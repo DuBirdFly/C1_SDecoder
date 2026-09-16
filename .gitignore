@@ -1,0 +1,21 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- Ruff ----
+# ruff 每次运行都会在项目根生成该缓存目录
+.ruff_cache/
+
+# ---- 编辑器 / 系统 ----
+*.swp
+*~
+.DS_Store
+
+# 说明：
+#   simulation/ 下的 VCS 仿真产物、日志、novas 配置
+#   以及 merge_all_filelist 的生成结果，
+#   已由各级子目录中已有的 .gitignore 负责排除。
+#   .vscode/settings.json 属于项目共享配置，故意保留跟踪。

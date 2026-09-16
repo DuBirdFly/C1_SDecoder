@@ -1,0 +1,18 @@
+{
+    // 尾随空格
+    "MD009": false,
+    // 多行空行
+    "MD012": {
+        "maximum": 4
+    },
+    // line 的长度
+    "MD013": false,
+    // 有序列表项前缀
+    "MD029": {
+        "style": "one_or_ordered"
+    },
+    // 允许行内 HTML
+    "MD033": false,
+    // 使用强调代替标题
+    "MD036": false
+}

@@ -1,0 +1,9 @@
+# Ruff 项目配置，作用于本仓库内的全部 Python 文件。
+#
+# 规则集不显式声明 select，沿用 ruff 内置默认规则集；
+# 下方 ignore 只是在其基础上追加豁免。
+
+[lint]
+# F541: f-string without any placeholders
+# 仓库中已有代码使用无占位符的 f-string 作为书写习惯，不需要报错。
+ignore = ["F541"]
