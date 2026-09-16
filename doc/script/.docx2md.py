@@ -1,19 +1,34 @@
 #!/usr/bin/env python3
-"""将 doc/ 下的设计方案 .docx 转换为规范 Markdown，并把插图导出到 doc/images/。
+"""将设计方案 .docx 转换为规范 Markdown，并导出其中的 PNG 插图。
 
-用法： python3 doc/.docx2md.py
+行为说明:
+  * 输入 .docx，输出 .md；输入输出路径均由命令行给出，相对路径按当前目录解析，
+    因此请在 doc/script 目录下执行本脚本。
+  * PNG 插图直接写进 Markdown，形式为 ![imageN](image/<输出md基名>/imageN.png)，
+    图片同步导出到「输出文件所在目录/image/<输出md基名>/」，目录不存在时自动创建。
+  * 非 PNG 图片（emf/wmf 等矢量图）不导出，仅在 Markdown 里以
+    <!-- 非 PNG 图片未处理：xxx.emf --> 注释标明原有位置。
+
+用法:
+    cd doc/script
+    python3 ./.docx2md.py <输入.docx> <输出.md>
+
+示例:
+    cd doc/script
+
+    # md 输出到 doc/script/.docx2md.py.output/，
+    # 图片落到 .docx2md.py.output/image/内存池化SDecoder和SMMU部件设计方案v2.3/
+    python3 ./.docx2md.py \\
+        ../内存池化SDecoder和SMMU部件设计方案/内存池化SDecoder和SMMU部件设计方案v2.3.docx \\
+        .docx2md.py.output/内存池化SDecoder和SMMU部件设计方案v2.3.md
 """
 
+import argparse
 import html
 import os
 import re
-import sys
 import unicodedata
 import zipfile
-
-DOCX = "doc/内存池化SDecoder和SMMU部件设计方案v2.3.docx"
-OUT_MD = "doc/内存池化SDecoder和SMMU部件设计方案v2.3.md"
-IMG_DIR = "doc/images"
 
 BODY_RE = re.compile(r"<w:body>(.*)</w:body>", re.DOTALL)
 TAG_RE = re.compile(r"<(/?)([A-Za-z0-9:]+)((?:\s+[^<>]*?)?)(/?)>")
@@ -281,9 +296,36 @@ def marker(numid, ilvl, counters):
 
 
 # -------------------------------------------------------------------- main
-def main():
-    with_images = "--with-images" in sys.argv
-    z = zipfile.ZipFile(DOCX)
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        prog=".docx2md.py",
+        description="将设计方案 .docx 转换为规范 Markdown，并导出其中的 PNG 插图。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "示例（在 doc/script 目录下执行）:\n"
+            "  cd doc/script\n"
+            "  python3 ./.docx2md.py <输入.docx> <输出.md>\n"
+        ),
+    )
+    parser.add_argument("input", help="输入 .docx 文件路径")
+    parser.add_argument("output", help="输出 .md 文件路径（所属目录不存在时自动创建）")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    src_docx = args.input
+    out_md = args.output
+
+    # 与 md 现有形式保持一致：图片放在 <输出目录>/image/<md 基名>/，
+    # Markdown 中以 image/<md 基名>/xxx.png 相对引用（同 Typora 每文档一目录的约定）
+    out_dir = os.path.dirname(out_md) or "."
+    out_stem = os.path.splitext(os.path.basename(out_md))[0]
+    rel_img_dir = f"image/{out_stem}"
+    img_dir = os.path.join(out_dir, "image", out_stem)
+    os.makedirs(out_dir, exist_ok=True)
+
+    z = zipfile.ZipFile(src_docx)
     body = BODY_RE.search(z.read("word/document.xml").decode("utf-8")).group(1)
     rels = {}
     for m in re.finditer(
@@ -293,8 +335,7 @@ def main():
         rels[m.group(1)] = m.group(2)
     collect_numbering(z)
 
-    os.makedirs(IMG_DIR, exist_ok=True)
-    emitted, lines, counters = set(), [], {}
+    emitted, skipped, lines, counters = set(), 0, [], {}
     img_re = re.compile(r'r:embed="(rId\d+)"|r:id="(rId\d+)"')
     title_open, title_lines = True, 0
 
@@ -327,14 +368,19 @@ def main():
             cap = caption_for(i)
             for t in imgs:
                 name = os.path.basename(t)
-                with open(os.path.join(IMG_DIR, name), "wb") as f:
-                    f.write(z.read("word/" + t))
-                if with_images:
-                    lines.append(f"![{os.path.splitext(name)[0]}](images/{name})")
-                else:
+                # 非 PNG（emf/wmf 等矢量图）不做导出，只在 md 里留注释标明位置
+                if not name.lower().endswith(".png"):
+                    skipped += 1
                     lines.append(
-                        f"<!-- 图片占位：images/{name}{'　—　' + cap if cap else ''} -->"
+                        f"<!-- 非 PNG 图片未处理：{name}"
+                        f"{'　—　' + cap if cap else ''} -->"
                     )
+                    continue
+                os.makedirs(img_dir, exist_ok=True)
+                with open(os.path.join(img_dir, name), "wb") as f:
+                    f.write(z.read("word/" + t))
+                stem = os.path.splitext(name)[0]
+                lines.append(f"![{stem}]({rel_img_dir}/{name})")
             lines.append("")
             continue
 
@@ -404,9 +450,12 @@ def main():
         res.append(ln)
 
     out = "\n".join(res).strip() + "\n"
-    with open(OUT_MD, "w", encoding="utf-8") as f:
+    with open(out_md, "w", encoding="utf-8") as f:
         f.write(out)
-    print(f"written: {OUT_MD} ({len(out)} chars, {len(emitted)} images)")
+    print(
+        f"written: {out_md} ({len(out)} chars, "
+        f"{len(emitted) - skipped} PNG exported, {skipped} non-PNG skipped)"
+    )
 
 
 if __name__ == "__main__":

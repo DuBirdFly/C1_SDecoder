@@ -9,6 +9,9 @@ venv/
 # ruff 每次运行都会在项目根生成该缓存目录
 .ruff_cache/
 
+# ---- doc/script/.docx2md.py 的示例输出目录 ----
+.docx2md.py.output/
+
 # ---- 编辑器 / 系统 ----
 *.swp
 *~

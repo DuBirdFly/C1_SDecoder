@@ -40,17 +40,17 @@ Home是内存物理资源的拥有者，User是内存物理资源的访问者。
 
 注4：GVA和本地VA的关系：本地VA内的属于全局共享的集合，构成了GVA？（疑问：用户在使用本地VA的时候，难道还需要区分本地和远程、区分GVA和非GVA？关键矛盾在于，SMD跟物理内存紧密绑定，因此GVA也跟物理内存紧密绑定，但用户VA又希望对本地/远程无感。）
 
-<!-- 图片占位：images/image1.emf　—　原文无题注，请按上下文补图 -->
+![image1](image/内存池化SDecoder和SMMU部件设计方案v2.3/image1.png)
 
 注5：GVA里，不包含未共享的内存段。HBM必须全部共享，才能全被看见、达到互连效果。
 
-<!-- 图片占位：images/image2.png　—　原文无题注，请按上下文补图 -->
+![image2](image/内存池化SDecoder和SMMU部件设计方案v2.3/image2.png)
 
 ## 异步访问和同步访问
 
 基于SMD，申威576超节点系统支持以同步/异步的方式，访问共享内存段（*TokenID需再考虑*）。
 
-<!-- 图片占位：images/image3.png　—　图1：同步/异步访问示意图：User1以URMA异步访问；User2以Load/Store同步访问。 -->
+![image3](image/内存池化SDecoder和SMMU部件设计方案v2.3/image3.png)
 
 图1：同步/异步访问示意图：User1以URMA异步访问；User2以Load/Store同步访问。
 
@@ -58,7 +58,7 @@ Home是内存物理资源的拥有者，User是内存物理资源的访问者。
 
 URMA异步访问，如图2所示（*TokenID需再考虑*）。
 
-<!-- 图片占位：images/image4.png　—　图2：URMA异步访问：通过URMA软件接口，向存储设备发起访问 -->
+![image4](image/内存池化SDecoder和SMMU部件设计方案v2.3/image4.png)
 
 图2：URMA异步访问：通过URMA软件接口，向存储设备发起访问
 
@@ -66,7 +66,7 @@ URMA异步访问，如图2所示（*TokenID需再考虑*）。
 
 Load/Store同步访问，如图3所示（*TokenID需再考虑*）。
 
-<!-- 图片占位：images/image5.png　—　图3：Load/Store同步访问：由硬件直接发起(CPU指令)，向存储设备发起访问 -->
+![image5](image/内存池化SDecoder和SMMU部件设计方案v2.3/image5.png)
 
 图3：Load/Store同步访问：由硬件直接发起(CPU指令)，向存储设备发起访问
 
@@ -87,7 +87,7 @@ Load/Store同步访问，如图3所示（*TokenID需再考虑*）。
 
 SDecoder作为576超节点系统中User侧CPU/GPU/xPU（在Load/Store同步访问时）对SMD访问的入口，在User侧按需将本地PA转换为SMD发送给Home侧。具体通过查找SDecoder Table，完成PA→SMD的地址转换。
 
-<!-- 图片占位：images/image6.png　—　图4：SDecoder功能：User侧的PA到SMD（包含FA）的地址转换 -->
+![image6](image/内存池化SDecoder和SMMU部件设计方案v2.3/image6.png)
 
 图4：SDecoder功能：User侧的PA到SMD（包含FA）的地址转换
 
@@ -155,7 +155,7 @@ b. 以U_PA[34:30]为索引访问二级表SDT_L2条目；
 
 SDecoder两级代换流程的示意图如下：
 
-<!-- 图片占位：images/image7.png　—　图4：SDecoder两级代换流程示意图 -->
+![image7](image/内存池化SDecoder和SMMU部件设计方案v2.3/image7.png)
 
 图4：SDecoder两级代换流程示意图
 
@@ -179,7 +179,7 @@ SMMU作为576超节点系统中的内存访问控制组件，在Home侧提供内
 
 SMMU代换的完整流程包含四个步骤：配置查找、上下文查找、地址转换、权限校验。其中，EID用于索引配置查找表（用EID找上下文表的PA），Token ID用于索引上下文查找表（用TokenID找转换表和权限表的基地址；*TokenID需再考虑*），FA用于索引地址转换表和权限校验表（用代换表和权限表，完成代换和检查）。
 
-<!-- 图片占位：images/image8.png　—　图5：UMMU功能：Home侧的FA到PA的地址转换和权限校验 -->
+![image8](image/内存池化SDecoder和SMMU部件设计方案v2.3/image8.png)
 
 图5：UMMU功能：Home侧的FA到PA的地址转换和权限校验
 
@@ -227,9 +227,9 @@ f. 访问Home侧本地存储空间，读出PTEIndex[47:0]地址中存放的三�
 
 SMMU三级代换流程的示意图如下（旧图；待修改）：
 
-<!-- 图片占位：images/image9.wmf　—　图6：SMMU三级代换流程示意图（旧图；待修改） -->
+![image9](image/内存池化SDecoder和SMMU部件设计方案v2.3/image9.png)
 
-<!-- 图片占位：images/image10.png　—　图6：SMMU三级代换流程示意图（旧图；待修改） -->
+![image10](image/内存池化SDecoder和SMMU部件设计方案v2.3/image10.png)
 
 图6：SMMU三级代换流程示意图（旧图；待修改）
 
@@ -263,7 +263,7 @@ SMMU三级代换流程的示意图如下（旧图；待修改）：
 
 UBMM软件架构，如下图所示（《灵衢®使能操作系统参考设计》第4.2节）：
 
-<!-- 图片占位：images/image11.png　—　原文无题注，请按上下文补图 -->
+![image11](image/内存池化SDecoder和SMMU部件设计方案v2.3/image11.png)
 
 其中：
 
@@ -274,11 +274,11 @@ UBMM软件架构，如下图所示（《灵衢®使能操作系统参考设计�
 
 Home侧有四种接口，可以将内存资源注册到UMMU；User侧有异步/同步两种方式，可以使用已注册的内存资源：
 
-<!-- 图片占位：images/image12.png　—　原文无题注，请按上下文补图 -->
+![image12](image/内存池化SDecoder和SMMU部件设计方案v2.3/image12.png)
 
 内存借用流程需要由UBPRM进行决策，得到Home侧的EID信息、User侧的EID信息以及需要借用的内存大小。如下流程为决策之后的使用流程：
 
-<!-- 图片占位：images/image13.png　—　原文无题注，请按上下文补图 -->
+![image13](image/内存池化SDecoder和SMMU部件设计方案v2.3/image13.png)
 
 1) Home 侧：调用obmm_export 接口，指定EID和内存大小信息，生成mem desc中的UBA和TokenID 信息，{dest EID，UBA，TokenID}描述 Home侧出借内存信息。
 2) UBPRM：填充mem desc中的{src EID，scna，dcna}以及不同vendor实现的私有信息。
