@@ -33,7 +33,6 @@ import zipfile
 BODY_RE = re.compile(r"<w:body>(.*)</w:body>", re.DOTALL)
 TAG_RE = re.compile(r"<(/?)([A-Za-z0-9:]+)((?:\s+[^<>]*?)?)(/?)>")
 # 源文档 heading 1/2/3 → 降一级，为文档标题留出唯一的 H1
-HEAD_STYLE = {"1": 2, "2": 3, "3": 4, "10": 2, "20": 3, "30": 4}
 CIRCLE = "①②③④⑤⑥⑦⑧⑨⑩"
 NUM_FMT = {}
 
@@ -244,6 +243,35 @@ def render_table(tbl):
 
 
 # ---------------------------------------------------------------- numbering
+def collect_headings(z):
+    """由 styles.xml 解析「样式ID → Markdown 标题层级」。
+
+    优先用大纲级别 outlineLvl（0 基），其次从样式名推断，兼容
+    `heading 1` 与 `1级标题` 两种常见命名；两者都没有则不是标题。
+    返回 {styleId: 层级(1 基)}。
+    """
+    st = z.read("word/styles.xml").decode("utf-8")
+    levels = {}
+    for m in re.finditer(
+        r'<w:style\b[^>]*w:styleId="([^"]+)".*?</w:style>', st, re.DOTALL
+    ):
+        sid, body = m.group(1), m.group(0)
+        if 'w:type="paragraph"' not in body and "w:type=" in body:
+            continue  # 跳过字符/表格样式
+        name = re.search(r'<w:name w:val="([^"]+)"', body)
+        name = name.group(1) if name else ""
+        outline = re.search(r'<w:outlineLvl w:val="(\d+)"', body)
+        if outline:
+            levels[sid] = int(outline.group(1)) + 1
+            continue
+        m2 = re.match(r"(?:heading|标题)\s*(\d+)$", name.strip(), re.IGNORECASE)
+        if not m2:
+            m2 = re.match(r"(\d+)\s*级标题$", name.strip())
+        if m2 and 1 <= int(m2.group(1)) <= 9:
+            levels[sid] = int(m2.group(1))
+    return levels
+
+
 def collect_numbering(z):
     num = z.read("word/numbering.xml").decode("utf-8")
     n2a = dict(
@@ -334,6 +362,7 @@ def main(argv=None):
     ):
         rels[m.group(1)] = m.group(2)
     collect_numbering(z)
+    head_levels = collect_headings(z)
 
     emitted, skipped, lines, counters = set(), 0, [], {}
     img_re = re.compile(r'r:embed="(rId\d+)"|r:id="(rId\d+)"')
@@ -390,9 +419,10 @@ def main(argv=None):
 
         style = re.search(r'<w:pStyle w:val="([^"]+)"', p)
         style = style.group(1) if style else ""
-        if style in HEAD_STYLE:
+        if style in head_levels:
             title_open = False
-            lines.append("#" * HEAD_STYLE[style] + " " + para_plain(p))
+            # 源文档标题降一级，为文档标题留出唯一的 H1
+            lines.append("#" * min(head_levels[style] + 1, 6) + " " + para_plain(p))
             lines.append("")
             counters.clear()
             continue
