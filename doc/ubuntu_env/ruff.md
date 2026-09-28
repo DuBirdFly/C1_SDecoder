@@ -65,7 +65,7 @@ pip uninstall ruff
   更麻烦的是 `ruff check --fix` 会按默认规则**真的去改代码** (删掉那些多余的 `f` 前缀);
 - 带上 `--config`: 规则集按预期生效.
 
-因此本仓库的约定是**每条命令都带 `--config`** (与 [markdownlint](../markdownlint/README.md) 的处理方式一致),
+因此本仓库的约定是**每条命令都带 `--config`** (与 [markdownlint](markdownlint.md) 的处理方式一致),
 路径按当前所在目录推导:
 
 | 执行目录 | `--config` 相对路径 |

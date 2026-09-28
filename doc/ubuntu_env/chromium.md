@@ -2,7 +2,7 @@
 
 chromium 是开源的浏览器内核, 也是各种无头 (headless) 渲染工具的运行时.
 本仓库里用到它的只有一处: 用 `mmdc` 把 Mermaid **真正渲染**成 SVG/PNG 时, 它由 puppeteer 拉起
-(见 [doc/dev/mermaid/README.md](../mermaid/README.md)); 只做 Mermaid 语法校验用不到它
+(见 [doc/ubuntu_env/mermaid.md](mermaid.md)); 只做 Mermaid 语法校验用不到它
 
 ## 安装与卸载
 

@@ -118,7 +118,7 @@ doc/<文档名>/
 
 ## 三. 检查
 
-排版类问题交给 markdownlint, 规则集与命令说明见 [`doc/dev/markdownlint/README.md`](dev/markdownlint/README.md).
+排版类问题交给 markdownlint, 规则集与命令说明见 [`doc/ubuntu_env/markdownlint.md`](ubuntu_env/markdownlint.md).
 改动后**在仓库根目录**执行:
 
 ```bash

@@ -10,7 +10,7 @@ whenToUse: "写完或改完含 mermaid 图的 Markdown 之后; 或用户要求�
 
 ```bash
 git ls-files -z "*.md" | xargs -0 mermaid-check   # 已跟踪的 md 文件
-mermaid-check doc/dev/mermaid/README.md           # 还没 git add 的新文件直接传路径
+mermaid-check doc/ubuntu_env/mermaid.md           # 还没 git add 的新文件直接传路径
 ```
 
 - 退出码 `0` 表示全部通过, `1` 表示有块语法错误, `2` 表示有文件读不到或没给参数
@@ -19,6 +19,6 @@ mermaid-check doc/dev/mermaid/README.md           # 还没 git add 的新文件�
 
 命令实体在 `~/.local/share/mermaid-check/` (`check-mermaid.mjs` + npm 依赖),
 入口在 `~/.local/bin/mermaid-check`; 位置与原理, 换机器时的重建步骤, 以及备用方案 (`mmdc` 真渲染)
-都写在 [`doc/dev/mermaid/README.md`](../../../doc/dev/mermaid/README.md).
+都写在 [`doc/ubuntu_env/mermaid.md`](../../../doc/ubuntu_env/mermaid.md).
 
 图该怎么画 (形式选择, 命名, 引用格式) 以 [`doc/md文件编写规范.md`](../../../doc/md文件编写规范.md) 为准.

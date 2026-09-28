@@ -4,7 +4,7 @@
 人看图、把 md 转 pdf/docx 各有各的办法, 不需要命令行, 本文件不涉及那部分.
 
 哪些图该用 Mermaid, 哪些该改用文件型图片, 图的命名与引用格式, 都以
-[doc/md文件编写规范.md](../../md文件编写规范.md) 的 "一. 图表" 为准
+[doc/md文件编写规范.md](../md文件编写规范.md) 的 "一. 图表" 为准
 
 ## 为什么必须校验
 
@@ -24,7 +24,7 @@ info
 | --- | --- | --- |
 | `mermaid-check` 命令 | **agent 默认用这个**: 本机已装好 | 无额外成本, 秒级, 不需要浏览器 |
 | <https://mermaid.live> | 人工快速试语法 | 要人手粘贴, 不能批量 |
-| `mmdc` 真渲染 | 需要最接近最终产物的确认 | 需要 Chromium (可 snap 安装, 见 [chromium 文档](../chromium/README.md)), 不作为 agent 的常规手段 |
+| `mmdc` 真渲染 | 需要最接近最终产物的确认 | 需要 Chromium (可 snap 安装, 见 [chromium 文档](chromium.md)), 不作为 agent 的常规手段 |
 
 ### mermaid-check (推荐)
 
@@ -37,7 +37,7 @@ mermaid 需要一个 DOM, 用 `jsdom` 顶上, 所以**不需要浏览器**, 离�
 git ls-files -z "*.md" | xargs -0 mermaid-check   # 已跟踪的 md 文件
 
 # 还没 git add 的新文件不在 ls-files 里, 直接传路径
-mermaid-check doc/dev/mermaid/README.md
+mermaid-check doc/ubuntu_env/mermaid.md
 ```
 
 输出形如:
@@ -171,7 +171,7 @@ mmdc -i input.mmd -o output.svg -t dark -b transparent
 
 它需要一个 Chromium: 默认由 puppeteer 自己下载 (几百 MB, 受限网络下会失败, 实测报
 `All providers failed for chrome ...`); 更省事的是装系统 Chromium 再用 `executablePath` 指过去,
-安装与配置见 [doc/dev/chromium/README.md](../chromium/README.md).
+安装与配置见 [doc/ubuntu_env/chromium.md](chromium.md).
 `mmdc` 本身的细节见官方仓库 <https://github.com/mermaid-js/mermaid-cli>
 
 ## agent 自检清单
@@ -183,4 +183,4 @@ mmdc -i input.mmd -o output.svg -t dark -b transparent
 - [ ] 单张图节点数不超过 25 (超出就拆分或改用文件型图片), 节点里没有塞长句
 - [ ] 同一张图只保留一种形式: 没有既留 Mermaid 源码又贴同一张图片
 - [ ] 跑过 `mermaid-check`, 退出码为 `0`
-- [ ] 该 Markdown 同时通过 markdownlint, 见 [doc/dev/markdownlint/README.md](../markdownlint/README.md)
+- [ ] 该 Markdown 同时通过 markdownlint, 见 [doc/ubuntu_env/markdownlint.md](markdownlint.md)

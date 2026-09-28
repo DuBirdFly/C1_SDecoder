@@ -13,14 +13,15 @@
 markdownlint-cli2 "doc/**/*.md" --config ./.config/.markdownlint.jsonc
 ```
 
-文档里含 Mermaid 图时, 再按 [`doc/dev/mermaid/README.md`](doc/dev/mermaid/README.md) 跑一遍语法校验.
+文档里含 Mermaid 图时, 再按 [`doc/ubuntu_env/mermaid.md`](doc/ubuntu_env/mermaid.md) 跑一遍语法校验.
 
-规则集与命令说明见 [`doc/dev/markdownlint/README.md`](doc/dev/markdownlint/README.md);
-Node.js 安装见 [`doc/dev/nodejs/README.md`](doc/dev/nodejs/README.md).
+规则集与命令说明见 [`doc/ubuntu_env/markdownlint.md`](doc/ubuntu_env/markdownlint.md);
+Node.js 安装见 [`doc/ubuntu_env/nodejs.md`](doc/ubuntu_env/nodejs.md).
 
 ## 目录约定
 
 - `doc/`: 项目文档. 设计方案放在各自的 `<文档名>/` 目录内, 图片放在同级的 `image/<文档名>/`.
-- `doc/dev/`: 工具链与环境说明 (Node.js, markdownlint 等).
+- `doc/ubuntu_env/`: 本机 (Ubuntu) 环境与工具链说明, 一工具一文件: `nodejs.md`, `markdownlint.md`,
+  `ruff.md`, `chromium.md`, `mermaid.md`.
 - `.agents/notes/`: 只放决策与理由记录 (为什么这么定), 不放操作手册.
 - `.agents/skills/`: 需要按需加载给 agent 的能力 (带 YAML frontmatter 的 `SKILL.md`).

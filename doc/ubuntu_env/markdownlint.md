@@ -3,7 +3,7 @@
 markdownlint 用于检查 Markdown 的排版规范. 本仓库的规则集是 `.config/.markdownlint.jsonc`,
 所有命令都**显式带上 `--config` 指向它** (原因见下面的「发现规则」)
 
-**前提**: 先按 [`doc/dev/nodejs/README.md`](../nodejs/README.md) 安装 Node.js. `markdownlint-cli2` 要求 **Node >= 22**, 该文档推荐使用 Node 24 LTS
+**前提**: 先按 [`doc/ubuntu_env/nodejs.md`](nodejs.md) 安装 Node.js. `markdownlint-cli2` 要求 **Node >= 22**, 该文档推荐使用 Node 24 LTS
 
 ## 安装与卸载
 
@@ -58,7 +58,7 @@ npm uninstall markdownlint-cli2 --global
 | --- | --- |
 | 仓库根 | `./.config/.markdownlint.jsonc` |
 | `doc/` | `../.config/.markdownlint.jsonc` |
-| `doc/dev/markdownlint/` | `../../../.config/.markdownlint.jsonc` |
+| `doc/ubuntu_env/` | `../../.config/.markdownlint.jsonc` |
 
 ## 使用
 
@@ -68,20 +68,20 @@ npm uninstall markdownlint-cli2 --global
 
 ```bash
 cd /path/to/project_root
-markdownlint-cli2 "doc/dev/markdownlint/README.md" --config ./.config/.markdownlint.jsonc
+markdownlint-cli2 "doc/ubuntu_env/markdownlint.md" --config ./.config/.markdownlint.jsonc
 ```
 
 ```bash
 # 也可以在被检查文件所在目录执行
-cd /path/to/project_root/doc/dev/markdownlint
-markdownlint-cli2 "README.md" --config ../../../.config/.markdownlint.jsonc
+cd /path/to/project_root/doc/ubuntu_env
+markdownlint-cli2 "markdownlint.md" --config ../../.config/.markdownlint.jsonc
 ```
 
 输出形如:
 
 ```text
 markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
-Finding: doc/dev/markdownlint/README.md
+Finding: doc/ubuntu_env/markdownlint.md
 Linting: 1 file
 Summary: 0 issues in 0 files
 ```
@@ -112,7 +112,7 @@ markdownlint-cli2 "doc/**/*.md" --config ./.config/.markdownlint.jsonc
 
 ```bash
 cd /path/to/project_root
-markdownlint-cli2 --fix "doc/dev/markdownlint/README.md" --config ./.config/.markdownlint.jsonc
+markdownlint-cli2 --fix "doc/ubuntu_env/markdownlint.md" --config ./.config/.markdownlint.jsonc
 ```
 
 只能修可自动修复的规则 (列表标记, 空行, 围栏缩进等). 行宽这类需要人工判断的规则不会被改动
