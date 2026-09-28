@@ -17,7 +17,9 @@ base:
 	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/simulation/base
 	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/rtl
 	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/testbench
-	@cd ./base/filelists/merge_all_filelist && python3 merge_all_filelist.py -top ../all.f
+	@python3 ../script/merge_all_filelist.py -top ./base/filelists/all.f \
+		-output $(RUN_DIR)/output/merged.f \
+		-log $(RUN_DIR)/log/merge_all_filelist/merge.log
 
 ######################################################
 # note: 指定 -o 包括了 simv 和 simv.daidir
@@ -27,7 +29,7 @@ base:
 VCS  = vcs -full64
 VCS += -file ./base/option/compile_base.f
 VCS += -file ./base/option/compile_uvm.f
-VCS += -file ./base/filelists/merge_all_filelist/merged.f
+VCS += -file ./output/merged.f
 VCS += +optconfigfile+./base/option/vcs.cfg
 VCS += -l ./log/vcs.log
 VCS += -o ./output/simv

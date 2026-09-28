@@ -23,7 +23,7 @@ C1_SDecoder/
 ├── script/                       # 项目流程脚本
 ├── simulation/                   # VCS 仿真环境
 │   ├── base/                     # 仿真公共底座
-│   │   ├── filelists/            # 文件列表及其合并脚本
+│   │   ├── filelists/            # 文件列表
 │   │   ├── novas/                # Verdi / Novas 配置
 │   │   └── option/               # 编译与仿真选项
 │   └── script/                   # 仿真专属脚本

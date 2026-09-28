@@ -29,9 +29,8 @@ ruff check --config ./.config/ruff.toml doc/script/.docx2md.py   # 单个文件
   ruff format --check --config ./.config/ruff.toml .    # 只检查, 不改文件
   ```
 
-  **不要顺手格式化整个仓库**: 目前
-  `simulation/base/filelists/merge_all_filelist/merge_all_filelist.py` 仍有待重排的内容,
-  混进功能改动会污染 diff, 要格式化就单独提一个提交
+  **不要顺手格式化整个仓库**: 当前 `ruff format --check` 是通过的, 但全仓库重排一旦有 diff
+  就会混进功能改动; 只格式化本次改动的文件, 要全量重排就单独提一个提交
 - 它只回答"代码规范对不对", 不跑测试, 不做类型检查
 
 ## 收尾: 清掉 .ruff_cache

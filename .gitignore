@@ -12,13 +12,17 @@ venv/
 # ---- doc/script/.docx2md.py 的示例输出目录 ----
 .docx2md.py.output/
 
+# ---- 本地备份 ----
+# 不再使用但暂不删除的旧代码放这里, 整目录不纳入版本管理
+backup/
+
 # ---- 编辑器 / 系统 ----
 *.swp
 *~
 .DS_Store
 
 # 说明：
-#   simulation/ 下的 VCS 仿真产物、日志、novas 配置
-#   以及 merge_all_filelist 的生成结果，
-#   已由各级子目录中已有的 .gitignore 负责排除。
+#   simulation/ 下的 VCS 仿真产物、日志、novas 配置，
+#   已由各级子目录中已有的 .gitignore 负责排除 (含 run_dir/ 下的合并 filelist)。
+#   backup/ 由上面的规则整目录排除
 #   .vscode/settings.json 属于项目共享配置，故意保留跟踪。

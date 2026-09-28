@@ -71,8 +71,8 @@ pip uninstall ruff
 | 执行目录 | `--config` 相对路径 |
 | --- | --- |
 | 仓库根 | `./.config/ruff.toml` |
+| `script/` | `../.config/ruff.toml` |
 | `doc/script/` | `../../.config/ruff.toml` |
-| `simulation/base/filelists/merge_all_filelist/` | `../../../../.config/ruff.toml` |
 
 `--config` 放在子命令前面或后面都可以:
 
@@ -100,11 +100,12 @@ ruff check --config ./.config/ruff.toml .
 All checks passed!
 ```
 
-有问题时逐条列出, 并提示哪些能自动修复:
+有问题时逐条列出, 并提示哪些能自动修复. 例如省略 `--config` 时, 默认规则会把无占位符的
+f-string 报成 F541 (本仓库已在 `.config/ruff.toml` 里豁免, 带上 `--config` 就不会出现):
 
 ```text
 F541 [*] f-string without any placeholders
-   --> simulation/base/filelists/merge_all_filelist/merge_all_filelist.py:120:17
+   --> 某文件:120:17
     |
 120 |         f.write(f"// 包含以下 .f 文件:\n")
     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -147,9 +148,9 @@ ruff format --config ./.config/ruff.toml .           # 实际改写
 
 注: `[lint]` 段不参与格式化, 所以 `ruff format` 加不加 `--config` 结果相同; 仍然统一带上, 少记一条规则
 
-当前仓库 `ruff format --check` 有 1 个文件待重排:
-`simulation/base/filelists/merge_all_filelist/merge_all_filelist.py`.
-建议单独提一次纯格式化提交, 或者只格式化新写的文件, 避免把格式化 diff 混进功能改动
+当前仓库 `ruff format --check` 无待重排文件, 全部通过.
+若将来出现待重排文件, 建议单独提一次纯格式化提交, 或者只格式化新写的文件,
+避免把格式化 diff 混进功能改动
 
 ### 用于脚本或提交前检查
 
@@ -174,6 +175,7 @@ ruff check --config ./.config/ruff.toml . || exit 1
   find . -name .ruff_cache -type d -not -path "./.git/*" -prune -exec rm -rf {} +
   ```
 
-- 扫描范围默认尊重 `.gitignore`, 只处理 `*.py`. 本仓库当前命中两个文件:
-  `doc/script/.docx2md.py` 与
-  `simulation/base/filelists/merge_all_filelist/merge_all_filelist.py`
+- 扫描范围默认尊重 `.gitignore`, 只处理 `*.py`. 本仓库当前命中 5 个文件:
+  `doc/script/.docx2md.py` 与 `script/` 下的 4 个脚本
+  (`coverage_merge.py`, `gen_filelist.py`, `merge_all_filelist.py`, `run_regression.py`);
+  `backup/` 下虽留有旧脚本, 但整目录被 `.gitignore` 排除, 不参与扫描
