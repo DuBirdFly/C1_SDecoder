@@ -162,8 +162,18 @@ ruff check --config ./.config/ruff.toml . || exit 1
 
 ## 缓存与扫描范围
 
-- ruff 会在**执行命令的目录**下生成 `.ruff_cache/`, `.gitignore` 里的 `.ruff_cache/` 在任意层级都匹配,
-  不需要手工清理
+- ruff 会在**执行命令的目录**下生成 `.ruff_cache/`; `.gitignore` 里的 `.ruff_cache/` 在任意层级都匹配,
+  所以它不会出现在 `git status` 里, 不需要为"git 干净"而清理
+- 但**本仓库的约定是检查完顺手删掉**, 不把缓存留在工作区
+  (同 [`.agents/skills/python-check/SKILL.md`](../../.agents/skills/python-check/SKILL.md)):
+
+  ```bash
+  rm -rf .ruff_cache     # 常规: 只在仓库根跑过时一条就够
+
+  # 在别的目录也跑过 (例如 cd .config 或 cd doc/script), 用这条兜底
+  find . -name .ruff_cache -type d -not -path "./.git/*" -prune -exec rm -rf {} +
+  ```
+
 - 扫描范围默认尊重 `.gitignore`, 只处理 `*.py`. 本仓库当前命中两个文件:
   `doc/script/.docx2md.py` 与
   `simulation/base/filelists/merge_all_filelist/merge_all_filelist.py`
