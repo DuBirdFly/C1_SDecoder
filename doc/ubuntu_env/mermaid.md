@@ -57,8 +57,8 @@ ok   doc/内存池化SDecoder和SMMU部件设计方案2.6/内存池化SDecoder�
 | `1` | 有块语法错误 | `FAIL <文件>:<行号> -> Parse error on line N` |
 | `2` | 有文件读不到, 或没给参数 | `SKIP <文件> -> ENOENT`, 或用法提示 |
 
-同一个命令也做成了本项目的 skill (`.agents/skills/mermaid-check/SKILL.md`),
-agent 在会话里能自动看到它, 不必每次翻这份文档
+同一个命令也做成了本项目的 skill (`.agents/skills/markdown-mermaid-check/SKILL.md`, 由总入口
+`.agents/skills/markdown-check/SKILL.md` 串起), agent 在会话里能自动看到它, 不必每次翻这份文档
 
 ### 装在哪, 怎么重建
 

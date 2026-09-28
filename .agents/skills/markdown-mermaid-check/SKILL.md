@@ -1,10 +1,12 @@
 ---
-name: mermaid-check
+name: markdown-mermaid-check
 description: "校验 Markdown 里 mermaid 围栏块的语法: 用本机已安装的 mermaid-check 命令逐块 parse, 不需要浏览器, 秒级返回."
 whenToUse: "写完或改完含 mermaid 图的 Markdown 之后; 或用户要求验证某张 Mermaid 图是否能正常渲染时."
 ---
 
-# mermaid-check
+# markdown-mermaid-check
+
+`markdown-check` 的第二项 (图语法); 第一项是排版检查 [`markdown-lint-check`](../markdown-lint-check/SKILL.md)
 
 改动含 Mermaid 的 Markdown 后, 在仓库根执行:
 
