@@ -177,7 +177,4 @@ ruff check --config ./.config/ruff.toml . || exit 1
   find . -name .ruff_cache -type d -not -path "./.git/*" -prune -exec rm -rf {} +
   ```
 
-- 扫描范围默认尊重 `.gitignore`, 只处理 `*.py`. 本仓库当前命中 5 个文件:
-  `doc/script/.docx2md.py` 与 `script/` 下的 4 个脚本
-  (`coverage_merge.py`, `gen_filelist.py`, `merge_all_filelist.py`, `run_regression.py`);
-  `backup/` 下虽留有旧脚本, 但整目录被 `.gitignore` 排除, 不参与扫描
+- 扫描范围默认尊重 `.gitignore`, 只处理 `*.py`.
