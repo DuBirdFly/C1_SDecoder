@@ -18,6 +18,23 @@ markdownlint-cli2 "doc/**/*.md" --config ./.config/.markdownlint.jsonc
 规则集与命令说明见 [`doc/ubuntu_env/markdownlint.md`](doc/ubuntu_env/markdownlint.md);
 Node.js 安装见 [`doc/ubuntu_env/nodejs.md`](doc/ubuntu_env/nodejs.md).
 
+## 写 python 文件
+
+写完或改完 `.py` 后, 在**仓库根目录**执行检查 (必须显式带 `--config`: ruff 不会去 `.config/`
+找配置, 省略后 `.config/ruff.toml` 里的豁免全部失效):
+
+```bash
+ruff check --config ./.config/ruff.toml .             # lint 全仓库
+ruff format --check --config ./.config/ruff.toml .    # 只检查格式, 不落盘
+```
+
+- 新写的代码要标类型注解: 函数签名与返回, 模块常量, 以及含义不直观的局部变量, 尽可能写全
+- **不要顺手格式化整个仓库**, 只格式化本次改动的文件; 要全量重排就单独提一个提交
+- 检查完顺手删掉工作区里的 `.ruff_cache/` (已被 gitignore, 但不留在工作区)
+
+规则集与命令说明见 [`doc/ubuntu_env/ruff.md`](doc/ubuntu_env/ruff.md);
+按需加载的检查流程见 [`.agents/skills/python-check/SKILL.md`](.agents/skills/python-check/SKILL.md).
+
 ## 目录约定
 
 - `doc/`: 项目文档. 设计方案放在各自的 `<文档名>/` 目录内, 图片放在同级的 `image/<文档名>/`.
