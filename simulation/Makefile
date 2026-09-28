@@ -1,7 +1,8 @@
 TB_TOP ?= tb_top
 TESTNAME ?= TestBase
 
-RUN_DIR = run_case.$(TB_TOP).$(TESTNAME)
+REPO_ROOT = ../../..
+RUN_DIR = run_dir/$(TB_TOP).$(TESTNAME)
 
 .PHONY: base vcs simv verdi all clean
 
@@ -13,9 +14,9 @@ base:
 	@mkdir -p $(RUN_DIR)/log
 	@mkdir -p $(RUN_DIR)/output
 	@mkdir -p $(RUN_DIR)/output/wave
-	@cd $(RUN_DIR) && ln -sf ../base
-	@cd $(RUN_DIR) && ln -sf ../../rtl
-	@cd $(RUN_DIR) && ln -sf ../../testbench
+	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/simulation/base
+	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/rtl
+	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/testbench
 	@cd ./base/filelists/merge_all_filelist && python3 merge_all_filelist.py -top ../all.f
 
 ######################################################
@@ -56,11 +57,11 @@ all: simv
 ######################################################
 VERDI  = verdi
 VERDI += -ssf $(abspath $(RUN_DIR)/output/wave/novas.vf)
-VERDI += -dbdir ../output/simv.daidir
-VERDI += -logdir ../log/verdiLog
-VERDI += -rcFile ../../base/novas/novas.rc
-VERDI += -guiConf ../../base/novas/novas.conf
+VERDI += -dbdir ./output/simv.daidir
+VERDI += -logdir ./log/verdiLog
+VERDI += -rcFile $(REPO_ROOT)/simulation/base/novas/novas.rc
+VERDI += -guiConf $(REPO_ROOT)/simulation/base/novas/novas.conf
 
 verdi:
-	@mkdir -p $(RUN_DIR)/run_verdi
-	cd $(RUN_DIR)/run_verdi && $(VERDI) &
+	@mkdir -p $(RUN_DIR)
+	cd $(RUN_DIR) && $(VERDI) &

@@ -42,7 +42,7 @@ C1_SDecoder/
 
 说明:
 
-- `simulation/` 下的 `run_case.<TB_TOP>.<TESTNAME>/` 不是源码目录, 由 `make base` 按需生成,
+- `simulation/` 下的 `run_dir/<TB_TOP>.<TESTNAME>/` 不是源码目录, 由 `make base` 按需生成,
   存放单次仿真的日志与产物 (`log/`, `output/`), 已由 `.gitignore` 排除.
 - `doc/` 下每个设计方案的图片放在同级 `image/<文档名>/` 目录, 具体约定见
   [`doc/md文件编写规范.md`](doc/md文件编写规范.md).
