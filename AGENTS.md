@@ -13,6 +13,8 @@
 markdownlint-cli2 "doc/**/*.md" --config ./.config/.markdownlint.jsonc
 ```
 
+文档里含 Mermaid 图时, 再按 [`doc/dev/mermaid/README.md`](doc/dev/mermaid/README.md) 跑一遍语法校验.
+
 规则集与命令说明见 [`doc/dev/markdownlint/README.md`](doc/dev/markdownlint/README.md);
 Node.js 安装见 [`doc/dev/nodejs/README.md`](doc/dev/nodejs/README.md).
 
