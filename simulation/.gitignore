@@ -1,2 +1,1 @@
-run_single_testcase/
-run_regress_test/
+run_*_testcase/

@@ -31,7 +31,7 @@ TB_TOPS: list[str] = ["tb_top"]
 REGRESS_CASES: list[str] = ["TestBase", "TestBase_Regress_test"]
 
 # 回归运行目录的父目录名, 与单点跑的 run_single_testcase 分开
-RUN_ROOT: str = "run_regress_test"
+RUN_ROOT: str = "run_regress_testcase"
 # 收集起来的各用例 log 放这里 (相对 simulation/), 每个用例一个 <TB_TOP>.<TESTNAME>/
 LOG_DIR: str = f"{RUN_ROOT}/log"
 # 每个用例要收走的日志文件 (均来自 RUN_DIR/log/)

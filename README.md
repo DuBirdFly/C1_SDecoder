@@ -42,7 +42,10 @@ C1_SDecoder/
 
 说明:
 
-- `simulation/` 下的 `run_dir/<TB_TOP>.<TESTNAME>/` 不是源码目录, 由 `make base` 按需生成,
-  存放单次仿真的日志与产物 (`log/`, `output/`), 已由 `.gitignore` 排除.
+- `simulation/` 下的 `run_*_testcase` 不是源码目录, 由 `make base` 按需生成, 存放仿真的日志与
+  产物 (`log/`, `output/`), 已由 `.gitignore` 排除.
+- 单点跑用 `run_single_testcase/<TB_TOP>.<TESTNAME>/`, 一个 TB 的一个 test 各占一个运行目录.
+- 回归用 `run_regress_testcase/<TB_TOP>/`, 同一个 TB 的多个 case 共用一次编译, 各 case 的
+  日志另收在 `log/<TB_TOP>.<TESTNAME>/` 下.
 - `doc/` 下每个设计方案的图片放在同级 `image/<文档名>/` 目录, 具体约定见
   [`doc/md文件编写规范.md`](doc/md文件编写规范.md).
