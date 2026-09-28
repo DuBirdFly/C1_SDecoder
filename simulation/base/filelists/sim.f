@@ -5,10 +5,10 @@
 ./testbench/utils/utils.sv
 
 // UVM files
-./testbench/test/uvm_header.sv
+./testbench/inc/uvm_header.sv
 
 ./testbench/test/test_pkg.sv
-./testbench/test/TestBase.sv
+./testbench/test/smoke/TestBase.sv
 
 // Testbench top files
 ./testbench/top/crg.sv
