@@ -4,4 +4,6 @@
     "verilog.preprocessor.inactiveCode.enabled": false,
 
     "markdownlint.configFile": "./.config/.markdownlint.jsonc",
+
+    "ruff.configuration": "./.config/ruff.toml"
 }
