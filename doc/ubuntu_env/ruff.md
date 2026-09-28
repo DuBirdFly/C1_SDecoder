@@ -52,8 +52,9 @@ pip uninstall ruff
 
 规则集只有一份: **`.config/ruff.toml`**, 用 `--config <路径>` 指定
 
-- 内容: 沿用 ruff 内置默认规则集, 只追加一条 `[lint] ignore = ["F541"]`
-  (F541 是 "无占位符的 f-string", 本仓库已有代码把它当书写习惯, 不报错)
+- 内容: 沿用 ruff 内置默认规则集, 另追加少量 `[lint] ignore` 豁免
+- 注意: "默认规则集" 并不只是 E/F 那几类. 本机 ruff 0.16.8 实测, 零配置下
+  `DTZ005` (`datetime.now()` 缺 `tz` 参数) 与 `I001` (import 未排序) 同样会报出来
 - 编辑器: `.vscode/settings.json` 的 `ruff.configuration` 指向同一个文件
 
 ### 发现规则 (容易踩坑)
@@ -61,9 +62,9 @@ pip uninstall ruff
 **ruff 不会去 `.config/` 找配置**: 它只在被检查文件所在目录及其上级目录里查找
 `ruff.toml`, `.ruff.toml` 或 `pyproject.toml`. 配置放在 `.config/` 下, 因此:
 
-- 省略 `--config`: 退回内置默认规则, `[lint] ignore` 失效, 会误报 F541;
-  更麻烦的是 `ruff check --fix` 会按默认规则**真的去改代码** (删掉那些多余的 `f` 前缀);
-- 带上 `--config`: 规则集按预期生效.
+- 省略 `--config`: 退回内置默认规则集, `.config/ruff.toml` 里的 `ignore` 全部失效 ——
+  被豁免的写法一旦出现就会报出来, `ruff check --fix` 还会按默认规则**真的去改代码**;
+- 带上 `--config`: 规则集按配置生效.
 
 因此本仓库的约定是**每条命令都带 `--config`** (与 [markdownlint](markdownlint.md) 的处理方式一致),
 路径按当前所在目录推导:
@@ -100,18 +101,19 @@ ruff check --config ./.config/ruff.toml .
 All checks passed!
 ```
 
-有问题时逐条列出, 并提示哪些能自动修复. 例如省略 `--config` 时, 默认规则会把无占位符的
-f-string 报成 F541 (本仓库已在 `.config/ruff.toml` 里豁免, 带上 `--config` 就不会出现):
+有问题时逐条列出, 并提示哪些能自动修复. 输出形如 (下例取自默认规则集里的 DTZ005,
+文件名是占位符):
 
 ```text
-F541 [*] f-string without any placeholders
-   --> 某文件:120:17
-    |
-120 |         f.write(f"// 包含以下 .f 文件:\n")
-    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+DTZ005 `datetime.datetime.now()` called without a `tz` argument
+  --> some_file.py:93:17
+   |
+93 |     timestamp = datetime.datetime.now()
+   |                 ^^^^^^^^^^^^^^^^^^^^^
+   |
+help: Pass a `datetime.timezone` object to the `tz` parameter
 
-Found 2 errors.
-[*] 2 fixable with the `--fix` option.
+Found 1 error.
 ```
 
 格式为 `规则码 [*] 说明` + `--> 文件:行:列`, 行首的 `[*]` 表示该问题可自动修复

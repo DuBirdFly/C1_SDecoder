@@ -7,7 +7,8 @@ whenToUse: "写完或改完 Python 文件 (.py) 之后; 或用户要求检查, �
 # python-check
 
 在**仓库根目录**执行. `--config` 必须带: ruff 不会去 `.config/` 找配置,
-省略后会误报 F541 (无占位符 f-string), 而且 `--fix` 会真的删掉代码里多余的 `f` 前缀
+省略后 `.config/ruff.toml` 里的 `ignore` 全部失效 (仓库接受的书写习惯会重新变成告警,
+`--fix` 还会按默认规则真的去改代码)
 
 ```bash
 ruff check --config ./.config/ruff.toml .                        # lint 全仓库

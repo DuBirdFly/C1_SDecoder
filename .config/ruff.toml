@@ -1,9 +1,14 @@
 # Ruff 项目配置，作用于本仓库内的全部 Python 文件。
 #
-# 规则集不显式声明 select，沿用 ruff 内置默认规则集；
-# 下方 ignore 只是在其基础上追加豁免。
+# 规则集不显式声明 select，沿用 ruff 内置默认规则集，只在其基础上追加豁免。
+#
+# 注意: "默认规则集" 并不只是 E/F 那几类。以本机 ruff 0.16.8 实测，零配置下
+# DTZ005 (datetime.now() 缺 tz) 与 I001 (import 未排序) 同样会报出来。
+#
+# 之所以保留这个文件: ruff 只在被检查文件所在目录及其上级目录查找 ruff.toml，
+# 不会找到 .config/ 下面。命令统一带 --config ./.config/ruff.toml，下面的豁免才生效。
 
 [lint]
 # F541: f-string without any placeholders
-# 仓库中已有代码使用无占位符的 f-string 作为书写习惯，不需要报错。
+# 无占位符的 f-string 是本仓库接受的书写习惯，不需要报错。
 ignore = ["F541"]
