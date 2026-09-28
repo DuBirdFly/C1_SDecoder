@@ -2,15 +2,19 @@
 """
 合并 .f 文件脚本, 递归解析 -f 引用, 输出单个合并后的文件.
 
-用法: python3 merge_all_filelist.py -top <顶层 .f> [-output merged.f] [-log merge.log]
+用法:
+    python3 merge_all_filelist.py -src_filelist_dir <目录> -src_filelist_name <文件名> \\
+        -dst_merged_filelist_path <合并结果路径> -log <日志路径>
 
 示例:
-    python3 merge_all_filelist.py -top ./base/filelists/all.f -output merged.f
-    python3 merge_all_filelist.py -top ./base/filelists/all.f -output ./run_dir/x/output/merged.f -log ./run_dir/x/log/merge_all_filelist/merge.log
+    python3 merge_all_filelist.py -src_filelist_dir ./base/filelists -src_filelist_name all.f \\
+        -dst_merged_filelist_path ./run_single_testcase/tb_top.TestBase/output/merged.f \\
+        -log ./run_single_testcase/tb_top.TestBase/log/merge_all_filelist/merge.log
 
 说明:
-    -top 与其内部 -f 引用的相对路径, 分别以命令执行目录与被引用文件所在目录为基准;
-    -output 与 -log 以命令执行目录为基准, 上级目录不存在时自动创建.
+    顶层 .f = -src_filelist_dir/-src_filelist_name, 其内部 -f 引用的相对路径以被引用
+    文件所在目录为基准;
+    -dst_merged_filelist_path 与 -log 以命令执行目录为基准, 上级目录不存在时自动创建.
 """
 
 import argparse
@@ -119,35 +123,56 @@ def write_text(path: str, lines: list) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="合并 .f 文件, 递归解析 -f 引用, 输出单个合并文件",
-        epilog="示例: python3 merge_all_filelist.py -top ./base/filelists/all.f -output merged.f",
+        epilog=(
+            "示例: python3 merge_all_filelist.py -src_filelist_dir ./base/filelists "
+            "-src_filelist_name all.f -dst_merged_filelist_path merged.f -log merge.log"
+        ),
     )
     parser.add_argument(
-        "-top",
+        "-src_filelist_dir",
         required=True,
-        help="顶层 .f 文件 (例如 ./base/filelists/all.f)",
+        help="顶层 .f 文件所在目录 (例如 ./base/filelists)",
     )
     parser.add_argument(
-        "-output",
-        default="merged.f",
-        help="输出文件 (默认: merged.f, 相对于执行目录)",
+        "-src_filelist_name",
+        required=True,
+        help="顶层 .f 文件名 (例如 all.f)",
+    )
+    parser.add_argument(
+        "-dst_merged_filelist_path",
+        required=True,
+        help="合并结果输出路径 (相对于执行目录)",
     )
     parser.add_argument(
         "-log",
-        default="merge.log",
-        help="日志文件 (默认: merge.log, 相对于执行目录)",
+        required=True,
+        help="日志输出路径 (相对于执行目录)",
     )
     args = parser.parse_args()
+
+    # 顶层文件 = 目录 + 文件名; 交给 resolve_f_file 时用 (名, 目录) 两个参数,
+    # 这样它内部 -f 引用的相对基准就是该目录
+    top_path: str = os.path.join(args.src_filelist_dir, args.src_filelist_name)
 
     visited: set = set()
     lines_out: list = []
     log_lines: list = []
 
-    resolve_f_file(args.top, os.getcwd(), visited, lines_out, log_lines)
+    resolve_f_file(
+        args.src_filelist_name,
+        args.src_filelist_dir,
+        visited,
+        lines_out,
+        log_lines,
+    )
 
-    write_text(args.output, make_header(args.top, visited) + [""] + lines_out)
+    write_text(
+        args.dst_merged_filelist_path,
+        make_header(top_path, visited) + [""] + lines_out,
+    )
 
     summary = (
-        f"合并完成! 输出文件: {args.output}, 共 {len(lines_out)} 行, "
+        f"合并完成! 输出文件: {args.dst_merged_filelist_path}, 共 {len(lines_out)} 行, "
         f"来自 {len(visited)} 个 *.f 文件"
     )
     print(f"\n{summary}")

@@ -1,2 +1,2 @@
 -f rtl.f
--f sim.f
+-f testbench.f

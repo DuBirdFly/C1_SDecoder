@@ -1,10 +1,17 @@
+######################################################
+# USER CONFIG (single test case)
 TB_TOP ?= tb_top
 TESTNAME ?= TestBase
+DUMP_WAVE ?= 1
 
+######################################################
+# GLOBAL CONFIG
 REPO_ROOT = ../../..
-RUN_DIR = run_dir/$(TB_TOP).$(TESTNAME)
+RUN_DIR_NAME ?= run_single_testcase
+RUN_DIR ?= $(RUN_DIR_NAME)/$(TB_TOP).$(TESTNAME)
 
-.PHONY: base vcs simv verdi all clean
+######################################################
+.PHONY: base vcs simv simv_only verdi all clean
 
 ######################################################
 base:
@@ -17,8 +24,10 @@ base:
 	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/simulation/base
 	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/rtl
 	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/testbench
-	@python3 ../script/merge_all_filelist.py -top ./base/filelists/all.f \
-		-output $(RUN_DIR)/output/merged.f \
+	@python3 ../script/merge_all_filelist.py \
+		-src_filelist_dir ./base/filelists \
+		-src_filelist_name all.f \
+		-dst_merged_filelist_path $(RUN_DIR)/output/merged.f \
 		-log $(RUN_DIR)/log/merge_all_filelist/merge.log
 
 ######################################################
@@ -36,6 +45,10 @@ VCS += -o ./output/simv
 VCS += -Mdir=./output/csrc
 VCS += -top $(TB_TOP)
 
+ifeq ($(DUMP_WAVE), 1)
+	VCS += +define+DUMP_FSDB
+endif
+
 vcs: base
 	cd $(RUN_DIR) && $(VCS)
 
@@ -45,8 +58,11 @@ SIMV += -f ./base/option/simulate_base.f
 SIMV += -l ./log/simv.log
 SIMV += -k ./output/ucli.key
 
-simv: vcs
+simv_only:
 	cd $(RUN_DIR) && $(SIMV)
+
+simv: vcs
+	$(MAKE) simv_only
 
 ######################################################
 clean:

@@ -1,6 +1,3 @@
-// Simulation options
-+define+DUMP_FSDB
-
 // utility files
 ./testbench/utils/utils.sv
 
@@ -9,6 +6,7 @@
 
 ./testbench/test/test_pkg.sv
 ./testbench/test/smoke/TestBase.sv
+./testbench/test/regress/TestBase_Regress_test.sv
 
 // Testbench top files
 ./testbench/top/crg.sv
