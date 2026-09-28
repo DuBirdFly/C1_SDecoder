@@ -44,7 +44,7 @@ mermaid-check doc/ubuntu_env/mermaid.md
 
 ```text
 ok   doc/md文件编写规范.md:38
-ok   doc/内存池化SDecoder和SMMU部件设计方案2.6/内存池化SDecoder和SMMU部件设计方案v2.6.md:53
+ok   doc/design_plan/内存池化SDecoder和SMMU部件设计方案2.6/内存池化SDecoder和SMMU部件设计方案v2.6.md:53
 
 9 个块, 0 个失败 (mermaid 12.0.0)
 ```
