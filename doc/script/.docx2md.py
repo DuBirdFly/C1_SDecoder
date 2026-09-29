@@ -99,13 +99,14 @@ def flag(rpr, tag):
 
 
 def runs_tokens(p):
-    """把 w:p 拆成 (text, bold, italic) 序列。"""
+    """把 w:p 拆成 (text, bold, italic, strike) 序列。"""
     toks = []
     for m in RUN_RE.finditer(p):
         chunk = m.group(1) or m.group(2) or ""
         rpr = re.search(r"<w:rPr>(.*?)</w:rPr>", chunk, re.DOTALL)
         rpr = rpr.group(1) if rpr else ""
         b, i = bool(flag(rpr, "w:b")), bool(flag(rpr, "w:i"))
+        s = bool(flag(rpr, "w:strike") or flag(rpr, "w:dstrike"))
         buf = []
         for t in TOKEN_RE.finditer(chunk):
             if t.group(1) is not None:
@@ -117,15 +118,15 @@ def runs_tokens(p):
             continue
         # 空白单独作为无格式片段，避免 "** 文本 **" 失效
         if not text.strip():
-            toks.append((text, False, False))
+            toks.append((text, False, False, False))
             continue
         head = text[: len(text) - len(text.lstrip())]
         tail = text[len(text.rstrip()) :]
         if head:
-            toks.append((head, False, False))
-        toks.append((text.strip(), b, i))
+            toks.append((head, False, False, False))
+        toks.append((text.strip(), b, i, s))
         if tail:
-            toks.append((tail, False, False))
+            toks.append((tail, False, False, False))
     return toks
 
 
@@ -135,13 +136,13 @@ def esc_inline(s):
 
 
 def render_runs(toks):
-    """用星号标记输出；相邻同格式片段合并，标记按栈开合，避免 *** 歧义。"""
+    """输出强调与删除线标记；相邻同格式片段合并，标记按栈开合，避免 *** 歧义。"""
 
     def merge(seq):
         out = []
         for t in seq:
             if out and out[-1][1:] == t[1:]:
-                out[-1] = (out[-1][0] + t[0], t[1], t[2])
+                out[-1] = (out[-1][0] + t[0],) + t[1:]
             else:
                 out.append(t)
         return out
@@ -151,15 +152,15 @@ def render_runs(toks):
     for k in range(1, len(merged) - 1):
         if (
             not merged[k][0].strip()
-            and merged[k][1:] == (False, False)
+            and merged[k][1:] == (False, False, False)
             and merged[k - 1][1:] == merged[k + 1][1:]
         ):
             merged[k] = (merged[k][0],) + merged[k - 1][1:]
     merged = merge(merged)
 
     out, stack = [], []  # stack: 已打开的标记，外层在前
-    for text, b, i in merged:
-        want = [m for m, on in (("*", i), ("**", b)) if on]
+    for text, b, i, s in merged:
+        want = [m for m, on in (("*", i), ("**", b), ("~~", s)) if on]
         common = 0
         while (
             common < len(stack) and common < len(want) and stack[common] == want[common]
