@@ -7,6 +7,8 @@
     },
     // line 的长度
     "MD013": false,
+    // 标题重名 (标题不编号, 同名标题靠层级区分)
+    "MD024": false,
     // 有序列表项前缀
     "MD029": {
         "style": "one_or_ordered"
