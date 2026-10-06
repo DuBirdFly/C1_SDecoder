@@ -43,14 +43,20 @@ ruff format --check --config ./.config/ruff.toml .    # 只检查格式, 不落�
 make -C simulation all
 ```
 
-### 文件名约定
+### 代码风格
+
+#### 文件名
 
 - 文件名与 `module/interface/package/class` 名一致
-- package 以 `_pkg` 结尾
+- package 以 `_pkg.svh` 结尾
 - interface 以 `_if` 结尾
 - module 推荐全小写, 下划线式 (不强制)
+- `*.svh` 文件以 `ifndef` 宏保护 (避免多次 `include` 导致的重复定义)
+  - rtl 里通常 `*.svh` 使用 `include` 导入
+  - testbench 里 `*.svh` 可以 `include` 导入, 也可以在 filelist 里导入
+  - `*-undef.svh` 不使用 `include` 导入, 人工约束 `*-undef.svh` 只能在 filelist 的对应段末尾导入
 
-### 文件内命名约定
+#### 文件内命名
 
 - 类型名 (如类, 结构体, 枚举)：单个大写字母开头
 - 变量名：小写字母开头
@@ -61,7 +67,7 @@ make -C simulation all
   - 结构体/枚举: 大写字母开头, 下划线式
   - 其他: 小写字母开头, 下划线式
 
-### 缩进与大括号风格
+#### 缩进与大括号
 
 - `begin` 放在语句同一行的末尾，而不是另起一行
 - `else` 另起一行, 与 `if` 对齐
@@ -79,11 +85,12 @@ always_ff @(posedge clk or negedge rst_n) begin
 end
 ```
 
-### 其他风格要求
+#### 其他代码风格要求
 
 - `rtl/` 下的设计代码**禁用 function / task** (不去挑战 EDA 工具)
 - `testbench/` 下的验证代码可以不受限使用 Verilog / SystemVerilog 新语法特性
 - `virtual interface` 使用 `_vif` 结尾
+- 普通 `for` 循环的变量用 `int i/j/k`, `generative for` 的变量用 `genvar_i/j/k`
 
 ## 目录约定
 
