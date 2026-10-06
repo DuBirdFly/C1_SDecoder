@@ -28,7 +28,7 @@ SIM_DIR: str = os.path.join(REPO_ROOT, "simulation")
 # 要回归的 TB 顶层列表, 与单点跑的 TB_TOP 对应
 TB_TOPS: list[str] = ["tb_top"]
 # 回归用例清单: 依序执行, 名字即 UVM 的 +UVM_TESTNAME
-REGRESS_CASES: list[str] = ["TestBase", "TestBase_Regress_test"]
+REGRESS_CASES: list[str] = ["TestBase", "TestRegress"]
 
 # 回归运行目录的父目录名, 与单点跑的 run_single_testcase 分开
 RUN_ROOT: str = "run_regress_testcase"

@@ -6,7 +6,7 @@
 
 ./testbench/test/test_pkg.sv
 ./testbench/test/smoke/TestBase.sv
-./testbench/test/regress/TestBase_Regress_test.sv
+./testbench/test/regress/TestRegress.sv
 
 // Testbench top files
 ./testbench/top/crg.sv
