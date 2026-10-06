@@ -37,6 +37,7 @@ base:
 # VCS  = vcs -full64 -LDFLAGS -Wl,--no-as-needed
 VCS  = vcs -full64
 VCS += -file ./base/option/compile_base.f
+VCS += -file ./base/option/compile_define.f
 VCS += -file ./base/option/compile_uvm.f
 VCS += -file ./output/merged.f
 VCS += +optconfigfile+./base/option/vcs.cfg
