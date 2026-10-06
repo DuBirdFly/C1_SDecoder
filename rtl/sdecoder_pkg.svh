@@ -27,6 +27,7 @@ package sdecoder_pkg;
     } SDTLB_DATA_ITEM_t;
 
     localparam PA_WIDTH = 48;
+    localparam SLA_WIDTH = 48;
     localparam SDTLB_ENTRIES = 128;
     localparam SDTLB_ENTRIES_IDX_WIDTH = $clog2(SDTLB_ENTRIES);
 

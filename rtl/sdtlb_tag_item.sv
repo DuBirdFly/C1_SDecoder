@@ -48,7 +48,11 @@ import sdecoder_pkg::*;
 
     // 置无效 (刷新) 请求, 置无效指定 pa 范围覆盖的条目
     input  logic                    inv_en,
-    input  logic [PA_WIDTH-1:0]     inv_pa
+    input  logic [PA_WIDTH-1:0]     inv_pa,
+
+    // 命中条目的读出: 本条目命中时输出其段空间基址 / 上界, 否则给 0
+    output logic [16:0]             rd_pa_base,
+    output logic [ 4:0]             rd_pa_up
 
 );
 
@@ -99,6 +103,11 @@ import sdecoder_pkg::*;
 
     // 命中 = "请求有效" 且 "条目有效" 且 "请求地址落在条目覆盖范围内"
     assign req_hit = req_vld && tag_item.valid && req_match;
+
+    // 命中条目的读出: 未命中给 0, 上层把 SDTLB_ENTRIES 份输出逐位 OR 起来即为命中条目的
+    // 段空间基址 / 上界 (上层据此算 1GB 段内偏移, 见设计方案 §代换结果计算)
+    assign rd_pa_base = req_hit ? tag_item.pa_base : 17'h0;
+    assign rd_pa_up   = req_hit ? tag_item.pa_up   :  5'h0;
 
 
 `ifdef ASSERT_ON
