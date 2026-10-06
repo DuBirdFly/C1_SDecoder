@@ -35,6 +35,56 @@ ruff format --check --config ./.config/ruff.toml .    # 只检查格式, 不落�
 规则集与命令说明见 [`doc/ubuntu_env/ruff.md`](doc/ubuntu_env/ruff.md);
 按需加载的检查流程见 [`.agents/skills/python-check/SKILL.md`](.agents/skills/python-check/SKILL.md).
 
+## 写 Verilog / SystemVerilog 文件
+
+改动 `rtl/` 后, 在**仓库根目录**跑一遍编译与冒烟:
+
+```bash
+make -C simulation all
+```
+
+### 文件名约定
+
+- 文件名与 `module/interface/package/class` 名一致
+- package 以 `_pkg` 结尾
+- interface 以 `_if` 结尾
+- module 推荐全小写, 下划线式 (不强制)
+
+### 文件内命名约定
+
+- 类型名 (如类, 结构体, 枚举)：单个大写字母开头
+- 变量名：小写字母开头
+- 参数与宏: 全大写字母, 下划线式
+- 多词命名
+  - 类: 大驼峰式 (PascalCase)
+  - 对象: 小驼峰式 (camelCase)
+  - 结构体/枚举: 大写字母开头, 下划线式
+  - 其他: 小写字母开头, 下划线式
+
+### 缩进与大括号风格
+
+- `begin` 放在语句同一行的末尾，而不是另起一行
+- `else` 另起一行, 与 `if` 对齐
+
+例子
+
+```systemverilog
+always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        r <= '0;
+    end
+    else if (valid) begin
+        r <= i;
+    end
+end
+```
+
+### 其他风格要求
+
+- `rtl/` 下的设计代码**禁用 function / task** (不去挑战 EDA 工具)
+- `testbench/` 下的验证代码可以不受限使用 Verilog / SystemVerilog 新语法特性
+- `virtual interface` 使用 `_vif` 结尾
+
 ## 目录约定
 
 - `doc/`: 项目文档. 设计方案放在各自的 `<文档名>/` 目录内, 图片放在同级的 `image/<文档名>/`.
