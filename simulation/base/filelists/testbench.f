@@ -13,3 +13,4 @@
 ./testbench/top/wrapper_top.sv
 ./testbench/top/tb_top.sv
 ./testbench/top/tb_sdtlb_tag_item.sv
+./testbench/top/tb_sdtlb.sv
