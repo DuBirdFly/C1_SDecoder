@@ -1,4 +1,4 @@
-package utils;
+package utils_pkg;
 
     function automatic string color_msg(
         // attribute: 0: Normal, 1: Bold, 2: Dim, 3: Italic, 4: Underline, 5: Blink, 7: Reverse, 8: Hidden

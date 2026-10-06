@@ -2,8 +2,8 @@ class TestBase extends uvm_test;
 
     `uvm_component_utils(TestBase)
 
-    // virtual apb_interface vif_apb;
-    // virtual axi_interface vif_axi;
+    // virtual apb_if apb_vif;
+    // virtual axi_if axi_vif;
 
     // ApbEnv apbEnv;
     // ApbSeq apbSeq;
@@ -27,10 +27,10 @@ function void TestBase::build_phase(uvm_phase phase);
     // Specifies the timeout for the simulation. Default is <`UVM_DEFAULT_TIMEOUT>
     uvm_root::get().set_timeout(1_000_000 * 3, 1);
 
-    // if (!uvm_config_db#(virtual apb_interface)::get(this, "", "apb", vif_apb))
+    // if (!uvm_config_db#(virtual apb_if)::get(this, "", "apb", apb_vif))
     //     `uvm_fatal("NOVIF", "No Interface Specified")
 
-    // if (!uvm_config_db#(virtual axi_interface)::get(this, "", "axi", vif_axi))
+    // if (!uvm_config_db#(virtual axi_if)::get(this, "", "axi", axi_vif))
     //     `uvm_fatal("NOVIF", "No Interface Specified")
 
     // apbEnv = ApbEnv::type_id::create("apbEnv", this);

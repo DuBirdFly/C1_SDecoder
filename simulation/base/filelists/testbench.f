@@ -1,5 +1,5 @@
 // utility files
-./testbench/utils/utils.sv
+./testbench/utils/utils_pkg.sv
 
 // UVM files
 ./testbench/inc/uvm_header.sv

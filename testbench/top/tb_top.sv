@@ -41,8 +41,8 @@ module tb_top;
     );
 
     initial begin: config4uvm
-        // uvm_config_db#(virtual apb_interface)::set(null, "uvm_test_top", "apb", apb_if);
-        // uvm_config_db#(virtual axi_interface)::set(null, "uvm_test_top", "axi", axi_if);
+        // uvm_config_db#(virtual apb_if)::set(null, "uvm_test_top", "apb", apb_vif);
+        // uvm_config_db#(virtual axi_if)::set(null, "uvm_test_top", "axi", axi_vif);
         run_test();
     end
 
