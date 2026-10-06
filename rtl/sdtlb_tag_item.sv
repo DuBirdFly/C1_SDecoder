@@ -52,34 +52,25 @@ import sdecoder_pkg::*;
     // 本条目寄存器: 段空间基址 / 上界 / 有效位 (位域见 sdecoder_pkg)
     SDTLB_TAG_ITEM_t tag_item;
 
-    // -------------------------------------------------------------------------
-    // 地址与本条目的匹配关系 (设计方案 §命中判断 / §无效化):
-    //   段高位域相等 且 段内 1GB 下标落在闭区间内.
-    //   字段对齐: tag_item.pa_base[16:0] 对应 PA[46:30], bit 0 对齐 PA[30],
-    //   因此 [16:5] 是段高位域 PA[46:35], [4:0] 是段内 1GB 下标 PA[34:30].
-    // 请求地址与无效化地址各用一套信号, RTL 不用 function (工具兼容优先).
-    // -------------------------------------------------------------------------
-    logic [16:0] req_seg;           // Req_PA[46:30], 请求的段空间索引
-    logic [16:0] inv_seg;           // Inv_PA[46:30], 无效化地址的段空间索引
-    logic [ 4:0] req_1g_idx;        // Req_PA[34:30], 请求的段内 1GB 下标
-    logic [ 4:0] inv_1g_idx;        // Inv_PA[34:30], 无效化地址的段内 1GB 下标
-    logic        req_high_hit;      // 请求段高位域与本条目相等
-    logic        inv_high_hit;      // 无效化地址段高位域与本条目相等
-    logic        req_range_hit;     // 请求段内下标落在本条目闭区间内
-    logic        inv_range_hit;     // 无效化地址段内下标落在本条目闭区间内
+    // note: 这四行必须是 wire (或 logic + assign): 用 logic 加声明初始化只会在 0 时刻
+    //       赋值一次, 不是持续赋值, 比较结果会停在初始值上.
+    wire [16:0] req_seg_idx     = req_pa[46:30];
+    wire [ 4:0] req_page_idx    = req_pa[34:30];
+    logic       req_high_hit;
+    logic       req_range_hit;
 
-    assign req_seg     = req_pa[46:30];
-    assign inv_seg     = inv_pa[46:30];
-    assign req_1g_idx  = req_pa[34:30];
-    assign inv_1g_idx  = inv_pa[34:30];
+    wire [16:0] inv_seg_idx     = inv_pa[46:30];
+    wire [ 4:0] inv_page_idx    = inv_pa[34:30];
+    logic       inv_high_hit;
+    logic       inv_range_hit;
 
-    assign req_high_hit  = (req_seg[16:5] == tag_item.pa_base[16:5]);
-    assign req_range_hit = (req_1g_idx >= tag_item.pa_base[4:0]) &&
-                           (req_1g_idx <= tag_item.pa_up);
+    assign req_high_hit  = (req_seg_idx[16:5] == tag_item.pa_base[16:5]);
+    assign req_range_hit = (req_page_idx >= tag_item.pa_base[4:0]) &&
+                           (req_page_idx <= tag_item.pa_up);
 
-    assign inv_high_hit  = (inv_seg[16:5] == tag_item.pa_base[16:5]);
-    assign inv_range_hit = (inv_1g_idx >= tag_item.pa_base[4:0]) &&
-                           (inv_1g_idx <= tag_item.pa_up);
+    assign inv_high_hit  = (inv_seg_idx[16:5] == tag_item.pa_base[16:5]);
+    assign inv_range_hit = (inv_page_idx >= tag_item.pa_base[4:0]) &&
+                           (inv_page_idx <= tag_item.pa_up);
 
     logic req_match;    // 请求地址命中本条目 (不含有效位)
     logic inv_match;    // 本条目被无效化地址覆盖 (不含有效位)
