@@ -2,20 +2,20 @@
 // sdtlb_tag_item: SDTLB 的一个 Tag 条目, 即全相联 CAM 中的一级比较单元
 //
 // 职责 (见 doc/design_plan/SDecoder设计方案/SDecoder设计方案.md §命中判断):
-//   把一次代换请求的请求地址 Req_PA 与"本条目"描述的段空间做比较, 给出本条目
+//   把一次代换请求的请求地址 req_pa 与"本条目"描述的段空间做比较, 给出本条目
 //   是否命中. 同时满足以下三条才算命中:
 //     1. 本条目有效位 = 1;
-//     2. Req_PA[46:35] 与 PA_Base[46:35] 相等;
-//     3. Req_PA[34:30] 落在闭区间 [PA_Base[34:30], PA_Up[34:30]] 内.
+//     2. req_pa[46:35] 与 pa_base[46:35] 相等;
+//     3. req_pa[34:30] 落在闭区间 [pa_base[34:30], pa_up[34:30]] 内.
 //
-//   页式条目满足 PA_Base[34:30] = PA_Up[34:30], 区间退化为一个 1GB 页, 因此
+//   页式条目满足 pa_base[34:30] = pa_up[34:30], 区间退化为一个 1GB 页, 因此
 //   段式与页式共用本模块, 不需要两套比较逻辑.
 //
 // 层次与约定:
 //   - sdtlb_tag 用 generate 例化 SDTLB_ENTRIES 份本模块, 再把各条目的 req_hit 做
 //     优先级编码 (正常配置下同一次请求最多命中一个条目), 得到命中条目下标.
-//   - 条目内容存在本模块的 tag_item 寄存器里. 装入由端口 valid 作写使能: valid
-//     有效时把 pa_base / pa_up / valid 一起写进 tag_item, 因此装填当拍比较用的
+//   - 条目内容存在本模块的 tag_item 寄存器里. 装入由端口 wr_pa_vld 作写使能: 有效时
+//     把 wr_pa_base / wr_pa_up / wr_pa_vld 一起写进 tag_item, 因此装填当拍比较用的
 //     仍是旧值, 新值下一拍生效.
 //   - 无效化按设计方案 §无效化 实现: inv_all 清全部条目的有效位; inv_en + inv_pa
 //     清掉覆盖该地址的条目 (段高位域匹配 且 地址落在闭区间内). 两个入口都优先于
@@ -76,9 +76,10 @@ import sdecoder_pkg::*;
     logic inv_match;    // 本条目被无效化地址覆盖 (不含有效位)
 
     assign req_match = req_high_hit && req_range_hit;
-    // note: 这里刻意不带 tag_item.valid. 设计方案要求无效化优先于装入, 若带上有效位,
-    //       则条目当前无效时 inv_match 为 0, 同一拍的装入就会把刚被刷新的条目写回去.
-    //       对于本来就无效的条目, 清位是空操作, 所以去掉有效位不影响"清哪些条目"的结果.
+    // note: 这里刻意不带 tag_item.valid. else if 的优先级只在分支条件成立时才起作用:
+    //       若把有效位并进匹配条件, 条目当前无效时 inv_match 就是 0, 清位分支根本不会
+    //       被选中, 同拍的装入会照常执行, 把一条覆盖"正在被刷新的地址"的映射填进去
+    //       (无效条目本就无需清位, 谈不上"写回"). 去掉有效位不影响"清哪些条目".
     assign inv_match = inv_en && inv_high_hit && inv_range_hit;
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -86,7 +87,7 @@ import sdecoder_pkg::*;
             tag_item <= '0;
         end
         else if (inv_all || inv_match) begin
-            tag_item.valid <= 1'b0;     // 刷新优先: 只清有效位, 地址字段保留
+            tag_item.valid <= 1'b0;
         end
         else if (wr_pa_vld) begin
             tag_item <= '{pa_base: wr_pa_base, pa_up: wr_pa_up, valid: wr_pa_vld};
