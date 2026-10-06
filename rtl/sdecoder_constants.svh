@@ -1,3 +1,6 @@
+`ifndef _SDECODER_CONSTANTS_SVH_
+`define _SDECODER_CONSTANTS_SVH_
+
 `ifdef ASSERT_ON
 
     `define ASSERT_MSG_LABELED(label) `"[ERROR] [ASSERT]: Assertion 'label' failed`"
@@ -15,3 +18,5 @@
         $display(`ASSERT_MSG_LABELED(label))
 
 `endif
+
+`endif // _SDECODER_CONSTANTS_SVH_

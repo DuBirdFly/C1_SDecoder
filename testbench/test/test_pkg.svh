@@ -1,3 +1,6 @@
+`ifndef _TEST_PKG_SVH_
+`define _TEST_PKG_SVH_
+
 package test_pkg;
 
     import uvm_pkg::*;
@@ -8,3 +11,5 @@ package test_pkg;
     parameter FSDB_FILE_AMOUNT = 4;
 
 endpackage
+
+`endif // _TEST_PKG_SVH_

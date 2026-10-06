@@ -1,3 +1,6 @@
+`ifndef _SDECODER_PKG_SVH_
+`define _SDECODER_PKG_SVH_
+
 package sdecoder_pkg;
 
     // 1GB 即 2^30 Bytes, 1GB 的页内地址为 PA[29:0]
@@ -23,9 +26,10 @@ package sdecoder_pkg;
         logic           grn         ;
     } SDTLB_DATA_ITEM_t;
 
-    localparam SDTLB_ENTRIES = 128;
     localparam PA_WIDTH = 48;
-    // SDTLB 条目下标位宽, 由条目数推出, 供 sdtlb_tag / sdtlb_data 与顶层共用
-    localparam IDX_WIDTH = $clog2(SDTLB_ENTRIES);
+    localparam SDTLB_ENTRIES = 128;
+    localparam SDTLB_ENTRIES_IDX_WIDTH = $clog2(SDTLB_ENTRIES);
 
 endpackage
+
+`endif // _SDECODER_PKG_SVH_

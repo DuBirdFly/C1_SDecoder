@@ -16,6 +16,8 @@
 //   - 数据段没有有效位: 条目是否有效由同下标的 tag 条目的 tag_item.valid 表示, 因此
 //     本模块没有无效化端口, 刷新只清 tag 侧的有效位.
 // =============================================================================
+`include "sdecoder_constants.svh"
+`include "sdecoder_pkg.svh"
 `default_nettype none
 
 module sdtlb_data_item

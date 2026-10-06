@@ -24,6 +24,7 @@
 //   - 置无效只清有效位, 地址字段保留 (无效条目的地址字段是 don't care).
 // =============================================================================
 `include "sdecoder_constants.svh"
+`include "sdecoder_pkg.svh"
 `default_nettype none
 
 module sdtlb_tag_item
@@ -111,5 +112,3 @@ import sdecoder_pkg::*;
 endmodule
 
 `default_nettype wire
-
-`include "sdecoder-undef.svh"

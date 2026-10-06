@@ -1,3 +1,6 @@
+`ifndef _UTILS_PKG_SVH_
+`define _UTILS_PKG_SVH_
+
 package utils_pkg;
 
     function automatic string color_msg(
@@ -54,3 +57,5 @@ package utils_pkg;
     endfunction
 
 endpackage
+
+`endif // _UTILS_PKG_SVH_

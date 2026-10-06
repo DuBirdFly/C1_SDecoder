@@ -1,10 +1,10 @@
 // utility files
-./testbench/utils/utils_pkg.sv
+./testbench/utils/utils_pkg.svh
 
 // UVM files
 ./testbench/inc/uvm_header.sv
 
-./testbench/test/test_pkg.sv
+./testbench/test/test_pkg.svh
 ./testbench/test/smoke/TestBase.sv
 ./testbench/test/regress/TestRegress.sv
 
