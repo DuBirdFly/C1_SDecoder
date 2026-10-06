@@ -12,7 +12,7 @@
 //   段式与页式共用本模块, 不需要两套比较逻辑.
 //
 // 层次与约定:
-//   - sdtlb_tag 用 generate 例化 SDTLB_ENTRIES 份本模块, 再把各条目的 req_hit 做
+//   - sdtlb 用 generate 例化 SDTLB_ENTRIES 份本模块, 再把各条目的 req_hit 做
 //     优先级编码 (正常配置下同一次请求最多命中一个条目), 得到命中条目下标.
 //   - 条目内容存在本模块的 tag_item 寄存器里. 装填由端口 wr_pa_vld 作写使能: 有效时
 //     把 wr_pa_base / wr_pa_up / wr_pa_vld 一起写进 tag_item, 因此装填当拍比较用的

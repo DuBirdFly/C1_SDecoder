@@ -6,7 +6,7 @@
 //   由 SDPTW 在 Page Walk 完成后装填, 与同下标的 sdtlb_tag_item 一起构成一个 SDTLB 条目.
 //
 // 层次与约定:
-//   - sdtlb_data 用 generate 例化 SDTLB_ENTRIES 份本模块, 每个条目接同下标
+//   - sdtlb 用 generate 例化 SDTLB_ENTRIES 份本模块, 每个条目接同下标
 //     sdtlb_tag_item 的 req_hit 作为 rd_sel, 再把 SDTLB_ENTRIES 份输出 OR 起来, 得到命中条目的数据.
 //   - 条目内容存在本模块的 data_item 寄存器里. 装填由端口 wr_vld 作写使能: 有效时把
 //     wr_eid / wr_token_id / wr_s_pfn / wr_grn 一起写进 data_item, 因此装填当拍读出的
