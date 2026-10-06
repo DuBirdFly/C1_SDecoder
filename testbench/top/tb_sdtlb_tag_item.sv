@@ -33,6 +33,18 @@ module tb_sdtlb_tag_item;
 
     always #5 clk = ~clk;
 
+    // 波形 dump: 只有编译时定义了 DUMP_FSDB 才存在 (Makefile 传 DUMP_WAVE=1 时打开),
+    // 波形落在运行目录的 output/wave/ 下 (文件名与 tb_top 共用 test_pkg 里的常量)
+`ifdef DUMP_FSDB
+    initial begin
+        $display("===============================================");
+        $display("Dumping FSDB waveforms");
+        $fsdbAutoSwitchDumpfile(test_pkg::FSDB_LIMIT_SIZE, test_pkg::FSDB_FILENAME, test_pkg::FSDB_FILE_AMOUNT);
+        $fsdbDumpvars(0, tb_sdtlb_tag_item, "+mda");
+        $display("===============================================");
+    end
+`endif
+
     sdtlb_tag_item dut (
         .clk(clk), .rst_n(rst_n),
         .req_vld(req_vld), .req_pa(req_pa),

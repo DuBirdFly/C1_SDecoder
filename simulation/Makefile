@@ -2,7 +2,7 @@
 # USER CONFIG (single test case)
 TB_TOP ?= tb_top
 TESTNAME ?= TestBase
-DUMP_WAVE ?= 1
+DUMP_WAVE ?= 0
 
 ######################################################
 # GLOBAL CONFIG

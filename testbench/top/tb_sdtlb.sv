@@ -106,6 +106,18 @@ module tb_sdtlb;
         idx_obs = req_hit_idx;
     endtask
 
+    // 波形 dump: 只有编译时定义了 DUMP_FSDB 才存在 (Makefile 传 DUMP_WAVE=1 时打开),
+    // 波形落在运行目录的 output/wave/ 下 (文件名与 tb_top 共用 test_pkg 里的常量)
+`ifdef DUMP_FSDB
+    initial begin
+        $display("===============================================");
+        $display("Dumping FSDB waveforms");
+        $fsdbAutoSwitchDumpfile(test_pkg::FSDB_LIMIT_SIZE, test_pkg::FSDB_FILENAME, test_pkg::FSDB_FILE_AMOUNT);
+        $fsdbDumpvars(0, tb_sdtlb, "+mda");
+        $display("===============================================");
+    end
+`endif
+
     initial begin
         req_vld = 1'b1; req_pa = '0; pa_low = 30'h1234_5678;
         wr_vld = 1'b0; wr_pa_base = '0; wr_pa_up = '0;
