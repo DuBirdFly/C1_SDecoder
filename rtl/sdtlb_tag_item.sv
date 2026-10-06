@@ -14,16 +14,17 @@
 // 层次与约定:
 //   - sdtlb_tag 用 generate 例化 SDTLB_ENTRIES 份本模块, 再把各条目的 req_hit 做
 //     优先级编码 (正常配置下同一次请求最多命中一个条目), 得到命中条目下标.
-//   - 条目内容存在本模块的 tag_item 寄存器里. 装入由端口 wr_pa_vld 作写使能: 有效时
+//   - 条目内容存在本模块的 tag_item 寄存器里. 装填由端口 wr_pa_vld 作写使能: 有效时
 //     把 wr_pa_base / wr_pa_up / wr_pa_vld 一起写进 tag_item, 因此装填当拍比较用的
 //     仍是旧值, 新值下一拍生效.
 //   - 无效化按设计方案 §无效化 实现: inv_all 清全部条目的有效位; inv_en + inv_pa
-//     清掉覆盖该地址的条目 (段高位域匹配 且 地址落在闭区间内). 两个入口都优先于
-//     装入, 即同一拍既刷新又装填时按刷新处理, 不会把刚清掉的条目写回去; 对本来就
-//     无效的条目, 按地址清除是空操作, 但同样会挡住同拍的装入.
+//     清掉覆盖该地址的条目 (段高位域匹配 且 地址落在闭区间内). **两个入口都优先于
+//     装填**, 即同一拍既刷新又装填时按刷新处理, 不会把刚清掉的条目写回去; 对本来就
+//     无效的条目, 按地址清除是空操作, 但同样会挡住同拍的装填.
 //   - 置无效只清有效位, 地址字段保留 (无效条目的地址字段是 don't care).
 //   - 复位后 tag_item 清 0, 即所有条目上电为无效.
 // =============================================================================
+`include "sdecoder_constants.svh"
 `default_nettype none
 
 module sdtlb_tag_item
@@ -37,15 +38,17 @@ import sdecoder_pkg::*;
     input  logic [PA_WIDTH-1:0]     req_pa,
     output logic                    req_hit,
 
-    // 本条目装入端口
-    input  logic [16:0]             wr_pa_base, // 段空间基地址, 以 1 GB 对界
-    input  logic [ 4:0]             wr_pa_up,   // 段空间上界(含), 以 1 GB 对界
-    input  logic                    wr_pa_vld,  // 写使能, 同时作为写入的有效位
+    // 装填请求
+    input  logic [16:0]             wr_pa_base,
+    input  logic [ 4:0]             wr_pa_up,
+    input  logic                    wr_pa_vld,
 
-    // 无效化 (刷新) 端口, 优先于装入
-    input  logic                    inv_all,    // 置无效全部 TLB ENTRIES
-    input  logic                    inv_en,     // 按地址置无效使能
-    input  logic [PA_WIDTH-1:0]     inv_pa      // 按地址置无效的地址
+    // 置无效 (刷新) 请求, 置无效全部 TLB ENTRIES
+    input  logic                    inv_all,
+
+    // 置无效 (刷新) 请求, 置无效指定 pa 范围覆盖的条目
+    input  logic                    inv_en,
+    input  logic [PA_WIDTH-1:0]     inv_pa
 
 );
 
@@ -78,7 +81,7 @@ import sdecoder_pkg::*;
     assign req_match = req_high_hit && req_range_hit;
     // note: 这里刻意不带 tag_item.valid. else if 的优先级只在分支条件成立时才起作用:
     //       若把有效位并进匹配条件, 条目当前无效时 inv_match 就是 0, 清位分支根本不会
-    //       被选中, 同拍的装入会照常执行, 把一条覆盖"正在被刷新的地址"的映射填进去
+    //       被选中, 同拍的装填会照常执行, 把一条覆盖"正在被刷新的地址"的映射填进去
     //       (无效条目本就无需清位, 谈不上"写回"). 去掉有效位不影响"清哪些条目".
     assign inv_match = inv_en && inv_high_hit && inv_range_hit;
 
@@ -97,6 +100,17 @@ import sdecoder_pkg::*;
     // 命中 = "请求有效" 且 "条目有效" 且 "请求地址落在条目覆盖范围内"
     assign req_hit = req_vld && tag_item.valid && req_match;
 
+
+`ifdef ASSERT_ON
+    // req_pa[47] 必须为 0. 设计方案 §地址划分: SDecoder 只处理 Mem 空间 (PA[47] = 0),
+    // PA[47] = 1 的 IO 空间请求应由上层按"地址非法异常"处理 (接口手册 §异常码),
+    // 不该送进 Tag 阵列, 这里守住这个前提.
+    // 载荷只在请求有效时可信, 故用 req_vld 限定 (复位与 rst_n 为 X 时由宏里的 disable iff 挡住).
+    `assert_clk(a_req_pa_mem_space, (req_vld == 1'b0) || (req_pa[PA_WIDTH-1] == 1'b0));
+`endif
+
 endmodule
 
 `default_nettype wire
+
+`include "sdecoder-undef.svh"
