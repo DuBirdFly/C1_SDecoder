@@ -8,6 +8,9 @@
 ./testbench/test/smoke/TestBase.sv
 ./testbench/test/regress/TestRegress.sv
 
+// interface files
+./testbench/top/interface/sdtlb_if.sv
+
 // Testbench top files
 ./testbench/top/crg.sv
 ./testbench/top/wrapper_top.sv
