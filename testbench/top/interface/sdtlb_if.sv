@@ -15,17 +15,17 @@
 //   驱动: sdtlb_vif.drv.wr_vld <= 1'b1;   采样: sdtlb_vif.mon.req_hit_vld
 //   或在 UVM 环境里: uvm_config_db#(virtual sdtlb_if)::set(null, "*", "sdtlb_vif", sdtlb_vif);
 // =============================================================================
-`include "sdecoder_pkg.svh"
 
-interface sdtlb_if (
+interface sdtlb_if
+import sdecoder_pkg::*;
+
+(
     input  logic                    clk,
     input  logic                    rst_n
 );
 
     timeunit 1ps;
     timeprecision 1ps;
-
-    import sdecoder_pkg::*;
 
     // 代换请求 (查表)
     logic                               req_vld;
