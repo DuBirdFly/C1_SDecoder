@@ -6,7 +6,7 @@
 | 日期 | 2026-10-06 |
 | 范围 | SDTLB (Tag 阵列 + Data 阵列 + SLA 计算) 与其单元自检 |
 | 上游 | [SDecoder 设计方案](../../doc/design_plan/SDecoder设计方案/SDecoder设计方案.md), [SDecoder 接口手册](../../doc/design_plan/SDecoder接口手册/SDecoder接口手册.md) |
-| 说明 | 本文件只记**决策与理由**以及进展快照. 操作口径 (命名, 大括号风格, 检查命令) 见 [AGENTS.md](../../AGENTS.md), 设计细节与位域见上述设计文档, 这里不复制正文 |
+| 说明 | 本文件只记**决策与理由**以及进展快照. 编码规范 (命名, 大括号风格, `*.svh` 与 import 约束) 见 [CONTRIBUTING.md](../../CONTRIBUTING.md), agent 每次要遵守的约定与检查命令见 [AGENTS.md](../../AGENTS.md), 设计细节与位域见上述设计文档, 这里不复制正文 |
 
 ## 模块划分与理由
 
@@ -38,9 +38,10 @@ flowchart TB
 ## 断言与头文件机制
 
 - 断言宏 (`assert_clk` / `assert_x_value`) 与总开关 `ASSERT_ON` 放在 [rtl/sdecoder_constants.svh](../../rtl/sdecoder_constants.svh);`ASSERT_ON` 由 [simulation/base/option/compile_define.f](../../simulation/base/option/compile_define.f) 默认打开
-- `rtl/sdecoder-undef.svh` 作为 filelist 中该段的**末行**做清理. 它必须连**常量头的守卫**一起 `undef`, 否则下一段再 `include` 常量头会被守卫跳过而拿不到宏 (实测不补 => `Error-[UM] Undefined macro`)
-- 该 undef 文件**刻意不清** `_SDECODER_PKG_SVH_`: package 在一个编译单元里只能定义一份, 清了守卫会让下一个 include 包头的地方重复定义而报错. 常量头守卫与包头守卫的处理刚好相反, 这一点容易搞错
-- `*.svh` 一律带 `ifndef` 守卫的理由: 包/常量头会被多个文件 include, 守卫是防重复定义的第一道闸
+- `rtl/sdecoder-undef.svh` 作为 filelist 中该段的**末行**做清理, 把该段用到的 `ifndef` 守卫**全部**清掉, 含 `_SDECODER_PKG_SVH_` (参照 Synopsys 的口径: 段末把宏状态清干净). 常量头守卫必须清, 否则下一段再 `include` 常量头会被守卫跳过而拿不到宏 (实测不补 => `Error-[UM] Undefined macro`)
+- **由此定下的硬约束**: 已被前面段处理过的 `*.svh` 不允许在后续段再 `include`. testbench 侧要用包里的名字, 靠 `import sdecoder_pkg::*;` (参见 [sdtlb_if.sv](../../testbench/top/interface/sdtlb_if.sv) 把 import 放在接口头), 不要再写 `` `include "sdecoder_pkg.svh" `` —— 守卫已清, 再 include 就是把 `package` 声明读第二遍, 同一编译单元里重复定义 (实测 => `Error-[SV-PPD] Package previously declared`)
+- 代价 (已知并接受): testbench 环境不能再 `include` DUT 段已经处理过的 `*.svh`, 自包含性靠 `import` 维持;这条口径已写入 [CONTRIBUTING.md](../../CONTRIBUTING.md) 的 `*.svh` 小节
+- `*.svh` 一律带 `ifndef` 守卫的理由: 同一段内包/常量头会被多个文件 include, 守卫是防重复定义的第一道闸
 
 ## 关键坑与结论 (供后来人避雷)
 
@@ -52,6 +53,7 @@ flowchart TB
 | 既用 clocking block 又裸赋值写同一信号 | clocking block 的 `output` 会被该块持续驱动 (内部变量初值 X), 二者混用会出现多驱动/被 X 覆盖;驱动只能走一条路 |
 | `make` 退出码为 0 但自检失败 | VCS 即使 `$fatal` 退出码也是 0;判定必须看 `log/simv.log` 里的 `RESULT: PASS\|FAIL` 行 |
 | 无守卫的包头被多个文件 include | `Error-[SV-PPD] Package previously declared` |
+| 清了包头守卫后又去 `include` 包头 | 同样报 `Error-[SV-PPD]`: `undef` 删的是**宏**, 已声明的 package 不会消失, 所以包里的名字仍可用 (`import`), 但文本不能再来一遍 |
 
 ## 自检(testbench)决策
 
@@ -82,3 +84,4 @@ flowchart TB
 | 日期 | 说明 |
 | --- | --- |
 | 2026-10-06 | 首版: 汇总 SDTLB 已定决策, 关键坑与结论, 自检决策, 进展快照与待决策项 |
+| 2026-10-06 | 头文件口径定为 P1: 段末 `*-undef.svh` 连包头守卫一起清 (Synopsys 口径), 后续段不得再 `include` 已处理过的 `*.svh`, 改用 `import`;修正首版里"刻意不清包头守卫"的错误说法, 并写入 CONTRIBUTING.md |
