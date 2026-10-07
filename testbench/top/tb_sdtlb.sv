@@ -3,7 +3,6 @@
 //
 // 跑法 (在仓库根目录):
 //   make -C simulation all TB_TOP=tb_sdtlb
-//   要看波形加 DUMP_WAVE=1, 日志与产物在 simulation/run_single_testcase/tb_sdtlb.TestBase/
 //
 // 结构: 时钟与复位由 crg 生成 (本 tb 内不出现任何 #NUM 延时); 通过 sdtlb_if 接口连 DUT ——
 //       clk / rst_n 接进接口, DUT 各端口按名字连到接口信号; 同步一律等接口的 drv 时钟块
@@ -67,8 +66,6 @@ module tb_sdtlb;
         .inv_all(sdtlb_vif.inv_all), .inv_en(sdtlb_vif.inv_en), .inv_pa(sdtlb_vif.inv_pa)
     );
 
-    // 波形 dump: 只有编译时定义了 DUMP_FSDB 才存在 (Makefile 传 DUMP_WAVE=1 时打开),
-    // 波形落在运行目录的 output/wave/ 下 (文件名与 tb_top 共用 test_pkg 里的常量)
 `ifdef DUMP_FSDB
     initial begin
         $display("===============================================");
