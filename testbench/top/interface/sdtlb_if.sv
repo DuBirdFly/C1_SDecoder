@@ -7,13 +7,16 @@
 //         mon : 只采样 (input), 供 scoreboard / coverage 使用
 //
 // 用法 (sdtlb 是普通端口, 不是 interface 端口, 所以按名字逐根连接):
-//   sdtlb_if sdtlb_vif (.clk (clk), .rst_n (rst_n));
-//   sdtlb dut (
-//       .clk (sdtlb_vif.clk), .rst_n (sdtlb_vif.rst_n),
-//       .req_vld (sdtlb_vif.req_vld), ...
-//   );
-//   驱动: sdtlb_vif.drv.wr_vld <= 1'b1;   采样: sdtlb_vif.mon.req_hit_vld
-//   或在 UVM 环境里: uvm_config_db#(virtual sdtlb_if)::set(null, "*", "sdtlb_vif", sdtlb_vif);
+//   实体接口实例 (不是 virtual interface, 名字不带 _vif 后缀):
+//     sdtlb_if sdtlb_if (.clk (clk), .rst_n (rst_n));
+//     sdtlb dut (
+//         .clk (sdtlb_if.clk), .rst_n (sdtlb_if.rst_n),
+//         .req_vld (sdtlb_if.req_vld), ...
+//     );
+//     驱动: sdtlb_if.drv.wr_vld <= 1'b1;   采样: sdtlb_if.mon.req_hit_vld
+//   virtual interface (传给 UVM 组件时才用, 名字带 _vif 后缀):
+//     virtual sdtlb_if sdtlb_vif;
+//     uvm_config_db#(virtual sdtlb_if)::set(null, "*", "sdtlb_vif", sdtlb_vif);
 // =============================================================================
 
 interface sdtlb_if
