@@ -9,9 +9,9 @@ package sdecoder_pkg;
         // physical address base, 段空间基地址, 以 1 GB 对界
         // 即 PA[46:30], 不包含 PA[47] 这个 IO/MEM 空间区分位
         logic [16:0]    pa_base     ;
-        // physical address up, 段内页数 - 1 (相对 pa_base[34:30] 的偏移), 不是绝对上界.
-        // pa_up = 0 即页式 (只覆盖基址所在的那一个 1GB 页), 非 0 即段式;
-        // 段不允许跨 PA[34:30] 的 32 页边界, 即 pa_base[4:0] + pa_up <= 31
+        // physical address up, 段空间上界(含), 即 PA[34:30] 的上界页号, 不是相对偏移.
+        // 页式条目满足 pa_up = pa_base[34:30] (区间退化为一个 1GB 页);
+        // 装填时要求 pa_up >= pa_base[34:30] (区间非空), 由 sdtlb 的断言守住
         logic [ 4:0]    pa_up       ;
         // valid bit, 有效位, 1 表示条目有效, 0 表示条目无效
         logic           valid       ;

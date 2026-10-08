@@ -31,9 +31,9 @@ flowchart TB
 | 轮转替换指针放在 `sdtlb_tag` 内部, 以 `fill_idx` 输出 | 用户选定;写地址由 Tag 段给出, Data 段按同一下标写入, 保证 Tag/Data 同条目 |
 | 无效化只清 Tag 侧 `valid`, Data 段无有效位端口 | 设计方案的无效化只清 `Valid`;数据段的有效性由同下标 Tag 条目代表 |
 | 无效化的 `inv_match` **刻意不含** `tag_item.valid` | 若含有效位, 条目当前无效时清位分支不会被选中, 同拍的装填会把覆盖"正在被刷新地址"的映射填进去. 变异测试 (把有效位加回条件) 令该用例 FAIL, 已固定为回归用例 |
-| SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_up = 0` 使偏移自然为 0. 加法进位作为 `rd_sla_ovf` 给上层报地址非法 |
-| `pa_up` 定义为**相对 `pa_base` 的段内偏移** (页数 - 1), 不是绝对上界 | 上层拿到的 Page Walk 结果本来就是"基址 + 段长", 直接写偏移更自然;`pa_up = 0` 即页式 (只覆盖基址那一个 1GB 页), 非 0 即段式 |
-| 段**不允许跨 PA[34:30] 的 32 页边界**, 落成断言 `a_wr_pa_no_cross_page` (放 `sdtlb` 的装填入口) | 条目里的区间比较在 5 bit 页号上做 (`pa_base[4:0] + pa_up`), 跨界会让求和进位, 整段静默失效 —— 实测 base[4:0]=16 / up=20 时连基址页都命中不了. 断言用 6 bit 求和看住进位;它同时也蕴含 `pa_base + pa_up <= 17'h1ffff` |
+| SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_base[34:30] == pa_up` 使偏移自然为 0. 加法进位作为 `rd_sla_ovf` 给上层报地址非法 |
+| `pa_up` 是**段空间绝对上界 (含)**, 不是相对偏移 | 用户口径: 区间取闭区间 `[pa_base[34:30], pa_up]`, 页式即 `pa_base[34:30] == pa_up`. 曾短暂改成"相对偏移"口径又改回, 代价见下面"关键坑"里那条 5 bit 进位的记录 |
+| 装填区间须**非空**, 落成断言 `a_wr_pa_range_valid` (放 `sdtlb` 的装填入口) | 绝对上界形式下区间比较没有加法、不会进位, 唯一要守的是 `pa_up >= pa_base[4:0]`;低于基址页号的上界会让条目永远命中不了 |
 | 顶层不引出 `rd_pa_base` / `rd_pa_up`, 且 `rd_pa_up` 整条链删除 (条目 → 阵列 → 顶层) | 上层只需 SLA;`rd_pa_base` 留着是因为 SLA 偏移要用, `rd_pa_up` 无人读, 属死信号 |
 | 命中下标多命中取最小 | 设计方案 §命中判断;同时让"按命中下标读数据"有确定行为 |
 | 断言拆两处: `PA[47]=0` 放 tag 条目, `$onehot0(req_hit)` 放 tag 阵列 | 各自放在"产生该约束的模块"里: 条目是请求地址的入口, 阵列是命中向量的产生者 |
@@ -57,6 +57,7 @@ flowchart TB
 | `make` 退出码为 0 但自检失败 | VCS 即使 `$fatal` 退出码也是 0;判定必须看 `log/simv.log` 里的 `RESULT: PASS\|FAIL` 行 |
 | 无守卫的包头被多个文件 include | `Error-[SV-PPD] Package previously declared` |
 | 清了包头守卫后又去 `include` 包头 | 同样报 `Error-[SV-PPD]`: `undef` 删的是**宏**, 已声明的 package 不会消失, 所以包里的名字仍可用 (`import`), 但文本不能再来一遍 |
+| 把 `pa_up` 当"相对偏移"实现时, `pa_base[4:0] + pa_up` 是 **5 bit** 加法 | 求和会回绕: 跨 32 页边界的段整段静默失效 (实测 base[4:0]=16 / up=20 时连基址页都不命中, 且断言不报). 现已改回绝对上界口径;若将来仍要偏移口径, 比较必须放到 17 bit 上做 (`req_seg_idx` 与 `pa_base` / `pa_base + pa_up` 单调比较), 并且不再要求 PA[46:35] 相等 |
 
 ## 自检(testbench)决策
 
@@ -69,7 +70,7 @@ flowchart TB
 
 - RTL: `sdecoder_pkg.svh` / `sdecoder_constants.svh` / `sdecoder-undef.svh` / 两个条目 / 两个阵列 / `sdtlb` 顶层
 - 自检: 只剩 `tb_sdtlb` (接口 + `drv` + crg, 无 `#NUM`), 当前**只剩 9 条在用**(空表 3 条 + 页式条目 6 条);段式偏移、按地址置无效、轮转指针、SLA 溢出、多命中这 5 类用例被整段注释掉, 标注为 `[TODO] 以下测试是以前留的, 不再使用` (暂不处理)
-- 验证结论: `make -C simulation all` 与各模块 elaborate 均 0 error / 0 warning;`tb_sdtlb` 9 条 PASS;新断言 `a_wr_pa_no_cross_page` 在临时用例里验过 —— 合法装填 (16+5) 不报, 跨界装填 (16+20) 报出
+- 验证结论: `make -C simulation all` 与各模块 elaborate 均 0 error / 0 warning;`tb_sdtlb` 9 条 PASS;新断言 `a_wr_pa_range_valid` 在临时用例里验过 —— 合法装填 (base[4:0]=16, up=20) 不报, 区间为空的装填 (base[4:0]=16, up=5) 报出
 
 ## 待决策
 
@@ -91,3 +92,4 @@ flowchart TB
 | 2026-10-06 | 头文件口径定为 P1: 段末 `*-undef.svh` 连包头守卫一起清 (Synopsys 口径), 后续段不得再 `include` 已处理过的 `*.svh`, 改用 `import`;修正首版里"刻意不清包头守卫"的错误说法, 并写入 CONTRIBUTING.md |
 | 2026-10-06 | 波形口径改为**默认出**: Makefile 的 `DUMP_WAVE` 默认 1, 理由是目前 tb 体量小、不认为拖慢仿真;同步修正首版"波形默认关"的说法与两个 tb 里对应的注释 |
 | 2026-10-06 | `pa_up` 口径定为**相对偏移** (页数 - 1, 0 = 页式);段不允许跨 32 页边界的约束落成 `sdtlb` 里的 `a_wr_pa_no_cross_page` 断言(实测跨界装填会报);顶层去掉 `rd_pa_base` / `rd_pa_up` 并删除 `rd_pa_up` 整条死链;删除 `tb_sdtlb_tag_item`(旧绝对口径, 且条目行为改由 `tb_sdtlb` 覆盖);设计方案与 pkg 注释按新口径统一 |
+| 2026-10-06 | `pa_up` 口径**改回绝对上界 (含)**: 闭区间 `[pa_base[34:30], pa_up]`, 页式 `pa_base[34:30] == pa_up`. 上一笔记的"相对偏移"口径与其 6 bit 求和的不跨界断言一并撤销, 换成守住区间非空的 `a_wr_pa_range_valid`;RTL 注释、pkg 注释、设计方案 7 处、tb 的页式装填值 (`up` 由 0 改为 `base[4:0]`) 同步 |

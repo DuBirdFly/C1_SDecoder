@@ -51,7 +51,7 @@ import sdecoder_pkg::*;
     // 装填: 接 SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目
     input  logic                                wr_vld,
     input  logic [16:0]                         wr_pa_base,     // Tag: 段空间基地址, 以 1 GB 对界
-    input  logic [ 4:0]                         wr_pa_up,       // Tag: 段内页数 - 1 (0 = 页式)
+    input  logic [ 4:0]                         wr_pa_up,       // Tag: 段空间上界 (含)
     input  logic [10:0]                         wr_eid,         // Data: Entity 标识
     input  logic [ 9:0]                         wr_token_id,    // Data: 逻辑池标识
     input  logic [17:0]                         wr_s_pfn,       // Data: SLA 基址, 以 1 GB 对界
@@ -118,7 +118,7 @@ import sdecoder_pkg::*;
 
     // -------------------------------------------------------------------------
     // SLA 计算 (设计方案 §代换结果计算): 段式与页式共用同一公式, 页式条目的
-    // pa_up = 0 (只覆盖一个 1GB 页), 段内偏移自然为 0
+    // pa_base[34:30] == pa_up, 段内偏移自然为 0
     //   PA_Offset[34:30] = req_pa[34:30] - pa_base[34:30]
     //   SLA[47:30]       = S_PFN[47:30] + PA_Offset[34:30]  (进位 => 地址非法异常)
     //   SLA[47:0]        = {SLA[47:30], req_pa[29:0]}
@@ -134,17 +134,12 @@ import sdecoder_pkg::*;
     assign rd_sla     = req_hit_vld ? {sla_hi_sum[17:0], req_pa[29:0]} : '0;
 
     // -------------------------------------------------------------------------
-    // 装填合法性: 段不允许跨 PA[34:30] 的 32 页边界, 即 pa_base[4:0] + pa_up <= 31
-    // (等价于 pa_base + pa_up 不越过 17 bit 的 tag 基址字段). 条目的区间比较是在 5 bit
-    // 的页号上做的 (设计方案 §命中判断), 跨界的段会因进位而整段失效, 所以在装填入口守住
-    // 这个前提. 用 6 bit 求和以看住进位 (5 bit 求和本身会回绕, 看不出跨界)
+    // 装填合法性: pa_up 是段空间上界 (含), 不能低于基址的页号, 否则区间为空 —— 这样的
+    // 条目永远命中不了 (设计方案 §命中判断 的闭区间). 上界本身是 5 bit 页号, 不会越界,
+    // 所以这里只需要守住"非空"这一条
     // -------------------------------------------------------------------------
-    logic [5:0] wr_seg_end;
-
-    assign wr_seg_end = {1'b0, wr_pa_base[4:0]} + {1'b0, wr_pa_up};
-
 `ifdef ASSERT_ON
-    `assert_clk(a_wr_pa_no_cross_page, (wr_vld == 1'b0) || (wr_seg_end[5] == 1'b0));
+    `assert_clk(a_wr_pa_range_valid, (wr_vld == 1'b0) || (wr_pa_up >= wr_pa_base[4:0]));
 `endif
 
 endmodule

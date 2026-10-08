@@ -164,7 +164,7 @@ module tb_sdtlb;
         // 页式条目
         fill_one(
             .base({12'hfff, 5'h1f}),
-            .up(5'h0),
+            .up(5'h1f),
             .eid('1),
             .tok('1),
             .pfn(18'h33333),
