@@ -31,7 +31,10 @@ flowchart TB
 | 轮转替换指针放在 `sdtlb_tag` 内部, 以 `fill_idx` 输出 | 用户选定;写地址由 Tag 段给出, Data 段按同一下标写入, 保证 Tag/Data 同条目 |
 | 无效化只清 Tag 侧 `valid`, Data 段无有效位端口 | 设计方案的无效化只清 `Valid`;数据段的有效性由同下标 Tag 条目代表 |
 | 无效化的 `inv_match` **刻意不含** `tag_item.valid` | 若含有效位, 条目当前无效时清位分支不会被选中, 同拍的装填会把覆盖"正在被刷新地址"的映射填进去. 变异测试 (把有效位加回条件) 令该用例 FAIL, 已固定为回归用例 |
-| SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_base[34:30] == pa_up[34:30]` 使偏移自然为 0. 加法进位作为 `rd_sla_ovf` 给上层报地址非法 |
+| SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_up = 0` 使偏移自然为 0. 加法进位作为 `rd_sla_ovf` 给上层报地址非法 |
+| `pa_up` 定义为**相对 `pa_base` 的段内偏移** (页数 - 1), 不是绝对上界 | 上层拿到的 Page Walk 结果本来就是"基址 + 段长", 直接写偏移更自然;`pa_up = 0` 即页式 (只覆盖基址那一个 1GB 页), 非 0 即段式 |
+| 段**不允许跨 PA[34:30] 的 32 页边界**, 落成断言 `a_wr_pa_no_cross_page` (放 `sdtlb` 的装填入口) | 条目里的区间比较在 5 bit 页号上做 (`pa_base[4:0] + pa_up`), 跨界会让求和进位, 整段静默失效 —— 实测 base[4:0]=16 / up=20 时连基址页都命中不了. 断言用 6 bit 求和看住进位;它同时也蕴含 `pa_base + pa_up <= 17'h1ffff` |
+| 顶层不引出 `rd_pa_base` / `rd_pa_up`, 且 `rd_pa_up` 整条链删除 (条目 → 阵列 → 顶层) | 上层只需 SLA;`rd_pa_base` 留着是因为 SLA 偏移要用, `rd_pa_up` 无人读, 属死信号 |
 | 命中下标多命中取最小 | 设计方案 §命中判断;同时让"按命中下标读数据"有确定行为 |
 | 断言拆两处: `PA[47]=0` 放 tag 条目, `$onehot0(req_hit)` 放 tag 阵列 | 各自放在"产生该约束的模块"里: 条目是请求地址的入口, 阵列是命中向量的产生者 |
 
@@ -57,23 +60,24 @@ flowchart TB
 
 ## 自检(testbench)决策
 
-- **单时钟域 → 无 `#NUM`**: 时钟与复位一律由 [testbench/top/crg.sv](../../testbench/top/crg.sv) 生成;同步等时钟块事件 `@(sdtlb_vif.drv)`;驱动与读出之间隔一个事件, 组合逻辑早已稳定, 所以不需要延时
+- **单时钟域 → 无 `#NUM`**: 时钟与复位一律由 [testbench/top/crg.sv](../../testbench/top/crg.sv) 生成;同步等时钟块事件 `@(sdtlb_if.drv)`;驱动与读出之间隔一个事件, 组合逻辑早已稳定, 所以不需要延时
+- **单条目不再单独建 tb**: 原 `tb_sdtlb_tag_item.sv` 已删除 —— 它的用例是按旧的"绝对上界"口径写的, 与新口径冲突;条目行为改由 `tb_sdtlb` 覆盖 |
 - **接口 + 时钟块**: [testbench/top/interface/sdtlb_if.sv](../../testbench/top/interface/sdtlb_if.sv) 打包信号并给出 `drv` (驱动 + 回读) 与 `mon` (只采样) 两个时钟块;命中/数据/SLA 是同拍组合量, 因此**直接读裸接口信号**, 不走时钟块采样 (时钟块只在沿上取值, 不适合同拍组合量)
 - **波形默认出**: Makefile 的 `DUMP_WAVE` 默认 1 (目前 tb 体量小, 不认为会拖慢仿真;要关掉传 `DUMP_WAVE=0`);回归脚本仍显式 `DUMP_WAVE=0`, 排查问题按单测跑并开波形;单元自检的波形文件名与 `tb_top` 共用 `test_pkg` 里的常量
 
 ## 进展快照
 
 - RTL: `sdecoder_pkg.svh` / `sdecoder_constants.svh` / `sdecoder-undef.svh` / 两个条目 / 两个阵列 / `sdtlb` 顶层
-- 自检: `tb_sdtlb` 28 条 (已改为接口 + `drv` + crg, 无 `#NUM`), `tb_sdtlb_tag_item` 43 条 (仍是裸信号 + `#NUM` 风格)
-- 验证结论: `make -C simulation all` 与四个模块各自 elaborate 均 0 error / 0 warning;上述两支自检全部 PASS;SLA 的页式偏移 0、段式偏移入 `SLA[47:30]`、溢出报出、未命中置 0 均有用例覆盖
+- 自检: 只剩 `tb_sdtlb` (接口 + `drv` + crg, 无 `#NUM`), 当前**只剩 9 条在用**(空表 3 条 + 页式条目 6 条);段式偏移、按地址置无效、轮转指针、SLA 溢出、多命中这 5 类用例被整段注释掉, 标注为 `[TODO] 以下测试是以前留的, 不再使用` (暂不处理)
+- 验证结论: `make -C simulation all` 与各模块 elaborate 均 0 error / 0 warning;`tb_sdtlb` 9 条 PASS;新断言 `a_wr_pa_no_cross_page` 在临时用例里验过 —— 合法装填 (16+5) 不报, 跨界装填 (16+20) 报出
 
 ## 待决策
 
-1. `tb_sdtlb_tag_item` 的 `#NUM` 清理: 需要给它配一个 `sdtlb_tag_item_if`, 用 `mon` 时钟块的**输入偏斜**观测沿前值, 才能无延时地保住 `same-cycle keeps old` 这类检查;中途拉异步复位那条用例要改成"复位释放后确认条目无效"
-2. 替换策略: 轮转 (现状) 还是伪随机 (参考 CORE 内 TLB);影响是否要引入命中下标驱动的状态更新
-3. 条目用 FF 还是 RAM 实现 (直接决定阵列模块内部怎么写)
-4. `req_hit_idx` 是否作为顶层端口保留 (现仅内部用于读数据);`rd_sla_ovf` 的命名与异常上报形式;顶层是否保留 `rd_pa_base` / `rd_pa_up` (现为观测用)
-5. `grn` 目前不参与 SLA 计算 (与设计一致), 后续 SMD 组装是否要用
+1. 替换策略: 轮转 (现状) 还是伪随机 (参考 CORE 内 TLB);影响是否要引入命中下标驱动的状态更新
+2. 条目用 FF 还是 RAM 实现 (直接决定阵列模块内部怎么写)
+3. `req_hit_idx` 是否作为顶层端口保留 (现仅内部用于读数据);`rd_sla_ovf` 的命名与异常上报形式
+4. `grn` 目前不参与 SLA 计算 (与设计一致), 后续 SMD 组装是否要用;`一些思考.md` 里已记为"感觉没有意义"
+5. `tb_sdtlb` 里被注释掉的那批用例是否按新口径补回 (段式偏移 / 按地址置无效 / 轮转 / 溢出 / 多命中)
 
 ## 尚未开始
 
@@ -86,3 +90,4 @@ flowchart TB
 | 2026-10-06 | 首版: 汇总 SDTLB 已定决策, 关键坑与结论, 自检决策, 进展快照与待决策项 |
 | 2026-10-06 | 头文件口径定为 P1: 段末 `*-undef.svh` 连包头守卫一起清 (Synopsys 口径), 后续段不得再 `include` 已处理过的 `*.svh`, 改用 `import`;修正首版里"刻意不清包头守卫"的错误说法, 并写入 CONTRIBUTING.md |
 | 2026-10-06 | 波形口径改为**默认出**: Makefile 的 `DUMP_WAVE` 默认 1, 理由是目前 tb 体量小、不认为拖慢仿真;同步修正首版"波形默认关"的说法与两个 tb 里对应的注释 |
+| 2026-10-06 | `pa_up` 口径定为**相对偏移** (页数 - 1, 0 = 页式);段不允许跨 32 页边界的约束落成 `sdtlb` 里的 `a_wr_pa_no_cross_page` 断言(实测跨界装填会报);顶层去掉 `rd_pa_base` / `rd_pa_up` 并删除 `rd_pa_up` 整条死链;删除 `tb_sdtlb_tag_item`(旧绝对口径, 且条目行为改由 `tb_sdtlb` 覆盖);设计方案与 pkg 注释按新口径统一 |

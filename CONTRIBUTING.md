@@ -75,7 +75,7 @@ end
 
 | 变量 | 默认 | 作用 |
 | --- | --- | --- |
-| `TB_TOP` | `tb_top` | 仿真的顶层. UVM 冒烟用 `tb_top`;单元自检用 `tb_sdtlb` / `tb_sdtlb_tag_item` |
+| `TB_TOP` | `tb_top` | 仿真的顶层. UVM 冒烟用 `tb_top`;单元自检用 `tb_sdtlb` |
 | `TESTNAME` | `TestBase` | UVM 的 `+UVM_TESTNAME`;单元自检用不到, 只参与运行目录命名 |
 | `DUMP_WAVE` | `1` | 1 = 出 FSDB 波形 (目前 tb 体量小, 默认出);0 = 不出 |
 
@@ -103,5 +103,6 @@ flowchart LR
   `make -C simulation verdi` 打开. 回归由 `script/regression_run.py` 驱动, 那里显式
   `DUMP_WAVE=0` (回归不存波形), 排查问题按单测跑并开波形
 - **写 tb 的时序口径**: SDecoder 是单时钟域时序模块, tb 内不出现 `#NUM` 延时 —— 时钟与复位由
-  [testbench/top/crg.sv](testbench/top/crg.sv) 生成, 同步等时钟块事件 (如 `@(sdtlb_vif.drv)`)
-  或时钟沿, 组合量的稳定靠"隔一个事件"而不是延时 (`tb_sdtlb_tag_item.sv` 还是旧的 `#` 写法, 待改)
+  [testbench/top/crg.sv](testbench/top/crg.sv) 生成, 同步等时钟块事件 (如 `@(sdtlb_if.drv)`)
+  或时钟沿, 组合量的稳定靠"隔一个事件"而不是延时. 波形 dump 用的 `$fsdbDumpvars(..., "+all")`
+  不受此限
