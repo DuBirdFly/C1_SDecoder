@@ -6,10 +6,14 @@
 //   是否命中. 同时满足以下三条才算命中:
 //     1. 本条目有效位 = 1;
 //     2. req_pa[46:35] 与 pa_base[46:35] 相等;
-//     3. req_pa[34:30] 落在闭区间 [pa_base[34:30], pa_up[34:30]] 内.
+//     3. req_pa[34:30] 落在闭区间 [pa_base[34:30], pa_base[34:30] + pa_up] 内.
 //
-//   页式条目满足 pa_base[34:30] = pa_up[34:30], 区间退化为一个 1GB 页, 因此
-//   段式与页式共用本模块, 不需要两套比较逻辑.
+//   其中 pa_up 是**相对基址的段内偏移** (页数 - 1), 不是绝对上界: pa_up = 0 即页式
+//   (区间退化为一个 1GB 页), pa_up 非 0 即段式. 因此段式与页式共用本模块, 不需要
+//   两套比较逻辑.
+//
+//   注意: 区间比较是在 5 bit 的页号上做的, 段不允许跨 PA[34:30] 的 32 页边界
+//   (否则求和进位会让区间失效) —— 这个前提由 sdtlb 的 a_wr_pa_no_cross_page 断言守住.
 //
 // 层次与约定:
 //   - sdtlb 用 generate 例化 SDTLB_ENTRIES 份本模块, 再把各条目的 req_hit 做
@@ -50,13 +54,12 @@ import sdecoder_pkg::*;
     input  logic                    inv_en,
     input  logic [PA_WIDTH-1:0]     inv_pa,
 
-    // 命中条目的读出: 本条目命中时输出其段空间基址 / 上界, 否则给 0
-    output logic [16:0]             rd_pa_base,
-    output logic [ 4:0]             rd_pa_up
+    // 命中条目的读出: 本条目命中时输出其段空间基址, 否则给 0
+    output logic [16:0]             rd_pa_base
 
 );
 
-    // 本条目寄存器: 段空间基址 / 上界 / 有效位 (位域见 sdecoder_pkg)
+    // 本条目寄存器: 段空间基址 / 段内偏移 / 有效位 (位域见 sdecoder_pkg)
     SDTLB_TAG_ITEM_t tag_item;
 
     // note: 这四行必须是 wire (或 logic + assign): 用 logic 加声明初始化只会在 0 时刻
@@ -73,11 +76,11 @@ import sdecoder_pkg::*;
 
     assign req_high_hit  = (req_seg_idx[16:5] == tag_item.pa_base[16:5]);
     assign req_range_hit = (req_page_idx >= tag_item.pa_base[4:0]) &&
-                           (req_page_idx <= tag_item.pa_up);
+                           (req_page_idx <= tag_item.pa_base[4:0] + tag_item.pa_up);
 
     assign inv_high_hit  = (inv_seg_idx[16:5] == tag_item.pa_base[16:5]);
     assign inv_range_hit = (inv_page_idx >= tag_item.pa_base[4:0]) &&
-                           (inv_page_idx <= tag_item.pa_up);
+                           (inv_page_idx <= tag_item.pa_base[4:0] + tag_item.pa_up);
 
     logic req_match;    // 请求地址命中本条目 (不含有效位)
     logic inv_match;    // 本条目被无效化地址覆盖 (不含有效位)
@@ -105,9 +108,8 @@ import sdecoder_pkg::*;
     assign req_hit = req_vld && tag_item.valid && req_match;
 
     // 命中条目的读出: 未命中给 0, 上层把 SDTLB_ENTRIES 份输出逐位 OR 起来即为命中条目的
-    // 段空间基址 / 上界 (上层据此算 1GB 段内偏移, 见设计方案 §代换结果计算)
+    // 段空间基址 (上层据此算 1GB 段内偏移, 见设计方案 §代换结果计算)
     assign rd_pa_base = req_hit ? tag_item.pa_base : 17'h0;
-    assign rd_pa_up   = req_hit ? tag_item.pa_up   :  5'h0;
 
 
 `ifdef ASSERT_ON
@@ -116,6 +118,9 @@ import sdecoder_pkg::*;
     // 不该送进 Tag 阵列, 这里守住这个前提.
     // 载荷只在请求有效时可信, 故用 req_vld 限定 (复位与 rst_n 为 X 时由宏里的 disable iff 挡住).
     `assert_clk(a_req_pa_mem_space, (req_vld == 1'b0) || (req_pa[PA_WIDTH-1] == 1'b0));
+
+    // 装填的段不跨 32 页边界的约束 (本模块区间比较的前提) 由 sdtlb 的
+    // a_wr_pa_no_cross_page 断言守住, 不在这里重复检查
 `endif
 
 endmodule

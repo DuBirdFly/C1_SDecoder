@@ -41,8 +41,6 @@ import sdecoder_pkg::*;
     logic [ 9:0]                        rd_token_id;
     logic [17:0]                        rd_s_pfn;
     logic                               rd_grn;
-    logic [16:0]                        rd_pa_base;
-    logic [ 4:0]                        rd_pa_up;
     logic [SLA_WIDTH-1:0]               rd_sla;
     logic                               rd_sla_ovf;
 
@@ -83,8 +81,6 @@ import sdecoder_pkg::*;
         input  rd_token_id;
         input  rd_s_pfn;
         input  rd_grn;
-        input  rd_pa_base;
-        input  rd_pa_up;
         input  rd_sla;
         input  rd_sla_ovf;
     endclocking
@@ -101,8 +97,6 @@ import sdecoder_pkg::*;
         input  rd_token_id;
         input  rd_s_pfn;
         input  rd_grn;
-        input  rd_pa_base;
-        input  rd_pa_up;
         input  rd_sla;
         input  rd_sla_ovf;
         input  wr_vld;

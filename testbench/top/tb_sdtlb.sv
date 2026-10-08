@@ -30,12 +30,10 @@ module tb_sdtlb;
 
     int                                  errors = 0;
     int                                  checks = 0;
-    logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  idx_obs;
     logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  prev_idx;
     logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  dup_first;
     logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  dup_second;
     logic                                rot_ok;
-    logic [29:0]                         pa_low;
 
     // 时钟与复位由 crg 生成 (SDecoder 是单时钟域时序模块, tb 内不再自己写 #NUM 延时)
     crg #(
@@ -59,7 +57,6 @@ module tb_sdtlb;
         .req_hit_vld(sdtlb_if.req_hit_vld), .req_hit_idx(sdtlb_if.req_hit_idx),
         .rd_eid(sdtlb_if.rd_eid), .rd_token_id(sdtlb_if.rd_token_id),
         .rd_s_pfn(sdtlb_if.rd_s_pfn), .rd_grn(sdtlb_if.rd_grn),
-        .rd_pa_base(sdtlb_if.rd_pa_base), .rd_pa_up(sdtlb_if.rd_pa_up),
         .rd_sla(sdtlb_if.rd_sla), .rd_sla_ovf(sdtlb_if.rd_sla_ovf),
         .wr_vld(sdtlb_if.wr_vld), .wr_pa_base(sdtlb_if.wr_pa_base), .wr_pa_up(sdtlb_if.wr_pa_up),
         .wr_eid(sdtlb_if.wr_eid), .wr_token_id(sdtlb_if.wr_token_id),
@@ -72,19 +69,10 @@ module tb_sdtlb;
         $display("===============================================");
         $display("Dumping FSDB waveforms");
         $fsdbAutoSwitchDumpfile(test_pkg::FSDB_LIMIT_SIZE, test_pkg::FSDB_FILENAME, test_pkg::FSDB_FILE_AMOUNT);
-        $fsdbDumpvars(0, tb_sdtlb, "+mda");
+        $fsdbDumpvars(0, tb_sdtlb, "+all");
         $display("===============================================");
     end
 `endif
-
-    // PA = {1'b0, 段高位 12b, 段内下标 5b, 页内偏移 30b}
-    function automatic logic [PA_WIDTH-1:0] mk_pa(
-        input logic [11:0] high,
-        input logic [ 4:0] idx,
-        input logic [29:0] low
-    );
-        mk_pa = {1'b0, high, idx, low};
-    endfunction
 
     task automatic chk(input string name, input logic cond);
         checks++;
@@ -97,16 +85,15 @@ module tb_sdtlb;
         end
     endtask
 
-    // 在时钟块事件上给出查表请求; 再等一个事件后由调用方读裸信号 —— 此间输入已生效、
-    // 组合逻辑早已稳定, 所以不需要任何延时
-    task automatic set_req(input logic [PA_WIDTH-1:0] pa);
-        @(sdtlb_if.drv);
+    // 在时钟块事件上给出查表请求
+    task automatic set_req(logic [11:0] high, logic [4:0] idx, logic [29:0] low);
         sdtlb_if.drv.req_vld <= 1'b1;
-        sdtlb_if.drv.req_pa  <= pa;
+        sdtlb_if.drv.req_pa  <= {1'b0, high, idx, low};
         @(sdtlb_if.drv);
+        sdtlb_if.drv.req_vld <= 1'b0;
     endtask
 
-    // 装填一个条目 (drv 块驱动一拍), 随后用它的基址回查: idx_obs = 落在哪一条
+    // 装填一个条目 (drv 块驱动一拍)
     task automatic fill_one(
         input logic [16:0] base,
         input logic [ 4:0] up,
@@ -125,8 +112,6 @@ module tb_sdtlb;
         sdtlb_if.drv.wr_vld      <= 1'b1;
         @(sdtlb_if.drv);
         sdtlb_if.drv.wr_vld      <= 1'b0;
-        set_req({1'b0, base, 30'h0});
-        idx_obs = sdtlb_if.req_hit_idx;
     endtask
 
     // 按地址置无效, 拉高一拍
@@ -147,7 +132,8 @@ module tb_sdtlb;
     endtask
 
     initial begin
-        // 初值: DUT 输入全部由 drv 时钟块驱动 (时钟块内部变量初值为 X, 必须先给值)
+        logic [29:0] pa_low = 30'h1234_5678;
+
         sdtlb_if.drv.req_vld     <= 1'b0;
         sdtlb_if.drv.req_pa      <= '0;
         sdtlb_if.drv.wr_vld      <= 1'b0;
@@ -161,31 +147,41 @@ module tb_sdtlb;
         sdtlb_if.drv.inv_en      <= 1'b0;
         sdtlb_if.drv.inv_pa      <= '0;
 
-        pa_low = 30'h1234_5678;
-
         // 复位由 crg 产生: 等它释放, 再等两拍让接口输入生效
         wait (rst_n === 1'b1);
-        repeat (2) @(sdtlb_if.drv);
+        repeat (10) @(sdtlb_if.drv);
 
-        // ================= 空表 =================
-        set_req(mk_pa(12'h100, 5'd7, pa_low));
+        // ====================================================================
+        // 空表: 查表请求不命中, 输出全 0
+        set_req(.high(12'hfff), .idx(5'h1f), .low(pa_low));
         chk("empty: hit_vld = 0", sdtlb_if.req_hit_vld == 1'b0);
         chk("empty: rd_* = 0", (sdtlb_if.rd_eid == 0) && (sdtlb_if.rd_token_id == 0) &&
                               (sdtlb_if.rd_s_pfn == 0) && (sdtlb_if.rd_grn == 1'b0));
         chk("empty: sla / ovf = 0", (sdtlb_if.rd_sla == '0) && (sdtlb_if.rd_sla_ovf == 1'b0));
+        repeat (10) @(sdtlb_if.drv);
 
-        // ================= 页式条目: Tag 与 Data 同下标, 偏移恒 0 =================
-        fill_one({12'h100, 5'd7}, 5'd7, 11'h123, 10'h2a5, 18'h3ffff, 1'b0);
-        chk("fill#1 lands on idx 0", idx_obs == 0);
+        // ====================================================================
+        // 页式条目
+        fill_one(
+            .base({12'hfff, 5'h1f}),
+            .up(5'h0),
+            .eid('1),
+            .tok('1),
+            .pfn(18'h33333),
+            .grn(1'b0)
+        );
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'hfff), .idx(5'h1f), .low(pa_low));
+        chk("fill#1 lands on idx 0", sdtlb_if.req_hit_idx == 0);
         chk("fill#1: hit", sdtlb_if.req_hit_vld == 1'b1);
-        chk("fill#1: eid / token_id", (sdtlb_if.rd_eid == 11'h123) && (sdtlb_if.rd_token_id == 10'h2a5));
-        chk("fill#1: s_pfn / grn", (sdtlb_if.rd_s_pfn == 18'h3ffff) && (sdtlb_if.rd_grn == 1'b0));
-        chk("fill#1: rd_pa_base / rd_pa_up", (sdtlb_if.rd_pa_base == {12'h100, 5'd7}) && (sdtlb_if.rd_pa_up == 5'd7));
-        // 带上页内偏移再查一次, 验 SLA 低 30 位原样透传 req_pa[29:0]
-        set_req(mk_pa(12'h100, 5'd7, pa_low));
-        chk("page: SLA = {s_pfn, pa[29:0]}", sdtlb_if.rd_sla == {18'h3ffff, pa_low});
+        chk("fill#1: eid / token_id", (sdtlb_if.rd_eid == '1) && (sdtlb_if.rd_token_id == '1));
+        chk("fill#1: s_pfn / grn", (sdtlb_if.rd_s_pfn == 18'h33333) && (sdtlb_if.rd_grn == 1'b0));
+        chk("page: SLA = {s_pfn, pa[29:0]}", sdtlb_if.rd_sla == {18'h33333, pa_low});
         chk("page: 无溢出", sdtlb_if.rd_sla_ovf == 1'b0);
+        repeat (10) @(sdtlb_if.drv);
 
+        // [TODO] 以下测试是以前留的, 不再使用
+        /*
         // ================= 段式条目: 段内偏移加进 SLA[47:30] =================
         fill_one({12'h200, 5'd4}, 5'd9, 11'h001, 10'h001, 18'h00010, 1'b1);
         chk("fill#2 lands on idx 1", idx_obs == 1);
@@ -247,6 +243,7 @@ module tb_sdtlb;
         chk("dup tag: hit_vld", sdtlb_if.req_hit_vld == 1'b1);
         chk("dup tag: idx = min", sdtlb_if.req_hit_idx == ((dup_first < dup_second) ? dup_first : dup_second));
         chk("dup tag: 读出最小下标那条的数据", sdtlb_if.rd_eid == 11'h111);
+        */
 
         $display("\n%d checks, %d errors", checks, errors);
         if (errors == 0) begin

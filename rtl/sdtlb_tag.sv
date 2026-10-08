@@ -30,9 +30,8 @@ import sdecoder_pkg::*;
     input  logic [PA_WIDTH-1:0]                 req_pa,
     output logic [SDTLB_ENTRIES-1:0]            req_hit,     // 逐条目命中
 
-    // 命中条目的读出: 命中条目的段空间基址 / 上界, 未命中给 0
+    // 命中条目的读出: 命中条目的段空间基址, 未命中给 0
     output logic [16:0]                         rd_pa_base,
-    output logic [ 4:0]                         rd_pa_up,
 
     // 装填请求: 一次一条, 由内部轮转指针选址
     input  logic                                wr_vld,
@@ -60,9 +59,8 @@ import sdecoder_pkg::*;
 
     assign fill_idx = fill_ptr;
 
-    // 每个条目的命中读出 (未命中为 0), 汇总后即为命中条目的段空间基址 / 上界
+    // 每个条目的命中读出 (未命中为 0), 汇总后即为命中条目的段空间基址
     logic [16:0] rd_pa_base_item [SDTLB_ENTRIES];
-    logic [ 4:0] rd_pa_up_item   [SDTLB_ENTRIES];
 
     // -------------------------------------------------------------------------
     // SDTLB_ENTRIES 个 Tag 条目: 请求与刷新广播, 装填按 fill_ptr 译码后只写中一条
@@ -82,8 +80,7 @@ import sdecoder_pkg::*;
                 .inv_all    (inv_all),
                 .inv_en     (inv_en),
                 .inv_pa     (inv_pa),
-                .rd_pa_base (rd_pa_base_item[genvar_i]),
-                .rd_pa_up   (rd_pa_up_item[genvar_i])
+                .rd_pa_base (rd_pa_base_item[genvar_i])
             );
         end
     endgenerate
@@ -94,10 +91,8 @@ import sdecoder_pkg::*;
     // -------------------------------------------------------------------------
     always_comb begin
         rd_pa_base = '0;
-        rd_pa_up   = '0;
         for (int i = 0; i < SDTLB_ENTRIES; i++) begin
             rd_pa_base = rd_pa_base | rd_pa_base_item[i];
-            rd_pa_up   = rd_pa_up   | rd_pa_up_item[i];
         end
     end
 
