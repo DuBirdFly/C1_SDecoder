@@ -23,7 +23,7 @@ module tb_top;
             $display("===============================================");
             $display("Dumping FSDB waveforms");
             $fsdbAutoSwitchDumpfile(test_pkg::FSDB_LIMIT_SIZE, test_pkg::FSDB_FILENAME, test_pkg::FSDB_FILE_AMOUNT);
-            $fsdbDumpvars(0, tb_top, "+mda");
+            $fsdbDumpvars(0, tb_top, "+all");
             // $fsdbDumpvarsToFile("dump_information.list");
             $display("===============================================");
         `endif
