@@ -10,13 +10,13 @@
 //
 //   页式条目满足 pa_base[34:30] = pa_up, 区间退化为一个 1GB 页, 因此段式与页式共用
 //   本模块, 不需要两套比较逻辑. 区间为空 (pa_up < pa_base[34:30]) 的装填请求是非法
-//   的, 由 sdtlb 的 a_wr_pa_range_valid 断言守住.
+//   的, 由 sdtlb 的 a_fill_pa_range_valid 断言守住.
 //
 // 层次与约定:
 //   - sdtlb 用 generate 例化 SDTLB_ENTRIES 份本模块, 再把各条目的 req_hit 做
 //     优先级编码 (正常配置下同一次请求最多命中一个条目), 得到命中条目下标.
-//   - 条目内容存在本模块的 tag_item 寄存器里. 装填由端口 wr_pa_vld 作写使能: 有效时
-//     把 wr_pa_base / wr_pa_up / wr_pa_vld 一起写进 tag_item, 因此装填当拍比较用的
+//   - 条目内容存在本模块的 tag_item 寄存器里. 装填由端口 fill_pa_vld 作写使能: 有效时
+//     把 fill_pa_base / fill_pa_up / fill_pa_vld 一起写进 tag_item, 因此装填当拍比较用的
 //     仍是旧值, 新值下一拍生效.
 //   - 无效化按设计方案 §无效化 实现: inv_all 清全部条目的有效位; inv_en + inv_pa
 //     清掉覆盖该地址的条目 (段高位域匹配 且 地址落在闭区间内). **两个入口都优先于
@@ -40,9 +40,9 @@ import sdecoder_pkg::*;
     output logic                    req_hit,
 
     // 装填请求
-    input  logic [16:0]             wr_pa_base,
-    input  logic [ 4:0]             wr_pa_up,
-    input  logic                    wr_pa_vld,
+    input  logic [16:0]             fill_pa_base,
+    input  logic [ 4:0]             fill_pa_up,
+    input  logic                    fill_pa_vld,
 
     // 置无效 (刷新) 请求, 置无效全部 TLB ENTRIES
     input  logic                    inv_all,
@@ -52,7 +52,7 @@ import sdecoder_pkg::*;
     input  logic [PA_WIDTH-1:0]     inv_pa,
 
     // 命中条目的读出: 本条目命中时输出其段空间基址, 否则给 0
-    output logic [16:0]             rd_pa_base
+    output logic [16:0]             hit_pa_base
 
 );
 
@@ -96,8 +96,8 @@ import sdecoder_pkg::*;
         else if (inv_all || inv_match) begin
             tag_item.valid <= 1'b0;
         end
-        else if (wr_pa_vld) begin
-            tag_item <= '{pa_base: wr_pa_base, pa_up: wr_pa_up, valid: wr_pa_vld};
+        else if (fill_pa_vld) begin
+            tag_item <= '{pa_base: fill_pa_base, pa_up: fill_pa_up, valid: fill_pa_vld};
         end
     end
 
@@ -106,7 +106,7 @@ import sdecoder_pkg::*;
 
     // 命中条目的读出: 未命中给 0, 上层把 SDTLB_ENTRIES 份输出逐位 OR 起来即为命中条目的
     // 段空间基址 (上层据此算 1GB 段内偏移, 见设计方案 §代换结果计算)
-    assign rd_pa_base = req_hit ? tag_item.pa_base : 17'h0;
+    assign hit_pa_base = req_hit ? tag_item.pa_base : 17'h0;
 
 
 `ifdef ASSERT_ON
@@ -117,7 +117,7 @@ import sdecoder_pkg::*;
     `assert_clk(a_req_pa_mem_space, (req_vld == 1'b0) || (req_pa[PA_WIDTH-1] == 1'b0));
 
     // 装填区间非空的约束 (pa_up >= pa_base[4:0], 即上界不低于基址页号) 由 sdtlb 的
-    // a_wr_pa_range_valid 断言守住, 不在这里重复检查
+    // a_fill_pa_range_valid 断言守住, 不在这里重复检查
 `endif
 
 endmodule

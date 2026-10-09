@@ -55,12 +55,12 @@ module tb_sdtlb;
         .clk(clk), .rst_n(rst_n),
         .req_vld(sdtlb_if.req_vld), .req_pa(sdtlb_if.req_pa),
         .req_hit_vld(sdtlb_if.req_hit_vld), .req_hit_idx(sdtlb_if.req_hit_idx),
-        .rd_eid(sdtlb_if.rd_eid), .rd_token_id(sdtlb_if.rd_token_id),
-        .rd_s_pfn(sdtlb_if.rd_s_pfn), .rd_grn(sdtlb_if.rd_grn),
-        .rd_sla(sdtlb_if.rd_sla), .rd_sla_ovf(sdtlb_if.rd_sla_ovf),
-        .wr_vld(sdtlb_if.wr_vld), .wr_pa_base(sdtlb_if.wr_pa_base), .wr_pa_up(sdtlb_if.wr_pa_up),
-        .wr_eid(sdtlb_if.wr_eid), .wr_token_id(sdtlb_if.wr_token_id),
-        .wr_s_pfn(sdtlb_if.wr_s_pfn), .wr_grn(sdtlb_if.wr_grn),
+        .hit_eid(sdtlb_if.hit_eid), .hit_token_id(sdtlb_if.hit_token_id),
+        .hit_s_pfn(sdtlb_if.hit_s_pfn), .hit_grn(sdtlb_if.hit_grn),
+        .hit_sla(sdtlb_if.hit_sla), .hit_sla_ovf(sdtlb_if.hit_sla_ovf),
+        .fill_vld(sdtlb_if.fill_vld), .fill_pa_base(sdtlb_if.fill_pa_base), .fill_pa_up(sdtlb_if.fill_pa_up),
+        .fill_eid(sdtlb_if.fill_eid), .fill_token_id(sdtlb_if.fill_token_id),
+        .fill_s_pfn(sdtlb_if.fill_s_pfn), .fill_grn(sdtlb_if.fill_grn),
         .inv_all(sdtlb_if.inv_all), .inv_en(sdtlb_if.inv_en), .inv_pa(sdtlb_if.inv_pa)
     );
 
@@ -103,15 +103,15 @@ module tb_sdtlb;
         input logic        grn
     );
         @(sdtlb_if.drv);
-        sdtlb_if.drv.wr_pa_base  <= base;
-        sdtlb_if.drv.wr_pa_up    <= up;
-        sdtlb_if.drv.wr_eid      <= eid;
-        sdtlb_if.drv.wr_token_id <= tok;
-        sdtlb_if.drv.wr_s_pfn    <= pfn;
-        sdtlb_if.drv.wr_grn      <= grn;
-        sdtlb_if.drv.wr_vld      <= 1'b1;
+        sdtlb_if.drv.fill_pa_base  <= base;
+        sdtlb_if.drv.fill_pa_up    <= up;
+        sdtlb_if.drv.fill_eid      <= eid;
+        sdtlb_if.drv.fill_token_id <= tok;
+        sdtlb_if.drv.fill_s_pfn    <= pfn;
+        sdtlb_if.drv.fill_grn      <= grn;
+        sdtlb_if.drv.fill_vld      <= 1'b1;
         @(sdtlb_if.drv);
-        sdtlb_if.drv.wr_vld      <= 1'b0;
+        sdtlb_if.drv.fill_vld      <= 1'b0;
     endtask
 
     // 按地址置无效, 拉高一拍
@@ -136,13 +136,13 @@ module tb_sdtlb;
 
         sdtlb_if.drv.req_vld     <= 1'b0;
         sdtlb_if.drv.req_pa      <= '0;
-        sdtlb_if.drv.wr_vld      <= 1'b0;
-        sdtlb_if.drv.wr_pa_base  <= '0;
-        sdtlb_if.drv.wr_pa_up    <= '0;
-        sdtlb_if.drv.wr_eid      <= '0;
-        sdtlb_if.drv.wr_token_id <= '0;
-        sdtlb_if.drv.wr_s_pfn    <= '0;
-        sdtlb_if.drv.wr_grn      <= 1'b0;
+        sdtlb_if.drv.fill_vld      <= 1'b0;
+        sdtlb_if.drv.fill_pa_base  <= '0;
+        sdtlb_if.drv.fill_pa_up    <= '0;
+        sdtlb_if.drv.fill_eid      <= '0;
+        sdtlb_if.drv.fill_token_id <= '0;
+        sdtlb_if.drv.fill_s_pfn    <= '0;
+        sdtlb_if.drv.fill_grn      <= 1'b0;
         sdtlb_if.drv.inv_all     <= 1'b0;
         sdtlb_if.drv.inv_en      <= 1'b0;
         sdtlb_if.drv.inv_pa      <= '0;
@@ -155,9 +155,9 @@ module tb_sdtlb;
         // 空表: 查表请求不命中, 输出全 0
         set_req(.high(12'hfff), .idx(5'h1f), .low(pa_low));
         chk("empty: hit_vld = 0", sdtlb_if.req_hit_vld == 1'b0);
-        chk("empty: rd_* = 0", (sdtlb_if.rd_eid == 0) && (sdtlb_if.rd_token_id == 0) &&
-                              (sdtlb_if.rd_s_pfn == 0) && (sdtlb_if.rd_grn == 1'b0));
-        chk("empty: sla / ovf = 0", (sdtlb_if.rd_sla == '0) && (sdtlb_if.rd_sla_ovf == 1'b0));
+        chk("empty: hit_* = 0", (sdtlb_if.hit_eid == 0) && (sdtlb_if.hit_token_id == 0) &&
+                              (sdtlb_if.hit_s_pfn == 0) && (sdtlb_if.hit_grn == 1'b0));
+        chk("empty: sla / ovf = 0", (sdtlb_if.hit_sla == '0) && (sdtlb_if.hit_sla_ovf == 1'b0));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -174,10 +174,10 @@ module tb_sdtlb;
         set_req(.high(12'hfff), .idx(5'h1f), .low(pa_low));
         chk("fill#1 lands on idx 0", sdtlb_if.req_hit_idx == 0);
         chk("fill#1: hit", sdtlb_if.req_hit_vld == 1'b1);
-        chk("fill#1: eid / token_id", (sdtlb_if.rd_eid == '1) && (sdtlb_if.rd_token_id == '1));
-        chk("fill#1: s_pfn / grn", (sdtlb_if.rd_s_pfn == 18'h33333) && (sdtlb_if.rd_grn == 1'b0));
-        chk("page: SLA = {s_pfn, pa[29:0]}", sdtlb_if.rd_sla == {18'h33333, pa_low});
-        chk("page: 无溢出", sdtlb_if.rd_sla_ovf == 1'b0);
+        chk("fill#1: eid / token_id", (sdtlb_if.hit_eid == '1) && (sdtlb_if.hit_token_id == '1));
+        chk("fill#1: s_pfn / grn", (sdtlb_if.hit_s_pfn == 18'h33333) && (sdtlb_if.hit_grn == 1'b0));
+        chk("page: SLA = {s_pfn, pa[29:0]}", sdtlb_if.hit_sla == {18'h33333, pa_low});
+        chk("page: 无溢出", sdtlb_if.hit_sla_ovf == 1'b0);
         repeat (10) @(sdtlb_if.drv);
 
         // [TODO] 以下测试是以前留的, 不再使用
@@ -185,25 +185,25 @@ module tb_sdtlb;
         // ================= 段式条目: 段内偏移加进 SLA[47:30] =================
         fill_one({12'h200, 5'd4}, 5'd9, 11'h001, 10'h001, 18'h00010, 1'b1);
         chk("fill#2 lands on idx 1", idx_obs == 1);
-        chk("fill#2: own data (不串扰)", (sdtlb_if.rd_eid == 11'h001) && (sdtlb_if.rd_grn == 1'b1));
+        chk("fill#2: own data (不串扰)", (sdtlb_if.hit_eid == 11'h001) && (sdtlb_if.hit_grn == 1'b1));
         set_req(mk_pa(12'h200, 5'd6, pa_low));
-        chk("seg: 偏移 2 加进 SLA[47:30]", sdtlb_if.rd_sla == {18'h00012, pa_low});
-        chk("seg: 无溢出", sdtlb_if.rd_sla_ovf == 1'b0);
+        chk("seg: 偏移 2 加进 SLA[47:30]", sdtlb_if.hit_sla == {18'h00012, pa_low});
+        chk("seg: 无溢出", sdtlb_if.hit_sla_ovf == 1'b0);
         set_req(mk_pa(12'h200, 5'd4, pa_low));
-        chk("seg: 段基址处偏移 0", sdtlb_if.rd_sla == {18'h00010, pa_low});
+        chk("seg: 段基址处偏移 0", sdtlb_if.hit_sla == {18'h00010, pa_low});
 
         set_req(mk_pa(12'h100, 5'd7, pa_low));
         chk("re-query #1: idx 0 + own data", (sdtlb_if.req_hit_idx == 0) &&
-                                            (sdtlb_if.rd_eid == 11'h123) && (sdtlb_if.rd_s_pfn == 18'h3ffff));
+                                            (sdtlb_if.hit_eid == 11'h123) && (sdtlb_if.hit_s_pfn == 18'h3ffff));
 
         // ================= 按地址置无效: 只清覆盖该地址的条目 =================
         inv_addr(mk_pa(12'h100, 5'd7, 30'h0));
         set_req(mk_pa(12'h100, 5'd7, pa_low));
         chk("inv_addr: miss", sdtlb_if.req_hit_vld == 1'b0);
-        chk("inv_addr: rd_* 与 sla 置 0", (sdtlb_if.rd_eid == 0) && (sdtlb_if.rd_s_pfn == 0) &&
-                                         (sdtlb_if.rd_sla == '0) && (sdtlb_if.rd_sla_ovf == 1'b0));
+        chk("inv_addr: hit_* 与 sla 置 0", (sdtlb_if.hit_eid == 0) && (sdtlb_if.hit_s_pfn == 0) &&
+                                         (sdtlb_if.hit_sla == '0) && (sdtlb_if.hit_sla_ovf == 1'b0));
         set_req(mk_pa(12'h200, 5'd7, pa_low));
-        chk("inv_addr: #2 kept", (sdtlb_if.req_hit_vld == 1'b1) && (sdtlb_if.rd_eid == 11'h001));
+        chk("inv_addr: #2 kept", (sdtlb_if.req_hit_vld == 1'b1) && (sdtlb_if.hit_eid == 11'h001));
 
         // ================= 轮转替换指针: 连续装填下标逐个 +1 =================
         fill_one({12'h300, 5'd0}, 5'd0, 11'h0aa, 10'h0aa, 18'h000aa, 1'b0);
@@ -223,15 +223,15 @@ module tb_sdtlb;
         inv_everything();
         set_req(mk_pa(12'h300, 5'd0, pa_low));
         chk("inv_all: miss", sdtlb_if.req_hit_vld == 1'b0);
-        chk("inv_all: rd_* / sla 置 0", (sdtlb_if.rd_eid == 0) && (sdtlb_if.rd_grn == 1'b0) && (sdtlb_if.rd_sla == '0));
+        chk("inv_all: rd_* / sla 置 0", (sdtlb_if.hit_eid == 0) && (sdtlb_if.hit_grn == 1'b0) && (sdtlb_if.hit_sla == '0));
 
         // ================= SLA 溢出: S_PFN 全 1 再加偏移 =================
         fill_one({12'h400, 5'd0}, 5'd31, 11'h002, 10'h002, 18'h3ffff, 1'b1);
         set_req(mk_pa(12'h400, 5'd1, pa_low));
         chk("ovf: hit", sdtlb_if.req_hit_vld == 1'b1);
-        chk("ovf: 偏移 1 时报溢出", sdtlb_if.rd_sla_ovf == 1'b1);
+        chk("ovf: 偏移 1 时报溢出", sdtlb_if.hit_sla_ovf == 1'b1);
         set_req(mk_pa(12'h400, 5'd0, pa_low));
-        chk("ovf: 偏移 0 时不报", sdtlb_if.rd_sla_ovf == 1'b0);
+        chk("ovf: 偏移 0 时不报", sdtlb_if.hit_sla_ovf == 1'b0);
 
         // ================= 故意多命中: 优先级取最小 + 断言报出 (见文件头注) =================
         $display("[TB] 下面故意把同一 tag 装填两次, a_req_hit_onehot0 会报出来, 属预期");
@@ -242,7 +242,7 @@ module tb_sdtlb;
         @(sdtlb_if.drv);      // 再等一拍, 让 $onehot0 断言在时钟块事件上采样到重命中
         chk("dup tag: hit_vld", sdtlb_if.req_hit_vld == 1'b1);
         chk("dup tag: idx = min", sdtlb_if.req_hit_idx == ((dup_first < dup_second) ? dup_first : dup_second));
-        chk("dup tag: 读出最小下标那条的数据", sdtlb_if.rd_eid == 11'h111);
+        chk("dup tag: 读出最小下标那条的数据", sdtlb_if.hit_eid == 11'h111);
         */
 
         $display("\n%d checks, %d errors", checks, errors);

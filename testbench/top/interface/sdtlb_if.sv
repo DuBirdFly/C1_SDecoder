@@ -13,7 +13,7 @@
 //         .clk (sdtlb_if.clk), .rst_n (sdtlb_if.rst_n),
 //         .req_vld (sdtlb_if.req_vld), ...
 //     );
-//     驱动: sdtlb_if.drv.wr_vld <= 1'b1;   采样: sdtlb_if.mon.req_hit_vld
+//     驱动: sdtlb_if.drv.fill_vld <= 1'b1;   采样: sdtlb_if.mon.req_hit_vld
 //   virtual interface (传给 UVM 组件时才用, 名字带 _vif 后缀):
 //     virtual sdtlb_if sdtlb_vif;
 //     uvm_config_db#(virtual sdtlb_if)::set(null, "*", "sdtlb_vif", sdtlb_vif);
@@ -37,21 +37,21 @@ import sdecoder_pkg::*;
     logic [SDTLB_ENTRIES_IDX_WIDTH-1:0] req_hit_idx;
 
     // 命中条目的读出
-    logic [10:0]                        rd_eid;
-    logic [ 9:0]                        rd_token_id;
-    logic [17:0]                        rd_s_pfn;
-    logic                               rd_grn;
-    logic [SLA_WIDTH-1:0]               rd_sla;
-    logic                               rd_sla_ovf;
+    logic [10:0]                        hit_eid;
+    logic [ 9:0]                        hit_token_id;
+    logic [17:0]                        hit_s_pfn;
+    logic                               hit_grn;
+    logic [SLA_WIDTH-1:0]               hit_sla;
+    logic                               hit_sla_ovf;
 
     // 装填请求 (Page Walk 结果)
-    logic                               wr_vld;
-    logic [16:0]                        wr_pa_base;
-    logic [ 4:0]                        wr_pa_up;
-    logic [10:0]                        wr_eid;
-    logic [ 9:0]                        wr_token_id;
-    logic [17:0]                        wr_s_pfn;
-    logic                               wr_grn;
+    logic                               fill_vld;
+    logic [16:0]                        fill_pa_base;
+    logic [ 4:0]                        fill_pa_up;
+    logic [10:0]                        fill_eid;
+    logic [ 9:0]                        fill_token_id;
+    logic [17:0]                        fill_s_pfn;
+    logic                               fill_grn;
 
     // 置无效 (刷新) 请求
     logic                               inv_all;
@@ -64,25 +64,25 @@ import sdecoder_pkg::*;
 
         output req_vld;
         output req_pa;
-        output wr_vld;
-        output wr_pa_base;
-        output wr_pa_up;
-        output wr_eid;
-        output wr_token_id;
-        output wr_s_pfn;
-        output wr_grn;
+        output fill_vld;
+        output fill_pa_base;
+        output fill_pa_up;
+        output fill_eid;
+        output fill_token_id;
+        output fill_s_pfn;
+        output fill_grn;
         output inv_all;
         output inv_en;
         output inv_pa;
 
         input  req_hit_vld;
         input  req_hit_idx;
-        input  rd_eid;
-        input  rd_token_id;
-        input  rd_s_pfn;
-        input  rd_grn;
-        input  rd_sla;
-        input  rd_sla_ovf;
+        input  hit_eid;
+        input  hit_token_id;
+        input  hit_s_pfn;
+        input  hit_grn;
+        input  hit_sla;
+        input  hit_sla_ovf;
     endclocking
 
     // monitor: 全部采样
@@ -93,19 +93,19 @@ import sdecoder_pkg::*;
         input  req_pa;
         input  req_hit_vld;
         input  req_hit_idx;
-        input  rd_eid;
-        input  rd_token_id;
-        input  rd_s_pfn;
-        input  rd_grn;
-        input  rd_sla;
-        input  rd_sla_ovf;
-        input  wr_vld;
-        input  wr_pa_base;
-        input  wr_pa_up;
-        input  wr_eid;
-        input  wr_token_id;
-        input  wr_s_pfn;
-        input  wr_grn;
+        input  hit_eid;
+        input  hit_token_id;
+        input  hit_s_pfn;
+        input  hit_grn;
+        input  hit_sla;
+        input  hit_sla_ovf;
+        input  fill_vld;
+        input  fill_pa_base;
+        input  fill_pa_up;
+        input  fill_eid;
+        input  fill_token_id;
+        input  fill_s_pfn;
+        input  fill_grn;
         input  inv_all;
         input  inv_en;
         input  inv_pa;

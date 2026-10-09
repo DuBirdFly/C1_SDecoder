@@ -31,12 +31,12 @@ import sdecoder_pkg::*;
     output logic [SDTLB_ENTRIES-1:0]            req_hit,     // 逐条目命中
 
     // 命中条目的读出: 命中条目的段空间基址, 未命中给 0
-    output logic [16:0]                         rd_pa_base,
+    output logic [16:0]                         hit_pa_base,
 
     // 装填请求: 一次一条, 由内部轮转指针选址
-    input  logic                                wr_vld,
-    input  logic [16:0]                         wr_pa_base,
-    input  logic [ 4:0]                         wr_pa_up,
+    input  logic                                fill_vld,
+    input  logic [16:0]                         fill_pa_base,
+    input  logic [ 4:0]                         fill_pa_up,
     output logic [SDTLB_ENTRIES-1:0]            fill_sel,    // 本轮装填的 one-hot 选中, 给 Data 段阵列
 
     // 置无效 (刷新) 请求, 优先于装填
@@ -52,7 +52,7 @@ import sdecoder_pkg::*;
         if (!rst_n) begin
             fill_ptr <= '0;
         end
-        else if (wr_vld) begin
+        else if (fill_vld) begin
             fill_ptr <= fill_ptr + 1'b1;
         end
     end
@@ -64,7 +64,7 @@ import sdecoder_pkg::*;
     end
 
     // 每个条目的命中读出 (未命中为 0), 汇总后即为命中条目的段空间基址
-    logic [16:0] rd_pa_base_item [SDTLB_ENTRIES];
+    logic [16:0] hit_pa_base_item [SDTLB_ENTRIES];
 
     // -------------------------------------------------------------------------
     // SDTLB_ENTRIES 个 Tag 条目: 请求与刷新广播, 装填按 fill_sel 只写中一条
@@ -78,13 +78,13 @@ import sdecoder_pkg::*;
                 .req_vld    (req_vld),
                 .req_pa     (req_pa),
                 .req_hit    (req_hit[genvar_i]),
-                .wr_pa_base (wr_pa_base),
-                .wr_pa_up   (wr_pa_up),
-                .wr_pa_vld  (fill_sel[genvar_i]),
+                .fill_pa_base (fill_pa_base),
+                .fill_pa_up   (fill_pa_up),
+                .fill_pa_vld  (fill_sel[genvar_i]),
                 .inv_all    (inv_all),
                 .inv_en     (inv_en),
                 .inv_pa     (inv_pa),
-                .rd_pa_base (rd_pa_base_item[genvar_i])
+                .hit_pa_base (hit_pa_base_item[genvar_i])
             );
         end
     endgenerate
@@ -94,9 +94,9 @@ import sdecoder_pkg::*;
     // (按构造最多命中一条; 多命中已由下面的宽松独热断言守住)
     // -------------------------------------------------------------------------
     always_comb begin
-        rd_pa_base = '0;
+        hit_pa_base = '0;
         for (int i = 0; i < SDTLB_ENTRIES; i++) begin
-            rd_pa_base = rd_pa_base | rd_pa_base_item[i];
+            hit_pa_base = hit_pa_base | hit_pa_base_item[i];
         end
     end
 

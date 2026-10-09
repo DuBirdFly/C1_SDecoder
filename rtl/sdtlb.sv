@@ -7,7 +7,7 @@
 //   1. 查表: 请求交给 Tag 段阵列比较, 对命中向量做优先级编码 (多命中取最小) 与命中
 //      有效判断, 再用命中下标从 Data 段阵列读出该条目的数据.
 //   2. SLA 计算: 命中条目的 S_PFN 加上 1GB 段内偏移得到 SLA[47:0]; 加法进位时报
-//      rd_sla_ovf (地址非法异常, 设计方案 §代换结果计算).
+//      hit_sla_ovf (地址非法异常, 设计方案 §代换结果计算).
 //   3. 装填: 把 SDPTW 在 DONE 状态给出的 Page Walk 结果转给两个阵列, 由 Tag 段阵列的
 //      轮转替换指针给出下标, Tag 与 Data 同下标写入.
 //   4. 置无效: 转给 Tag 段阵列 (Data 段没有有效位).
@@ -41,23 +41,23 @@ import sdecoder_pkg::*;
     output logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  req_hit_idx,    // 命中下标, 多命中取最小
 
     // 命中条目的数据 (未命中时为 0)
-    output logic [10:0]                         rd_eid,
-    output logic [ 9:0]                         rd_token_id,
-    output logic [17:0]                         rd_s_pfn,
-    output logic                                rd_grn,
+    output logic [10:0]                         hit_eid,
+    output logic [ 9:0]                         hit_token_id,
+    output logic [17:0]                         hit_s_pfn,
+    output logic                                hit_grn,
 
     // 命中条目算出的 SLA
-    output logic [SLA_WIDTH-1:0]                rd_sla,         // SLA[47:0]
-    output logic                                rd_sla_ovf,     // SLA 加法溢出 -> 地址非法
+    output logic [SLA_WIDTH-1:0]                hit_sla,         // SLA[47:0]
+    output logic                                hit_sla_ovf,     // SLA 加法溢出 -> 地址非法
 
     // 装填: 接 SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目
-    input  logic                                wr_vld,
-    input  logic [16:0]                         wr_pa_base,     // Tag: 段空间基地址, 以 1 GB 对界
-    input  logic [ 4:0]                         wr_pa_up,       // Tag: 段空间上界 (含)
-    input  logic [10:0]                         wr_eid,         // Data: Entity 标识
-    input  logic [ 9:0]                         wr_token_id,    // Data: 逻辑池标识
-    input  logic [17:0]                         wr_s_pfn,       // Data: SLA 基址, 以 1 GB 对界
-    input  logic                                wr_grn,         // Data: 粒度位, 1 段式 0 页式
+    input  logic                                fill_vld,
+    input  logic [16:0]                         fill_pa_base,     // Tag: 段空间基地址, 以 1 GB 对界
+    input  logic [ 4:0]                         fill_pa_up,       // Tag: 段空间上界 (含)
+    input  logic [10:0]                         fill_eid,         // Data: Entity 标识
+    input  logic [ 9:0]                         fill_token_id,    // Data: 逻辑池标识
+    input  logic [17:0]                         fill_s_pfn,       // Data: SLA 基址, 以 1 GB 对界
+    input  logic                                fill_grn,         // Data: 粒度位, 1 段式 0 页式
 
     // 置无效 (刷新): 只作用于 Tag 侧的有效位
     input  logic                                inv_all,
@@ -76,10 +76,10 @@ import sdecoder_pkg::*;
         .req_vld    (req_vld),
         .req_pa     (req_pa),
         .req_hit    (req_hit),
-        .rd_pa_base (hit_pa_base),
-        .wr_vld     (wr_vld),
-        .wr_pa_base (wr_pa_base),
-        .wr_pa_up   (wr_pa_up),
+        .hit_pa_base (hit_pa_base),
+        .fill_vld     (fill_vld),
+        .fill_pa_base (fill_pa_base),
+        .fill_pa_up   (fill_pa_up),
         .fill_sel   (fill_sel),
         .inv_all    (inv_all),
         .inv_en     (inv_en),
@@ -90,16 +90,16 @@ import sdecoder_pkg::*;
     sdtlb_data u_sdtlb_data (
         .clk         (clk),
         .rst_n       (rst_n),
-        .wr_vld      (fill_sel),
-        .wr_eid      (wr_eid),
-        .wr_token_id (wr_token_id),
-        .wr_s_pfn    (wr_s_pfn),
-        .wr_grn      (wr_grn),
-        .rd_sel      (req_hit),
-        .rd_eid      (rd_eid),
-        .rd_token_id (rd_token_id),
-        .rd_s_pfn    (rd_s_pfn),
-        .rd_grn      (rd_grn)
+        .fill_vld      (fill_sel),
+        .fill_eid      (fill_eid),
+        .fill_token_id (fill_token_id),
+        .fill_s_pfn    (fill_s_pfn),
+        .fill_grn      (fill_grn),
+        .hit_sel      (req_hit),
+        .hit_eid      (hit_eid),
+        .hit_token_id (hit_token_id),
+        .hit_s_pfn    (hit_s_pfn),
+        .hit_grn      (hit_grn)
     );
 
     // -------------------------------------------------------------------------
@@ -128,10 +128,10 @@ import sdecoder_pkg::*;
     logic [18:0] sla_hi_sum;    // {1'b0, S_PFN} + {14'h0, 偏移}, 最高位是进位
 
     assign pa_offset  = req_hit_vld ? (req_pa[34:30] - hit_pa_base[4:0]) : 5'h0;
-    assign sla_hi_sum = {1'b0, rd_s_pfn} + {14'h0, pa_offset};
+    assign sla_hi_sum = {1'b0, hit_s_pfn} + {14'h0, pa_offset};
 
-    assign rd_sla_ovf = req_hit_vld && sla_hi_sum[18];
-    assign rd_sla     = req_hit_vld ? {sla_hi_sum[17:0], req_pa[29:0]} : '0;
+    assign hit_sla_ovf = req_hit_vld && sla_hi_sum[18];
+    assign hit_sla     = req_hit_vld ? {sla_hi_sum[17:0], req_pa[29:0]} : '0;
 
     // -------------------------------------------------------------------------
     // 装填合法性: pa_up 是段空间上界 (含), 不能低于基址的页号, 否则区间为空 —— 这样的
@@ -139,7 +139,7 @@ import sdecoder_pkg::*;
     // 所以这里只需要守住"非空"这一条
     // -------------------------------------------------------------------------
 `ifdef ASSERT_ON
-    `assert_clk(a_wr_pa_range_valid, (wr_vld == 1'b0) || (wr_pa_up >= wr_pa_base[4:0]));
+    `assert_clk(a_fill_pa_range_valid, (fill_vld == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]));
 `endif
 
 endmodule
