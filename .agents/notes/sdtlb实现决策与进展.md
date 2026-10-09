@@ -26,15 +26,15 @@ flowchart TB
 
 | 决策 | 理由 |
 | --- | --- |
-| 未命中时读出全 0 (`rd_*` / `rd_sla` / `rd_sla_ovf` 都给 0) | 组合读出若不加门控会露出 `req_pa` 的残值;置 0 后上层直接以 `req_hit_vld` 判断有效性 |
-| Data 段的读写选中用 **SDTLB_ENTRIES 位 one-hot 向量** (`wr_vld` / `rd_sel`), 不用"地址 + 有效"的 RAM 形式 | 暂不考虑 RAM 构建形式 (用户口径): 全相联下 one-hot 是最自然的形式 —— 写使能 `wr_vld` 由 Tag 段的轮转指针译码成 one-hot (`fill_sel`), 读选中 `rd_sel` 直接用 Tag 段的命中向量 (`req_hit`), 未命中时全 0 所以读出自然全 0, 连 `rd_vld` 都不需要. 端口名与 `sdtlb_data_item` 的同名端口对齐. 单命中行为与"按命中下标 mux"完全一致;多命中 (按构造不应出现, 已断言守住) 时读出是各命中条目数据的**按位或** |
+| 未命中时读出全 0 (`hit_*` / `hit_sla` / `hit_sla_ovf` 都给 0) | 组合读出若不加门控会露出 `req_pa` 的残值;置 0 后上层直接以 `req_hit_vld` 判断有效性 |
+| Data 段的读写选中用 **SDTLB_ENTRIES 位 one-hot 向量** (`fill_vld` / `hit_sel`), 不用"地址 + 有效"的 RAM 形式 | 暂不考虑 RAM 构建形式 (用户口径): 全相联下 one-hot 是最自然的形式 —— 写使能 `fill_vld` 由 Tag 段的轮转指针译码成 one-hot (`fill_sel`), 读选中 `hit_sel` 直接用 Tag 段的命中向量 (`req_hit`), 未命中时全 0 所以读出自然全 0, 连读有效位都不需要. 端口名与 `sdtlb_data_item` 的同名端口对齐. 单命中行为与"按命中下标 mux"完全一致;多命中 (按构造不应出现, 已断言守住) 时读出是各命中条目数据的**按位或** |
 | 轮转替换指针放在 `sdtlb_tag` 内部, 以 `fill_sel` (one-hot) 输出 | 用户选定;写选中由 Tag 段给出, Data 段用同一根向量写入, 保证 Tag/Data 同条目 |
 | 无效化只清 Tag 侧 `valid`, Data 段无有效位端口 | 设计方案的无效化只清 `Valid`;数据段的有效性由同下标 Tag 条目代表 |
 | 无效化的 `inv_match` **刻意不含** `tag_item.valid` | 若含有效位, 条目当前无效时清位分支不会被选中, 同拍的装填会把覆盖"正在被刷新地址"的映射填进去. 变异测试 (把有效位加回条件) 令该用例 FAIL, 已固定为回归用例 |
-| SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_base[34:30] == pa_up` 使偏移自然为 0. 加法进位作为 `rd_sla_ovf` 给上层报地址非法 |
+| SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_base[34:30] == pa_up` 使偏移自然为 0. 加法进位作为 `hit_sla_ovf` 给上层报地址非法 |
 | `pa_up` 是**段空间绝对上界 (含)**, 不是相对偏移 | 用户口径: 区间取闭区间 `[pa_base[34:30], pa_up]`, 页式即 `pa_base[34:30] == pa_up`. 曾短暂改成"相对偏移"口径又改回, 代价见下面"关键坑"里那条 5 bit 进位的记录 |
 | 装填区间须**非空**, 落成断言 `a_wr_pa_range_valid` (放 `sdtlb` 的装填入口) | 绝对上界形式下区间比较没有加法、不会进位, 唯一要守的是 `pa_up >= pa_base[4:0]`;低于基址页号的上界会让条目永远命中不了 |
-| 顶层不引出 `rd_pa_base` / `rd_pa_up`, 且 `rd_pa_up` 整条链删除 (条目 → 阵列 → 顶层) | 上层只需 SLA;`rd_pa_base` 留着是因为 SLA 偏移要用, `rd_pa_up` 无人读, 属死信号 |
+| 顶层不引出 Tag 侧读出 (`hit_pa_base` / `hit_pa_up`), 且 `hit_pa_up` 整条链删除 (条目 → 阵列 → 顶层) | 上层只需 SLA;`hit_pa_base` 留着是因为 SLA 偏移要用, `hit_pa_up` 无人读, 属死信号 |
 | 命中下标多命中取最小 | 设计方案 §命中判断;同时让"按命中下标读数据"有确定行为 |
 | 断言拆两处: `PA[47]=0` 放 tag 条目, `$onehot0(req_hit)` 放 tag 阵列 | 各自放在"产生该约束的模块"里: 条目是请求地址的入口, 阵列是命中向量的产生者 |
 
@@ -77,7 +77,7 @@ flowchart TB
 
 1. 替换策略: 轮转 (现状) 还是伪随机 (参考 CORE 内 TLB);影响是否要引入命中下标驱动的状态更新
 2. 条目用 FF 还是 RAM 实现 (直接决定阵列模块内部怎么写)
-3. `req_hit_idx` 是否作为顶层端口保留 (现仅内部用于读数据);`rd_sla_ovf` 的命名与异常上报形式
+3. `req_hit_idx` 是否作为顶层端口保留 (现仅内部用于读数据);`hit_sla_ovf` 的命名与异常上报形式
 4. `grn` 目前不参与 SLA 计算 (与设计一致), 后续 SMD 组装是否要用;`一些思考.md` 里已记为"感觉没有意义"
 5. `tb_sdtlb` 里被注释掉的那批用例是否按新口径补回 (段式偏移 / 按地址置无效 / 轮转 / 溢出 / 多命中)
 
@@ -96,3 +96,4 @@ flowchart TB
 | 2026-10-06 | `pa_up` 口径**改回绝对上界 (含)**: 闭区间 `[pa_base[34:30], pa_up]`, 页式 `pa_base[34:30] == pa_up`. 上一笔记的"相对偏移"口径与其 6 bit 求和的不跨界断言一并撤销, 换成守住区间非空的 `a_wr_pa_range_valid`;RTL 注释、pkg 注释、设计方案 7 处、tb 的页式装填值 (`up` 由 0 改为 `base[4:0]`) 同步 |
 | 2026-10-06 | 新增 agent 专用仿真入口 `simulation_agent/` (软链 `Makefile` / `base`, 独立运行目录), agent 不再往 `simulation/` 写产物;AGENTS.md 与 CONTRIBUTING.md 的命令与说明同步 |
 | 2026-10-06 | `sdtlb_data` 的读写口由"地址 + 有效"(`wr_idx`、`rd_vld`/`rd_idx`) 改为 **128 位 one-hot 向量** (`wr_vld`/`rd_sel`, 与条目端口同名), 因为暂不考虑 RAM 构建形式;`sdtlb_tag` 的 `fill_idx` 随之改为 `fill_sel` (one-hot), 顶层把 `req_hit` 直接接给 Data 段的 `rd_sel` —— 顺带省掉了读侧的 `rd_vld` 门控 |
+| 2026-10-06 | 端口/信号按类别改名: 装填类 `wr_*` -> `fill_*`, 命中读出类 `rd_*` -> `hit_*` (`rd_eid`/`rd_s_pfn`/`rd_grn`/`rd_token_id` -> `hit_*`, `rd_sla`/`rd_sla_ovf` -> `hit_sla`/`hit_sla_ovf`, `rd_sel` -> `hit_sel`, `rd_pa_base` -> `hit_pa_base`);断言名 `a_wr_pa_range_valid` -> `a_fill_pa_range_valid`;接口与 tb 同步 |
