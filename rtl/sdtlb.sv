@@ -13,11 +13,13 @@
 //   4. 置无效: 转给 Tag 段阵列 (Data 段没有有效位).
 //
 // 层次与约定:
-//   - Tag 段与 Data 段各自是独立阵列模块 (sdtlb_tag / sdtlb_data), 便于后续把阵列换成
-//     RAM/SRAM 实现: 替换时只改阵列模块内部, 本模块的端口与连线不变.
-//   - 读出用 "命中有效 + 命中下标" 的地址读形式 (与 RAM 一致), 未命中输出全 0.
-//     注意多命中时读出的是下标最小那条的数据 —— 按构造不应出现多命中, 已由
-//     sdtlb_tag 里的宽松独热断言守住.
+//   - Tag 段与 Data 段各自是独立阵列模块 (sdtlb_tag / sdtlb_data), 各自可以独立演进.
+//   - Data 段的读写选中都是 SDTLB_ENTRIES 位 one-hot (自然的全相联形式, 不为 RAM 形式
+//     预留地址口): 写选中由 Tag 段的轮转指针译码而来, 读选中直接用 Tag 段的命中向量,
+//     未命中时向量全 0, 读出自然全 0.
+//   - 命中下标 (req_hit_idx) 做优先级编码 (多命中取最小) 供上层观测; 数据通路不依赖它,
+//     所以多命中时读出的是各命中条目数据的按位或 (按构造不应出现多命中, 已由 sdtlb_tag
+//     里的宽松独热断言守住).
 //   - 条目内容一律由硬件在 Page Walk 完成后装填, 软件只能置无效 (§设计原则 4).
 //   - 本模块到 "命中下标 + 命中条目数据 + SLA" 为止: SMD 三元组的组装与异常码上报,
 //     以及未命中后的未命中队列 / Page Walk 流程, 由上层负责.
@@ -64,7 +66,7 @@ import sdecoder_pkg::*;
 );
 
     logic [SDTLB_ENTRIES-1:0]           req_hit;    // Tag 段阵列的逐条目命中
-    logic [SDTLB_ENTRIES_IDX_WIDTH-1:0] fill_idx;   // 本轮装填下标 (Tag 段阵列给出)
+    logic [SDTLB_ENTRIES-1:0]           fill_sel;   // 本轮装填的 one-hot 选中 (Tag 段阵列给出)
     logic [16:0]                        hit_pa_base;// 命中条目的段空间基址
 
     // Tag 段阵列: 比较 / 装填选址 / 置无效 / 命中条目的段基址读出
@@ -78,24 +80,22 @@ import sdecoder_pkg::*;
         .wr_vld     (wr_vld),
         .wr_pa_base (wr_pa_base),
         .wr_pa_up   (wr_pa_up),
-        .fill_idx   (fill_idx),
+        .fill_sel   (fill_sel),
         .inv_all    (inv_all),
         .inv_en     (inv_en),
         .inv_pa     (inv_pa)
     );
 
-    // Data 段阵列: 与 Tag 段同下标写入, 按命中下标读出
+    // Data 段阵列: 与 Tag 段同条目写入 (fill_sel 作 one-hot 写使能), 按命中向量读出
     sdtlb_data u_sdtlb_data (
         .clk         (clk),
         .rst_n       (rst_n),
-        .wr_vld      (wr_vld),
-        .wr_idx      (fill_idx),
+        .wr_vld      (fill_sel),
         .wr_eid      (wr_eid),
         .wr_token_id (wr_token_id),
         .wr_s_pfn    (wr_s_pfn),
         .wr_grn      (wr_grn),
-        .rd_vld      (req_hit_vld),
-        .rd_idx      (req_hit_idx),
+        .rd_sel      (req_hit),
         .rd_eid      (rd_eid),
         .rd_token_id (rd_token_id),
         .rd_s_pfn    (rd_s_pfn),

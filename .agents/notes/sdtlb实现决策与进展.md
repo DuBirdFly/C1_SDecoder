@@ -18,8 +18,8 @@ flowchart TB
     DATAARR --> DI["sdtlb_data_item x 128<br/>数据寄存器 + 门控读出"]
 ```
 
-- **条目 → 阵列 → 顶层三层**, 理由: 后续可能把阵列换成 RAM/SRAM 实现 (待决策项之一), 换的时候只改阵列模块内部, 顶层的端口与连线不动. 为此两个阵列的读写口都取"有效 + 下标 + 数据"的地址形式
-- **Tag 与 Data 分属两个阵列模块而非一个合并模块**: 二者的读语义本来就不同 (Tag 是全并行比较, Data 是按下标读), 分开后 Tag 侧仍是 CAM 语义, 将来若改索引式 tag RAM (set-associative 口径) 只需改 `sdtlb_tag` 与它对顶层的接口
+- **条目 → 阵列 → 顶层三层**: 条目是行为单元, 阵列管例化/译码/汇总, 顶层管编码与 SLA, 三者可各自演进. 阵列模块**不按 RAM/SRAM 形式预留接口** —— Data 段的读写选中都用 SDTLB_ENTRIES 位 one-hot (自然的全相联形式), 将来若真要换 RAM, 再改阵列模块的读写口 (把 one-hot 编成地址)
+- **Tag 与 Data 分属两个阵列模块而非一个合并模块**: 二者的读语义本来就不同 (Tag 是全并行比较, Data 是按选中读出), 分开后 Tag 侧仍是 CAM 语义, 将来若改索引式 tag RAM (set-associative 口径) 只需改 `sdtlb_tag` 与它对顶层的接口
 - 曾有过一版把两者合在一个 `sdtlb` 里的实现, 已弃用并留档在 [backup/rtl/sdtlb_tag.sv](../../backup/rtl/sdtlb_tag.sv) (`backup/` 不入库)
 
 ## 已定决策
@@ -27,8 +27,8 @@ flowchart TB
 | 决策 | 理由 |
 | --- | --- |
 | 未命中时读出全 0 (`rd_*` / `rd_sla` / `rd_sla_ovf` 都给 0) | 组合读出若不加门控会露出 `req_pa` 的残值;置 0 后上层直接以 `req_hit_vld` 判断有效性 |
-| Data 读出由"命中向量逐位 OR"改为"按命中下标 `rd_idx` 译码" | 与 RAM 的地址读形式一致;单命中时两者等价, 多命中时稳定读**下标最小**那条的数据 (与 `req_hit_idx` 口径一致), 不再是把多条数据 OR 成垃圾 |
-| 轮转替换指针放在 `sdtlb_tag` 内部, 以 `fill_idx` 输出 | 用户选定;写地址由 Tag 段给出, Data 段按同一下标写入, 保证 Tag/Data 同条目 |
+| Data 段的读写选中用 **SDTLB_ENTRIES 位 one-hot 向量** (`wr_vld` / `rd_sel`), 不用"地址 + 有效"的 RAM 形式 | 暂不考虑 RAM 构建形式 (用户口径): 全相联下 one-hot 是最自然的形式 —— 写使能 `wr_vld` 由 Tag 段的轮转指针译码成 one-hot (`fill_sel`), 读选中 `rd_sel` 直接用 Tag 段的命中向量 (`req_hit`), 未命中时全 0 所以读出自然全 0, 连 `rd_vld` 都不需要. 端口名与 `sdtlb_data_item` 的同名端口对齐. 单命中行为与"按命中下标 mux"完全一致;多命中 (按构造不应出现, 已断言守住) 时读出是各命中条目数据的**按位或** |
+| 轮转替换指针放在 `sdtlb_tag` 内部, 以 `fill_sel` (one-hot) 输出 | 用户选定;写选中由 Tag 段给出, Data 段用同一根向量写入, 保证 Tag/Data 同条目 |
 | 无效化只清 Tag 侧 `valid`, Data 段无有效位端口 | 设计方案的无效化只清 `Valid`;数据段的有效性由同下标 Tag 条目代表 |
 | 无效化的 `inv_match` **刻意不含** `tag_item.valid` | 若含有效位, 条目当前无效时清位分支不会被选中, 同拍的装填会把覆盖"正在被刷新地址"的映射填进去. 变异测试 (把有效位加回条件) 令该用例 FAIL, 已固定为回归用例 |
 | SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_base[34:30] == pa_up` 使偏移自然为 0. 加法进位作为 `rd_sla_ovf` 给上层报地址非法 |
@@ -95,3 +95,4 @@ flowchart TB
 | 2026-10-06 | `pa_up` 口径定为**相对偏移** (页数 - 1, 0 = 页式);段不允许跨 32 页边界的约束落成 `sdtlb` 里的 `a_wr_pa_no_cross_page` 断言(实测跨界装填会报);顶层去掉 `rd_pa_base` / `rd_pa_up` 并删除 `rd_pa_up` 整条死链;删除 `tb_sdtlb_tag_item`(旧绝对口径, 且条目行为改由 `tb_sdtlb` 覆盖);设计方案与 pkg 注释按新口径统一 |
 | 2026-10-06 | `pa_up` 口径**改回绝对上界 (含)**: 闭区间 `[pa_base[34:30], pa_up]`, 页式 `pa_base[34:30] == pa_up`. 上一笔记的"相对偏移"口径与其 6 bit 求和的不跨界断言一并撤销, 换成守住区间非空的 `a_wr_pa_range_valid`;RTL 注释、pkg 注释、设计方案 7 处、tb 的页式装填值 (`up` 由 0 改为 `base[4:0]`) 同步 |
 | 2026-10-06 | 新增 agent 专用仿真入口 `simulation_agent/` (软链 `Makefile` / `base`, 独立运行目录), agent 不再往 `simulation/` 写产物;AGENTS.md 与 CONTRIBUTING.md 的命令与说明同步 |
+| 2026-10-06 | `sdtlb_data` 的读写口由"地址 + 有效"(`wr_idx`、`rd_vld`/`rd_idx`) 改为 **128 位 one-hot 向量** (`wr_vld`/`rd_sel`, 与条目端口同名), 因为暂不考虑 RAM 构建形式;`sdtlb_tag` 的 `fill_idx` 随之改为 `fill_sel` (one-hot), 顶层把 `req_hit` 直接接给 Data 段的 `rd_sel` —— 顺带省掉了读侧的 `rd_vld` 门控 |

@@ -37,7 +37,7 @@ import sdecoder_pkg::*;
     input  logic                                wr_vld,
     input  logic [16:0]                         wr_pa_base,
     input  logic [ 4:0]                         wr_pa_up,
-    output logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  fill_idx,    // 本轮装填下标, 给 Data 段阵列
+    output logic [SDTLB_ENTRIES-1:0]            fill_sel,    // 本轮装填的 one-hot 选中, 给 Data 段阵列
 
     // 置无效 (刷新) 请求, 优先于装填
     input  logic                                inv_all,
@@ -57,13 +57,17 @@ import sdecoder_pkg::*;
         end
     end
 
-    assign fill_idx = fill_ptr;
+    // 把指针译码成 one-hot: 本轮只写中一条, Data 段阵列用同一根向量做写选中
+    always_comb begin
+        fill_sel = '0;
+        fill_sel[fill_ptr] = 1'b1;
+    end
 
     // 每个条目的命中读出 (未命中为 0), 汇总后即为命中条目的段空间基址
     logic [16:0] rd_pa_base_item [SDTLB_ENTRIES];
 
     // -------------------------------------------------------------------------
-    // SDTLB_ENTRIES 个 Tag 条目: 请求与刷新广播, 装填按 fill_ptr 译码后只写中一条
+    // SDTLB_ENTRIES 个 Tag 条目: 请求与刷新广播, 装填按 fill_sel 只写中一条
     // -------------------------------------------------------------------------
     genvar genvar_i;
     generate
@@ -76,7 +80,7 @@ import sdecoder_pkg::*;
                 .req_hit    (req_hit[genvar_i]),
                 .wr_pa_base (wr_pa_base),
                 .wr_pa_up   (wr_pa_up),
-                .wr_pa_vld  (wr_vld && (fill_ptr == genvar_i)),
+                .wr_pa_vld  (fill_sel[genvar_i]),
                 .inv_all    (inv_all),
                 .inv_en     (inv_en),
                 .inv_pa     (inv_pa),
