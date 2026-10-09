@@ -40,8 +40,12 @@ ruff format --check --config ./.config/ruff.toml .    # 只检查格式, 不落�
 改动 `rtl/` 后, 在**仓库根目录**跑一遍编译与冒烟:
 
 ```bash
-make -C simulation all
+make -C simulation_agent all
 ```
+
+`simulation_agent/` 是给 agent 用的仿真目录 (`Makefile` 与 `base` 都是指向 `simulation/` 的软链,
+只有运行目录 `run_*_testcase/` 独立), 用法与 `simulation/` 完全一样. **`simulation/` 是人自己的
+仿真目录, agent 不要往里写** —— 避免两边互相覆盖日志与波形.
 
 编码规范 (文件名与 `*.svh` 的导入约束, 命名, 缩进与大括号, 其他要求) 见
 [`CONTRIBUTING.md`](CONTRIBUTING.md)

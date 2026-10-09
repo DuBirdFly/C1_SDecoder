@@ -64,6 +64,7 @@ flowchart TB
 - **单时钟域 → 无 `#NUM`**: 时钟与复位一律由 [testbench/top/crg.sv](../../testbench/top/crg.sv) 生成;同步等时钟块事件 `@(sdtlb_if.drv)`;驱动与读出之间隔一个事件, 组合逻辑早已稳定, 所以不需要延时
 - **单条目不再单独建 tb**: 原 `tb_sdtlb_tag_item.sv` 已删除 —— 它的用例是按旧的"绝对上界"口径写的, 与新口径冲突;条目行为改由 `tb_sdtlb` 覆盖 |
 - **接口 + 时钟块**: [testbench/top/interface/sdtlb_if.sv](../../testbench/top/interface/sdtlb_if.sv) 打包信号并给出 `drv` (驱动 + 回读) 与 `mon` (只采样) 两个时钟块;命中/数据/SLA 是同拍组合量, 因此**直接读裸接口信号**, 不走时钟块采样 (时钟块只在沿上取值, 不适合同拍组合量)
+- **agent 与人工仿真分开**: agent 一律用 [simulation_agent/](../../simulation_agent) (其 `Makefile` / `base` 是指向 `simulation/` 的软链, 只有 `run_*_testcase/` 独立), 不往 `simulation/` 写运行产物 —— 避免两边互相覆盖日志与波形;`make -C simulation_agent all` 与 `make -C simulation all` 用法完全一样
 - **波形默认出**: Makefile 的 `DUMP_WAVE` 默认 1 (目前 tb 体量小, 不认为会拖慢仿真;要关掉传 `DUMP_WAVE=0`);回归脚本仍显式 `DUMP_WAVE=0`, 排查问题按单测跑并开波形;单元自检的波形文件名与 `tb_top` 共用 `test_pkg` 里的常量
 
 ## 进展快照
@@ -93,3 +94,4 @@ flowchart TB
 | 2026-10-06 | 波形口径改为**默认出**: Makefile 的 `DUMP_WAVE` 默认 1, 理由是目前 tb 体量小、不认为拖慢仿真;同步修正首版"波形默认关"的说法与两个 tb 里对应的注释 |
 | 2026-10-06 | `pa_up` 口径定为**相对偏移** (页数 - 1, 0 = 页式);段不允许跨 32 页边界的约束落成 `sdtlb` 里的 `a_wr_pa_no_cross_page` 断言(实测跨界装填会报);顶层去掉 `rd_pa_base` / `rd_pa_up` 并删除 `rd_pa_up` 整条死链;删除 `tb_sdtlb_tag_item`(旧绝对口径, 且条目行为改由 `tb_sdtlb` 覆盖);设计方案与 pkg 注释按新口径统一 |
 | 2026-10-06 | `pa_up` 口径**改回绝对上界 (含)**: 闭区间 `[pa_base[34:30], pa_up]`, 页式 `pa_base[34:30] == pa_up`. 上一笔记的"相对偏移"口径与其 6 bit 求和的不跨界断言一并撤销, 换成守住区间非空的 `a_wr_pa_range_valid`;RTL 注释、pkg 注释、设计方案 7 处、tb 的页式装填值 (`up` 由 0 改为 `base[4:0]`) 同步 |
+| 2026-10-06 | 新增 agent 专用仿真入口 `simulation_agent/` (软链 `Makefile` / `base`, 独立运行目录), agent 不再往 `simulation/` 写产物;AGENTS.md 与 CONTRIBUTING.md 的命令与说明同步 |
