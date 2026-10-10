@@ -6,13 +6,12 @@
 //   由 SDPTW 在 Page Walk 完成后装填, 与同下标的 sdtlb_tag_item 一起构成一个 SDTLB 条目.
 //
 // 层次与约定:
-//   - sdtlb 用 generate 例化 SDTLB_ENTRIES 份本模块, 每个条目接同下标
-//     sdtlb_tag_item 的 req_hit 作为 hit_sel, 再把 SDTLB_ENTRIES 份输出 OR 起来, 得到命中条目的数据.
+//   - 本模块**只存数据**, 不参与选择: 四个读出端口始终是本条目寄存器里的值, 由上层
+//     sdtlb_data 用 common 下的 onehot0_mux 按命中向量挑出命中条目的那一份.
 //   - 条目内容存在本模块的 data_item 寄存器里. 装填由端口 fill_vld 作写使能: 有效时把
 //     fill_eid / fill_token_id / fill_s_pfn / fill_grn 一起写进 data_item, 因此装填当拍读出的
 //     仍是旧值, 新值下一拍生效.
-//   - 读出是纯组合的: hit_sel 有效时输出本条目内容, 否则输出全 0, 便于上层直接 OR.
-//     这样比较与读数据同拍, 下一拍算 SLA, 与设计方案的 "命中 2 拍" 口径一致.
+//   - 读出是纯组合的 (比较与选数据同拍), 与设计方案的 "命中 2 拍" 口径一致.
 //   - 数据段没有有效位: 条目是否有效由同下标的 tag 条目的 tag_item.valid 表示, 因此
 //     本模块没有无效化端口, 刷新只清 tag 侧的有效位.
 // =============================================================================
@@ -33,12 +32,11 @@ import sdecoder_pkg::*;
     input  logic [17:0]             fill_s_pfn,   // SLA 基址, 以 1 GB 对界
     input  logic                    fill_grn,     // 粒度位, 1 表示段式, 0 表示 1GB 页式
 
-    // 读出端口
-    input  logic                    hit_sel,     // 本条目被选中 (接同下标 tag 条目的 req_hit)
-    output logic [10:0]             hit_eid,     // 选中时输出本条目内容, 否则全 0
-    output logic [ 9:0]             hit_token_id,// 同上
-    output logic [17:0]             hit_s_pfn,   // 同上
-    output logic                    hit_grn      // 同上
+    // 读出端口: 始终输出本条目内容 (是否被选中由上层 sdtlb_data 的 onehot0_mux 决定)
+    output logic [10:0]             hit_eid,
+    output logic [ 9:0]             hit_token_id,
+    output logic [17:0]             hit_s_pfn,
+    output logic                    hit_grn
 );
 
     // 本条目寄存器: 位域见 sdecoder_pkg 的 SDTLB_DATA_ITEM_t
@@ -58,11 +56,11 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 组合读出: 未选中时输出 0, 上层把 SDTLB_ENTRIES 份输出 OR 起来即为命中条目的数据
-    assign hit_eid      = hit_sel ? data_item.eid      : 11'h0;
-    assign hit_token_id = hit_sel ? data_item.token_id : 10'h0;
-    assign hit_s_pfn    = hit_sel ? data_item.s_pfn    : 18'h0;
-    assign hit_grn      = hit_sel ? data_item.grn      : 1'b0;
+    // 组合读出: 本条目内容 (不再按选中门控)
+    assign hit_eid      = data_item.eid;
+    assign hit_token_id = data_item.token_id;
+    assign hit_s_pfn    = data_item.s_pfn;
+    assign hit_grn      = data_item.grn;
 
 endmodule
 

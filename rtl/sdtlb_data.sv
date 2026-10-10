@@ -43,15 +43,15 @@ import sdecoder_pkg::*;
     output logic                                hit_grn
 );
 
-    // 每个条目的读出 (未选中时为 0), 汇总后即为命中条目的数据
+    // 每个条目的读出 (就是条目内容), 由下面的 onehot0_mux 按 hit_sel 挑出命中的那一份
     logic [10:0] hit_eid_item      [SDTLB_ENTRIES];
     logic [ 9:0] hit_token_id_item [SDTLB_ENTRIES];
     logic [17:0] hit_s_pfn_item    [SDTLB_ENTRIES];
     logic        hit_grn_item      [SDTLB_ENTRIES];
 
     // -------------------------------------------------------------------------
-    // SDTLB_ENTRIES 个 Data 条目: 每个条目的写使能 (fill_vld) 与读选中 (hit_sel)
-    // 就是对应那一位
+    // SDTLB_ENTRIES 个 Data 条目: 每个条目的写使能 (fill_vld) 就是对应那一位;条目只存
+    // 数据, 选中在下面用 onehot0_mux 做
     // -------------------------------------------------------------------------
     genvar genvar_i;
     generate
@@ -64,7 +64,6 @@ import sdecoder_pkg::*;
                 .fill_token_id (fill_token_id),
                 .fill_s_pfn    (fill_s_pfn),
                 .fill_grn      (fill_grn),
-                .hit_sel       (hit_sel[genvar_i]),
                 .hit_eid       (hit_eid_item[genvar_i]),
                 .hit_token_id  (hit_token_id_item[genvar_i]),
                 .hit_s_pfn     (hit_s_pfn_item[genvar_i]),
@@ -74,20 +73,32 @@ import sdecoder_pkg::*;
     endgenerate
 
     // -------------------------------------------------------------------------
-    // 命中数据汇总: 每个条目未选中时输出 0, 逐位 OR 起来就是命中条目的数据
+    // 命中数据汇总: 用 common 下的 onehot0_mux 从 SDTLB_ENTRIES 份条目读出里挑出命中
+    // 的那一份 (hit_sel 全 0 即未命中, 输出自然全 0)
     // -------------------------------------------------------------------------
-    always_comb begin
-        hit_eid      = '0;
-        hit_token_id = '0;
-        hit_s_pfn    = '0;
-        hit_grn      = 1'b0;
-        for (int i = 0; i < SDTLB_ENTRIES; i++) begin
-            hit_eid      = hit_eid      | hit_eid_item[i];
-            hit_token_id = hit_token_id | hit_token_id_item[i];
-            hit_s_pfn    = hit_s_pfn    | hit_s_pfn_item[i];
-            hit_grn      = hit_grn      | hit_grn_item[i];
-        end
-    end
+    onehot0_mux #(.N (SDTLB_ENTRIES), .WIDTH (11)) u_hit_eid_mux (
+        .sel  (hit_sel),
+        .din  (hit_eid_item),
+        .dout (hit_eid)
+    );
+
+    onehot0_mux #(.N (SDTLB_ENTRIES), .WIDTH (10)) u_hit_token_id_mux (
+        .sel  (hit_sel),
+        .din  (hit_token_id_item),
+        .dout (hit_token_id)
+    );
+
+    onehot0_mux #(.N (SDTLB_ENTRIES), .WIDTH (18)) u_hit_s_pfn_mux (
+        .sel  (hit_sel),
+        .din  (hit_s_pfn_item),
+        .dout (hit_s_pfn)
+    );
+
+    onehot0_mux #(.N (SDTLB_ENTRIES), .WIDTH (1)) u_hit_grn_mux (
+        .sel  (hit_sel),
+        .din  (hit_grn_item),
+        .dout (hit_grn)
+    );
 
 endmodule
 
