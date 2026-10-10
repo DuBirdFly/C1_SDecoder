@@ -12,14 +12,16 @@
 
 ```mermaid
 flowchart TB
-    SDTLB["sdtlb 顶层<br/>命中优先级编码 + SLA 计算"] --> TAGARR["sdtlb_tag 阵列<br/>generate for, 内含轮转替换指针"]
-    SDTLB --> DATAARR["sdtlb_data 阵列<br/>generate for, 写/读下标译码"]
-    TAGARR --> TI["sdtlb_tag_item x 128<br/>CAM 比较 + 有效位 + 命中读出"]
+    SDTLB["sdtlb 顶层<br/>命中优先级编码"] --> TAGARR["sdtlb_tag 阵列<br/>generate for"]
+    SDTLB --> DATAARR["sdtlb_data 阵列<br/>generate for, 读写 one-hot 选中"]
+    ARB["RoundRobinArbiter<br/>common: 轮转选中"] --> TAGARR
+    TAGARR --> TI["sdtlb_tag_item x 128<br/>CAM 比较 + 有效位"]
     DATAARR --> DI["sdtlb_data_item x 128<br/>数据寄存器 + 门控读出"]
 ```
 
-- **条目 → 阵列 → 顶层三层**: 条目是行为单元, 阵列管例化/译码/汇总, 顶层管编码与 SLA, 三者可各自演进. 阵列模块**不按 RAM/SRAM 形式预留接口** —— Data 段的读写选中都用 SDTLB_ENTRIES 位 one-hot (自然的全相联形式), 将来若真要换 RAM, 再改阵列模块的读写口 (把 one-hot 编成地址)
+- **条目 → 阵列 → 顶层三层**: 条目是行为单元, 阵列管例化/译码/汇总, 顶层管命中编码, 三者可各自演进. 阵列模块**不按 RAM/SRAM 形式预留接口** —— Data 段的读写选中都用 SDTLB_ENTRIES 位 one-hot (自然的全相联形式), 将来若真要换 RAM, 再改阵列模块的读写口 (把 one-hot 编成地址)
 - **Tag 与 Data 分属两个阵列模块而非一个合并模块**: 二者的读语义本来就不同 (Tag 是全并行比较, Data 是按选中读出), 分开后 Tag 侧仍是 CAM 语义, 将来若改索引式 tag RAM (set-associative 口径) 只需改 `sdtlb_tag` 与它对顶层的接口
+- **轮转选中抽成公共模块**: [rtl/common/RoundRobinArbiter.sv](../../rtl/common/RoundRobinArbiter.sv) —— 只做"轮转选中"(不带请求过滤), 参数化候选个数 `N`, 输出 one-hot `sel`, `step` 一次走一项, 走完回 0 (不依赖位宽回绕, 所以 N 不必是 2 的幂); 不依赖任何项目 package, 可直接复用到别的设计. `sdtlb_tag` 例化它得到 `fill_sel`
 - 曾有过一版把两者合在一个 `sdtlb` 里的实现, 已弃用并留档在 [backup/rtl/sdtlb_tag.sv](../../backup/rtl/sdtlb_tag.sv) (`backup/` 不入库)
 
 ## 已定决策
@@ -98,3 +100,4 @@ SLA 计算 (本次已删, 待按设计方案 §代换结果计算 重新实现);
 | 2026-10-06 | `sdtlb_data` 的读写口由"地址 + 有效"(`wr_idx`、`rd_vld`/`rd_idx`) 改为 **128 位 one-hot 向量** (`wr_vld`/`rd_sel`, 与条目端口同名), 因为暂不考虑 RAM 构建形式;`sdtlb_tag` 的 `fill_idx` 随之改为 `fill_sel` (one-hot), 顶层把 `req_hit` 直接接给 Data 段的 `rd_sel` —— 顺带省掉了读侧的 `rd_vld` 门控 |
 | 2026-10-06 | 端口/信号按类别改名: 装填类 `wr_*` -> `fill_*`, 命中读出类 `rd_*` -> `hit_*` (`rd_eid`/`rd_s_pfn`/`rd_grn`/`rd_token_id` -> `hit_*`, `rd_sla`/`rd_sla_ovf` -> `hit_sla`/`hit_sla_ovf`, `rd_sel` -> `hit_sel`, `rd_pa_base` -> `hit_pa_base`);断言名 `a_wr_pa_range_valid` -> `a_fill_pa_range_valid`;接口与 tb 同步 |
 | 2026-10-06 | SLA 计算从 RTL 删除 (用户要求, 之后再处理):`sdtlb` 的 `hit_sla` / `hit_sla_ovf` 端口与段内偏移加法 / 溢出判断全部移除, `sdtlb_if` 与 `tb_sdtlb` 同步 (自检 6 条);Tag 侧 `hit_pa_base` 读出也一并删除 (条目 → 阵列 → 顶层), 不留死信号;设计方案不变 |
+| 2026-10-06 | `sdtlb_tag` 的轮转选中抽出为公共模块 [rtl/common/RoundRobinArbiter.sv](../../rtl/common/RoundRobinArbiter.sv) (参数 N, one-hot `sel`, `step` 步进, 走完回 0;不依赖项目 package), `rtl.f` 收录在段首, `sdtlb_tag` 改为例化它 |
