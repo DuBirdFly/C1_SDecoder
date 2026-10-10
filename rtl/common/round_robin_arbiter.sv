@@ -1,5 +1,5 @@
 // =============================================================================
-// RoundRobinArbiter: 轮转选中器 (round robin)
+// round_robin_arbiter: 轮转选中器 (round robin)
 //
 // 用途: 在一组等价的候选 (如全相联 TLB 的 SDTLB_ENTRIES 个条目) 里轮转地挑一个, 让每个
 //       候选项被挑中的机会均等 —— 内部只有一个指针, 每来一次 step 就转向下一项.
@@ -16,7 +16,7 @@
 // =============================================================================
 `default_nettype none
 
-module RoundRobinArbiter #(
+module round_robin_arbiter #(
     parameter int unsigned N = 128      // 候选个数 (>= 1)
 ) (
     input  logic         clk,

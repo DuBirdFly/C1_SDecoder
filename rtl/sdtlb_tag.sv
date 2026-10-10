@@ -3,7 +3,7 @@
 //
 // 职责 (见 doc/design_plan/SDecoder设计方案/SDecoder设计方案.md §SDTLB 设计):
 //   1. 查表: 把请求地址广播给全部条目并行比较, 输出逐条目命中向量.
-//   2. 装填: 用 common 下的 RoundRobinArbiter 轮转选址 (一次只选中一条), 输出该选中给
+//   2. 装填: 用 common 下的 round_robin_arbiter 轮转选址 (一次只选中一条), 输出该选中给
 //      Data 段阵列.
 //   3. 置无效: 把刷新请求广播给全部条目 (条目内优先于装填).
 //
@@ -14,7 +14,7 @@
 //   - 条目内容一律由硬件在 Page Walk 完成后装填, 软件只能置无效 (§设计原则 4).
 //   - 替换策略: 轮转选中只在装填时步进, 指向最久没有被填充过的条目 (§替换策略);被选中
 //     的条目若仍有效就被直接覆盖 (由条目内的写入逻辑完成). 轮转逻辑本身在 common 下的
-//     [RoundRobinArbiter](common/RoundRobinArbiter.sv).
+//     [round_robin_arbiter](common/round_robin_arbiter.sv).
 //   - 命中向量的宽松独热断言放在本模块: 它是命中向量的产生者 (§命中判断).
 // =============================================================================
 `include "sdecoder_constants.svh"
@@ -46,7 +46,7 @@ import sdecoder_pkg::*;
 
     // 轮转选中: 只在装填时步进, 输出 one-hot 的 fill_sel (本轮只写中一条), 同一根向量
     // 也给 Data 段阵列做写选中
-    RoundRobinArbiter #(
+    round_robin_arbiter #(
         .N (SDTLB_ENTRIES)
     ) u_fill_arb (
         .clk   (clk),
