@@ -41,8 +41,6 @@ import sdecoder_pkg::*;
     logic [ 9:0]                        hit_token_id;
     logic [17:0]                        hit_s_pfn;
     logic                               hit_grn;
-    logic [SLA_WIDTH-1:0]               hit_sla;
-    logic                               hit_sla_ovf;
 
     // 装填请求 (Page Walk 结果)
     logic                               fill_vld;
@@ -81,8 +79,6 @@ import sdecoder_pkg::*;
         input  hit_token_id;
         input  hit_s_pfn;
         input  hit_grn;
-        input  hit_sla;
-        input  hit_sla_ovf;
     endclocking
 
     // monitor: 全部采样
@@ -97,8 +93,6 @@ import sdecoder_pkg::*;
         input  hit_token_id;
         input  hit_s_pfn;
         input  hit_grn;
-        input  hit_sla;
-        input  hit_sla_ovf;
         input  fill_vld;
         input  fill_pa_base;
         input  fill_pa_up;

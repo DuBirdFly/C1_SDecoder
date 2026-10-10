@@ -3,14 +3,15 @@
 //
 // 职责 (见 doc/design_plan/SDecoder设计方案/SDecoder设计方案.md §SDTLB 设计):
 //   每个条目 = 一份 Tag (段空间基址 / 上界 / 有效位, 存于 CAM) + 一份 Data
-//   (EID / TokenID / S_PFN / Grn). 本模块做四件事:
+//   (EID / TokenID / S_PFN / Grn). 本模块做三件事:
 //   1. 查表: 请求交给 Tag 段阵列比较, 对命中向量做优先级编码 (多命中取最小) 与命中
-//      有效判断, 再用命中下标从 Data 段阵列读出该条目的数据.
-//   2. SLA 计算: 命中条目的 S_PFN 加上 1GB 段内偏移得到 SLA[47:0]; 加法进位时报
-//      hit_sla_ovf (地址非法异常, 设计方案 §代换结果计算).
-//   3. 装填: 把 SDPTW 在 DONE 状态给出的 Page Walk 结果转给两个阵列, 由 Tag 段阵列的
-//      轮转替换指针给出下标, Tag 与 Data 同下标写入.
-//   4. 置无效: 转给 Tag 段阵列 (Data 段没有有效位).
+//      有效判断, 再用命中向量从 Data 段阵列读出该条目的数据.
+//   2. 装填: 把 SDPTW 在 DONE 状态给出的 Page Walk 结果转给两个阵列, 由 Tag 段阵列的
+//      轮转替换指针给出选中, Tag 与 Data 同条目写入.
+//   3. 置无效: 转给 Tag 段阵列 (Data 段没有有效位).
+//
+// 注: SLA 计算 (设计方案 §代换结果计算) 暂时不在本模块里做, 后续再处理 —— 相关端口、偏移
+//     加法与 Tag 侧字段读出都已删除, 将来按设计方案重新实现.
 //
 // 层次与约定:
 //   - Tag 段与 Data 段各自是独立阵列模块 (sdtlb_tag / sdtlb_data), 各自可以独立演进.
@@ -21,8 +22,8 @@
 //     所以多命中时读出的是各命中条目数据的按位或 (按构造不应出现多命中, 已由 sdtlb_tag
 //     里的宽松独热断言守住).
 //   - 条目内容一律由硬件在 Page Walk 完成后装填, 软件只能置无效 (§设计原则 4).
-//   - 本模块到 "命中下标 + 命中条目数据 + SLA" 为止: SMD 三元组的组装与异常码上报,
-//     以及未命中后的未命中队列 / Page Walk 流程, 由上层负责.
+//   - 本模块到 "命中下标 + 命中条目数据" 为止: SLA 计算, SMD 三元组的组装与异常码上报,
+//     以及未命中后的未命中队列 / Page Walk 流程, 由上层 (或后续版本) 负责.
 // =============================================================================
 `include "sdecoder_constants.svh"
 `include "sdecoder_pkg.svh"
@@ -46,10 +47,6 @@ import sdecoder_pkg::*;
     output logic [17:0]                         hit_s_pfn,
     output logic                                hit_grn,
 
-    // 命中条目算出的 SLA
-    output logic [SLA_WIDTH-1:0]                hit_sla,         // SLA[47:0]
-    output logic                                hit_sla_ovf,     // SLA 加法溢出 -> 地址非法
-
     // 装填: 接 SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目
     input  logic                                fill_vld,
     input  logic [16:0]                         fill_pa_base,     // Tag: 段空间基地址, 以 1 GB 对界
@@ -67,39 +64,36 @@ import sdecoder_pkg::*;
 
     logic [SDTLB_ENTRIES-1:0]           req_hit;    // Tag 段阵列的逐条目命中
     logic [SDTLB_ENTRIES-1:0]           fill_sel;   // 本轮装填的 one-hot 选中 (Tag 段阵列给出)
-    logic [16:0]                        hit_pa_base;// 命中条目的段空间基址
-
-    // Tag 段阵列: 比较 / 装填选址 / 置无效 / 命中条目的段基址读出
+    // Tag 段阵列: 比较 / 装填选址 / 置无效
     sdtlb_tag u_sdtlb_tag (
-        .clk        (clk),
-        .rst_n      (rst_n),
-        .req_vld    (req_vld),
-        .req_pa     (req_pa),
-        .req_hit    (req_hit),
-        .hit_pa_base (hit_pa_base),
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .req_vld      (req_vld),
+        .req_pa       (req_pa),
+        .req_hit      (req_hit),
         .fill_vld     (fill_vld),
         .fill_pa_base (fill_pa_base),
         .fill_pa_up   (fill_pa_up),
-        .fill_sel   (fill_sel),
-        .inv_all    (inv_all),
-        .inv_en     (inv_en),
-        .inv_pa     (inv_pa)
+        .fill_sel     (fill_sel),
+        .inv_all      (inv_all),
+        .inv_en       (inv_en),
+        .inv_pa       (inv_pa)
     );
 
     // Data 段阵列: 与 Tag 段同条目写入 (fill_sel 作 one-hot 写使能), 按命中向量读出
     sdtlb_data u_sdtlb_data (
-        .clk         (clk),
-        .rst_n       (rst_n),
+        .clk           (clk),
+        .rst_n         (rst_n),
         .fill_vld      (fill_sel),
         .fill_eid      (fill_eid),
         .fill_token_id (fill_token_id),
         .fill_s_pfn    (fill_s_pfn),
         .fill_grn      (fill_grn),
-        .hit_sel      (req_hit),
-        .hit_eid      (hit_eid),
-        .hit_token_id (hit_token_id),
-        .hit_s_pfn    (hit_s_pfn),
-        .hit_grn      (hit_grn)
+        .hit_sel       (req_hit),
+        .hit_eid       (hit_eid),
+        .hit_token_id  (hit_token_id),
+        .hit_s_pfn     (hit_s_pfn),
+        .hit_grn       (hit_grn)
     );
 
     // -------------------------------------------------------------------------
@@ -115,23 +109,6 @@ import sdecoder_pkg::*;
             end
         end
     end
-
-    // -------------------------------------------------------------------------
-    // SLA 计算 (设计方案 §代换结果计算): 段式与页式共用同一公式, 页式条目的
-    // pa_base[34:30] == pa_up, 段内偏移自然为 0
-    //   PA_Offset[34:30] = req_pa[34:30] - pa_base[34:30]
-    //   SLA[47:30]       = S_PFN[47:30] + PA_Offset[34:30]  (进位 => 地址非法异常)
-    //   SLA[47:0]        = {SLA[47:30], req_pa[29:0]}
-    // 未命中时 (req_hit_vld = 0) 偏移按 0 算, SLA 与溢出标志都给 0
-    // -------------------------------------------------------------------------
-    logic [ 4:0] pa_offset;     // 1GB 段内偏移
-    logic [18:0] sla_hi_sum;    // {1'b0, S_PFN} + {14'h0, 偏移}, 最高位是进位
-
-    assign pa_offset  = req_hit_vld ? (req_pa[34:30] - hit_pa_base[4:0]) : 5'h0;
-    assign sla_hi_sum = {1'b0, hit_s_pfn} + {14'h0, pa_offset};
-
-    assign hit_sla_ovf = req_hit_vld && sla_hi_sum[18];
-    assign hit_sla     = req_hit_vld ? {sla_hi_sum[17:0], req_pa[29:0]} : '0;
 
     // -------------------------------------------------------------------------
     // 装填合法性: pa_up 是段空间上界 (含), 不能低于基址的页号, 否则区间为空 —— 这样的

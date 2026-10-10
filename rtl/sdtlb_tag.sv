@@ -30,9 +30,6 @@ import sdecoder_pkg::*;
     input  logic [PA_WIDTH-1:0]                 req_pa,
     output logic [SDTLB_ENTRIES-1:0]            req_hit,     // 逐条目命中
 
-    // 命中条目的读出: 命中条目的段空间基址, 未命中给 0
-    output logic [16:0]                         hit_pa_base,
-
     // 装填请求: 一次一条, 由内部轮转指针选址
     input  logic                                fill_vld,
     input  logic [16:0]                         fill_pa_base,
@@ -63,9 +60,6 @@ import sdecoder_pkg::*;
         fill_sel[fill_ptr] = 1'b1;
     end
 
-    // 每个条目的命中读出 (未命中为 0), 汇总后即为命中条目的段空间基址
-    logic [16:0] hit_pa_base_item [SDTLB_ENTRIES];
-
     // -------------------------------------------------------------------------
     // SDTLB_ENTRIES 个 Tag 条目: 请求与刷新广播, 装填按 fill_sel 只写中一条
     // -------------------------------------------------------------------------
@@ -73,32 +67,20 @@ import sdecoder_pkg::*;
     generate
         for (genvar_i = 0; genvar_i < SDTLB_ENTRIES; genvar_i++) begin : genvar_tag_item
             sdtlb_tag_item u_tag_item (
-                .clk        (clk),
-                .rst_n      (rst_n),
-                .req_vld    (req_vld),
-                .req_pa     (req_pa),
-                .req_hit    (req_hit[genvar_i]),
+                .clk          (clk),
+                .rst_n        (rst_n),
+                .req_vld      (req_vld),
+                .req_pa       (req_pa),
+                .req_hit      (req_hit[genvar_i]),
                 .fill_pa_base (fill_pa_base),
                 .fill_pa_up   (fill_pa_up),
                 .fill_pa_vld  (fill_sel[genvar_i]),
-                .inv_all    (inv_all),
-                .inv_en     (inv_en),
-                .inv_pa     (inv_pa),
-                .hit_pa_base (hit_pa_base_item[genvar_i])
+                .inv_all      (inv_all),
+                .inv_en       (inv_en),
+                .inv_pa       (inv_pa)
             );
         end
     endgenerate
-
-    // -------------------------------------------------------------------------
-    // 命中条目读出汇总: 每个条目未命中时输出 0, 逐位 OR 起来即为命中条目的值
-    // (按构造最多命中一条; 多命中已由下面的宽松独热断言守住)
-    // -------------------------------------------------------------------------
-    always_comb begin
-        hit_pa_base = '0;
-        for (int i = 0; i < SDTLB_ENTRIES; i++) begin
-            hit_pa_base = hit_pa_base | hit_pa_base_item[i];
-        end
-    end
 
 `ifdef ASSERT_ON
     `assert_clk(a_req_hit_onehot0, $onehot0(req_hit));

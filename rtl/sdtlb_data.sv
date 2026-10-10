@@ -57,18 +57,18 @@ import sdecoder_pkg::*;
     generate
         for (genvar_i = 0; genvar_i < SDTLB_ENTRIES; genvar_i++) begin : genvar_data_item
             sdtlb_data_item u_data_item (
-                .clk         (clk),
-                .rst_n       (rst_n),
+                .clk           (clk),
+                .rst_n         (rst_n),
                 .fill_vld      (fill_vld[genvar_i]),
                 .fill_eid      (fill_eid),
                 .fill_token_id (fill_token_id),
                 .fill_s_pfn    (fill_s_pfn),
                 .fill_grn      (fill_grn),
-                .hit_sel      (hit_sel[genvar_i]),
-                .hit_eid      (hit_eid_item[genvar_i]),
-                .hit_token_id (hit_token_id_item[genvar_i]),
-                .hit_s_pfn    (hit_s_pfn_item[genvar_i]),
-                .hit_grn      (hit_grn_item[genvar_i])
+                .hit_sel       (hit_sel[genvar_i]),
+                .hit_eid       (hit_eid_item[genvar_i]),
+                .hit_token_id  (hit_token_id_item[genvar_i]),
+                .hit_s_pfn     (hit_s_pfn_item[genvar_i]),
+                .hit_grn       (hit_grn_item[genvar_i])
             );
         end
     endgenerate

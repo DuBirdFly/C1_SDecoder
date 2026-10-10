@@ -31,10 +31,10 @@ flowchart TB
 | 轮转替换指针放在 `sdtlb_tag` 内部, 以 `fill_sel` (one-hot) 输出 | 用户选定;写选中由 Tag 段给出, Data 段用同一根向量写入, 保证 Tag/Data 同条目 |
 | 无效化只清 Tag 侧 `valid`, Data 段无有效位端口 | 设计方案的无效化只清 `Valid`;数据段的有效性由同下标 Tag 条目代表 |
 | 无效化的 `inv_match` **刻意不含** `tag_item.valid` | 若含有效位, 条目当前无效时清位分支不会被选中, 同拍的装填会把覆盖"正在被刷新地址"的映射填进去. 变异测试 (把有效位加回条件) 令该用例 FAIL, 已固定为回归用例 |
-| SLA 计算放在顶层 `sdtlb`, 段式与页式共用一条公式 | 设计方案 §代换结果计算;页式的 `pa_base[34:30] == pa_up` 使偏移自然为 0. 加法进位作为 `hit_sla_ovf` 给上层报地址非法 |
+| SLA 计算**暂时从 RTL 删除** (用户要求, 之后再处理) | 相关的 `hit_sla` / `hit_sla_ovf` 端口、段内偏移加法与溢出判断, 以及 Tag 侧的字段读出 (`hit_pa_base`, 条目 → 阵列 → 顶层整条链) 全部删掉 —— 不留下只为将来服务的死信号. 设计方案 §代换结果计算 仍是目标口径, 恢复时按它实现 |
 | `pa_up` 是**段空间绝对上界 (含)**, 不是相对偏移 | 用户口径: 区间取闭区间 `[pa_base[34:30], pa_up]`, 页式即 `pa_base[34:30] == pa_up`. 曾短暂改成"相对偏移"口径又改回, 代价见下面"关键坑"里那条 5 bit 进位的记录 |
 | 装填区间须**非空**, 落成断言 `a_wr_pa_range_valid` (放 `sdtlb` 的装填入口) | 绝对上界形式下区间比较没有加法、不会进位, 唯一要守的是 `pa_up >= pa_base[4:0]`;低于基址页号的上界会让条目永远命中不了 |
-| 顶层不引出 Tag 侧读出 (`hit_pa_base` / `hit_pa_up`), 且 `hit_pa_up` 整条链删除 (条目 → 阵列 → 顶层) | 上层只需 SLA;`hit_pa_base` 留着是因为 SLA 偏移要用, `hit_pa_up` 无人读, 属死信号 |
+| Tag 侧字段读出 (`hit_pa_base` / `hit_pa_up`) 不在顶层引出, 且整条链删除 (条目 → 阵列 → 顶层) | 顶层只需要命中数据 (EID / TokenID / S_PFN / Grn) 与命中下标;这两个读出原先只服务 SLA 的偏移计算, SLA 删除后成了死信号, 一并清掉 |
 | 命中下标多命中取最小 | 设计方案 §命中判断;同时让"按命中下标读数据"有确定行为 |
 | 断言拆两处: `PA[47]=0` 放 tag 条目, `$onehot0(req_hit)` 放 tag 阵列 | 各自放在"产生该约束的模块"里: 条目是请求地址的入口, 阵列是命中向量的产生者 |
 
@@ -70,20 +70,20 @@ flowchart TB
 ## 进展快照
 
 - RTL: `sdecoder_pkg.svh` / `sdecoder_constants.svh` / `sdecoder-undef.svh` / 两个条目 / 两个阵列 / `sdtlb` 顶层
-- 自检: 只剩 `tb_sdtlb` (接口 + `drv` + crg, 无 `#NUM`), 当前**只剩 9 条在用**(空表 3 条 + 页式条目 6 条);段式偏移、按地址置无效、轮转指针、SLA 溢出、多命中这 5 类用例被整段注释掉, 标注为 `[TODO] 以下测试是以前留的, 不再使用` (暂不处理)
-- 验证结论: `make -C simulation all` 与各模块 elaborate 均 0 error / 0 warning;`tb_sdtlb` 9 条 PASS;新断言 `a_wr_pa_range_valid` 在临时用例里验过 —— 合法装填 (base[4:0]=16, up=20) 不报, 区间为空的装填 (base[4:0]=16, up=5) 报出
+- 自检: 只剩 `tb_sdtlb` (接口 + `drv` + crg, 无 `#NUM`), 当前**6 条在用**(空表 2 条 + 页式条目 4 条);SLA 相关的 3 条检查随 SLA 代码一起删除;段式偏移、按地址置无效、轮转指针、SLA 溢出、多命中这几类用例被整段注释掉, 标注为 `[TODO] 以下测试是以前留的, 不再使用` (暂不处理, 其中引用的 `hit_sla` 等已不存在)
+- 验证结论: `make -C simulation_agent all` 与各模块 elaborate 均 0 error / 0 warning;`tb_sdtlb` 6 条 PASS;断言 `a_fill_pa_range_valid` 在临时用例里验过 —— 合法装填 (base[4:0]=16, up=20) 不报, 区间为空的装填 (base[4:0]=16, up=5) 报出
 
 ## 待决策
 
 1. 替换策略: 轮转 (现状) 还是伪随机 (参考 CORE 内 TLB);影响是否要引入命中下标驱动的状态更新
 2. 条目用 FF 还是 RAM 实现 (直接决定阵列模块内部怎么写)
-3. `req_hit_idx` 是否作为顶层端口保留 (现仅内部用于读数据);`hit_sla_ovf` 的命名与异常上报形式
-4. `grn` 目前不参与 SLA 计算 (与设计一致), 后续 SMD 组装是否要用;`一些思考.md` 里已记为"感觉没有意义"
-5. `tb_sdtlb` 里被注释掉的那批用例是否按新口径补回 (段式偏移 / 按地址置无效 / 轮转 / 溢出 / 多命中)
+3. `req_hit_idx` 是否作为顶层端口保留 (数据通路已不用它, 现在纯观测口);SLA 计算重新加回时的端口形态与异常上报形式
+4. `grn` 目前不参与任何计算 (SLA 已删), 后续 SMD 组装是否要用;`一些思考.md` 里已记为"感觉没有意义"
+5. `tb_sdtlb` 里被注释掉的那批用例是否补回 (段式偏移 / 按地址置无效 / 轮转 / 溢出 / 多命中;其中 SLA 相关的那几条要等 SLA 恢复后再写)
 
 ## 尚未开始
 
-未命中队列 + SDPTW Page Walk 状态机 (`tw_*` 主端口);`rsp_*` 响应与 SMD 三元组组装、异常码上报;`cfg_*` 配置与刷新接口 (`cfg_inv_busy`、刷新期间阻塞回填);`PA[47] = 1` 的 IO 空间请求在顶层的异常通路 (目前只有 tag 条目里那条断言守着这个前提).
+SLA 计算 (本次已删, 待按设计方案 §代换结果计算 重新实现);未命中队列 + SDPTW Page Walk 状态机 (`tw_*` 主端口);`rsp_*` 响应与 SMD 三元组组装、异常码上报;`cfg_*` 配置与刷新接口 (`cfg_inv_busy`、刷新期间阻塞回填);`PA[47] = 1` 的 IO 空间请求在顶层的异常通路 (目前只有 tag 条目里那条断言守着这个前提).
 
 ## 变更记录
 
@@ -97,3 +97,4 @@ flowchart TB
 | 2026-10-06 | 新增 agent 专用仿真入口 `simulation_agent/` (软链 `Makefile` / `base`, 独立运行目录), agent 不再往 `simulation/` 写产物;AGENTS.md 与 CONTRIBUTING.md 的命令与说明同步 |
 | 2026-10-06 | `sdtlb_data` 的读写口由"地址 + 有效"(`wr_idx`、`rd_vld`/`rd_idx`) 改为 **128 位 one-hot 向量** (`wr_vld`/`rd_sel`, 与条目端口同名), 因为暂不考虑 RAM 构建形式;`sdtlb_tag` 的 `fill_idx` 随之改为 `fill_sel` (one-hot), 顶层把 `req_hit` 直接接给 Data 段的 `rd_sel` —— 顺带省掉了读侧的 `rd_vld` 门控 |
 | 2026-10-06 | 端口/信号按类别改名: 装填类 `wr_*` -> `fill_*`, 命中读出类 `rd_*` -> `hit_*` (`rd_eid`/`rd_s_pfn`/`rd_grn`/`rd_token_id` -> `hit_*`, `rd_sla`/`rd_sla_ovf` -> `hit_sla`/`hit_sla_ovf`, `rd_sel` -> `hit_sel`, `rd_pa_base` -> `hit_pa_base`);断言名 `a_wr_pa_range_valid` -> `a_fill_pa_range_valid`;接口与 tb 同步 |
+| 2026-10-06 | SLA 计算从 RTL 删除 (用户要求, 之后再处理):`sdtlb` 的 `hit_sla` / `hit_sla_ovf` 端口与段内偏移加法 / 溢出判断全部移除, `sdtlb_if` 与 `tb_sdtlb` 同步 (自检 6 条);Tag 侧 `hit_pa_base` 读出也一并删除 (条目 → 阵列 → 顶层), 不留死信号;设计方案不变 |

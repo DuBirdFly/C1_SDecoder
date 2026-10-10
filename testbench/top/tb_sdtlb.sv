@@ -1,5 +1,6 @@
 // =============================================================================
-// tb_sdtlb: sdtlb (SDTLB 顶层: Tag 阵列 + Data 阵列 + SLA 计算) 的单元自检
+// tb_sdtlb: sdtlb (SDTLB 顶层: Tag 阵列 + Data 阵列) 的单元自检
+// 注: SLA 计算已从 DUT 删除 (后续再处理), 相关检查随之删除
 //
 // 跑法 (在仓库根目录):
 //   make -C simulation all TB_TOP=tb_sdtlb
@@ -57,7 +58,6 @@ module tb_sdtlb;
         .req_hit_vld(sdtlb_if.req_hit_vld), .req_hit_idx(sdtlb_if.req_hit_idx),
         .hit_eid(sdtlb_if.hit_eid), .hit_token_id(sdtlb_if.hit_token_id),
         .hit_s_pfn(sdtlb_if.hit_s_pfn), .hit_grn(sdtlb_if.hit_grn),
-        .hit_sla(sdtlb_if.hit_sla), .hit_sla_ovf(sdtlb_if.hit_sla_ovf),
         .fill_vld(sdtlb_if.fill_vld), .fill_pa_base(sdtlb_if.fill_pa_base), .fill_pa_up(sdtlb_if.fill_pa_up),
         .fill_eid(sdtlb_if.fill_eid), .fill_token_id(sdtlb_if.fill_token_id),
         .fill_s_pfn(sdtlb_if.fill_s_pfn), .fill_grn(sdtlb_if.fill_grn),
@@ -157,7 +157,6 @@ module tb_sdtlb;
         chk("empty: hit_vld = 0", sdtlb_if.req_hit_vld == 1'b0);
         chk("empty: hit_* = 0", (sdtlb_if.hit_eid == 0) && (sdtlb_if.hit_token_id == 0) &&
                               (sdtlb_if.hit_s_pfn == 0) && (sdtlb_if.hit_grn == 1'b0));
-        chk("empty: sla / ovf = 0", (sdtlb_if.hit_sla == '0) && (sdtlb_if.hit_sla_ovf == 1'b0));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -176,8 +175,6 @@ module tb_sdtlb;
         chk("fill#1: hit", sdtlb_if.req_hit_vld == 1'b1);
         chk("fill#1: eid / token_id", (sdtlb_if.hit_eid == '1) && (sdtlb_if.hit_token_id == '1));
         chk("fill#1: s_pfn / grn", (sdtlb_if.hit_s_pfn == 18'h33333) && (sdtlb_if.hit_grn == 1'b0));
-        chk("page: SLA = {s_pfn, pa[29:0]}", sdtlb_if.hit_sla == {18'h33333, pa_low});
-        chk("page: 无溢出", sdtlb_if.hit_sla_ovf == 1'b0);
         repeat (10) @(sdtlb_if.drv);
 
         // [TODO] 以下测试是以前留的, 不再使用
