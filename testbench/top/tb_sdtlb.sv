@@ -1,25 +1,24 @@
 // =============================================================================
 // tb_sdtlb: sdtlb (SDTLB 顶层: Tag 阵列 + Data 阵列) 的单元自检
-// 注: SLA 计算已从 DUT 删除 (后续再处理), 相关检查随之删除
+// 注: SLA 计算已从 DUT 删除 (后续再处理), 相关检查随之删除;
+//     请求地址与命中读出按新接口: req_pa 只到 PA[46:30] (17 bit),
+//     命中输出是 req_hit + req_hit_tag_item / req_hit_data_item 两个 struct.
 //
 // 跑法 (在仓库根目录):
-//   make -C simulation all TB_TOP=tb_sdtlb
+//   make -C simulation_agent all TB_TOP=tb_sdtlb
 //
 // 结构: 时钟与复位由 crg 生成 (本 tb 内不出现任何 #NUM 延时); 通过 sdtlb_if 接口连 DUT ——
 //       clk / rst_n 接进接口, DUT 各端口按名字连到接口信号; 同步一律等接口的 drv 时钟块
 //       事件 @(sdtlb_if.drv), 不再直接 @(posedge clk); DUT 输入用 drv 时钟块驱动
-//       (posedge + 1ps 输出偏斜), 组合结果直接读裸接口信号 (命中/数据/SLA 都是同拍组合量,
-//       不适合走时钟块采样) —— 驱动与读出之间隔一个时钟块事件, 组合逻辑早已稳定.
+//       (posedge + 1ps 输出偏斜), 组合结果直接读裸接口信号 (命中与两个 struct 都是同拍
+//       组合量, 不适合走时钟块采样) —— 驱动与读出之间隔一个时钟块事件, 组合逻辑早已稳定.
 //       接口的 mon 时钟块留给后续的 monitor / scoreboard 组件.
 //
 // 说明: 只例化 sdtlb, 不依赖 UVM, 也不参与 tb_top 的冒烟流程. 覆盖
-//   装填 (Tag/Data 同下标) / 查表与命中下标 / 数据读出 / SLA 计算与溢出 /
-//   按地址与全部置无效 / 轮转替换指针 / 多命中取最小 七类行为,
+//   空表 / 装填 (Tag 与 Data 同条目) / 按地址区间命中与不命中 / 命中读出的
+//   Tag 与 Data 两个 struct 内容,
 //   末尾打印 "<N> checks, <M> errors" 与 "RESULT: PASS|FAIL", 失败时再 $fatal 提前结束.
 //   注意: VCS 在 $fatal 时退出码仍是 0, 因此判定要看 log/simv.log 里的 RESULT 行.
-//
-// 注: 最后一段"多命中"是**故意**制造的重命中, 用来验优先级编码与 $onehot0 断言,
-//     运行日志里会出现 Assertion 'a_req_hit_onehot0' failed, 属预期.
 // =============================================================================
 `timescale 1ns/1ps
 module tb_sdtlb;
@@ -31,10 +30,6 @@ module tb_sdtlb;
 
     int                                  errors = 0;
     int                                  checks = 0;
-    logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  prev_idx;
-    logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  dup_first;
-    logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  dup_second;
-    logic                                rot_ok;
 
     // 时钟与复位由 crg 生成 (SDecoder 是单时钟域时序模块, tb 内不再自己写 #NUM 延时)
     crg #(
@@ -55,9 +50,8 @@ module tb_sdtlb;
     sdtlb dut (
         .clk(clk), .rst_n(rst_n),
         .req_vld(sdtlb_if.req_vld), .req_pa(sdtlb_if.req_pa),
-        .req_hit_vld(sdtlb_if.req_hit_vld), .req_hit_idx(sdtlb_if.req_hit_idx),
-        .hit_eid(sdtlb_if.hit_eid), .hit_token_id(sdtlb_if.hit_token_id),
-        .hit_s_pfn(sdtlb_if.hit_s_pfn), .hit_grn(sdtlb_if.hit_grn),
+        .req_hit(sdtlb_if.req_hit),
+        .req_hit_tag_item(sdtlb_if.req_hit_tag_item), .req_hit_data_item(sdtlb_if.req_hit_data_item),
         .fill_vld(sdtlb_if.fill_vld), .fill_pa_base(sdtlb_if.fill_pa_base), .fill_pa_up(sdtlb_if.fill_pa_up),
         .fill_eid(sdtlb_if.fill_eid), .fill_token_id(sdtlb_if.fill_token_id),
         .fill_s_pfn(sdtlb_if.fill_s_pfn), .fill_grn(sdtlb_if.fill_grn),
@@ -85,12 +79,12 @@ module tb_sdtlb;
         end
     endtask
 
-    // 在时钟块事件上给出查表请求
-    task automatic set_req(logic [11:0] high, logic [4:0] idx, logic [29:0] low);
+    // 在时钟块事件上给出查表请求: 请求地址 = {段高位 12b, 段内页号 5b} (17 bit, 即 PA[46:30]).
+    // req_vld 拉高后保持 (DUT 的 req_hit 由 req_vld 限定, 拉低就读不到命中了), 换地址时再改 req_pa.
+    task automatic set_req(logic [11:0] high, logic [4:0] idx);
         sdtlb_if.drv.req_vld <= 1'b1;
-        sdtlb_if.drv.req_pa  <= {1'b0, high, idx, low};
+        sdtlb_if.drv.req_pa  <= {high, idx};
         @(sdtlb_if.drv);
-        sdtlb_if.drv.req_vld <= 1'b0;
     endtask
 
     // 装填一个条目 (drv 块驱动一拍)
@@ -115,7 +109,7 @@ module tb_sdtlb;
     endtask
 
     // 按地址置无效, 拉高一拍
-    task automatic inv_addr(input logic [PA_WIDTH-1:0] pa);
+    task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] pa);
         @(sdtlb_if.drv);
         sdtlb_if.drv.inv_en <= 1'b1;
         sdtlb_if.drv.inv_pa <= pa;
@@ -132,8 +126,6 @@ module tb_sdtlb;
     endtask
 
     initial begin
-        logic [29:0] pa_low = 30'h1234_5678;
-
         sdtlb_if.drv.req_vld     <= 1'b0;
         sdtlb_if.drv.req_pa      <= '0;
         sdtlb_if.drv.fill_vld      <= 1'b0;
@@ -152,15 +144,15 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 空表: 查表请求不命中, 输出全 0
-        set_req(.high(12'hfff), .idx(5'h1f), .low(pa_low));
-        chk("empty: hit_vld = 0", sdtlb_if.req_hit_vld == 1'b0);
-        chk("empty: hit_* = 0", (sdtlb_if.hit_eid == 0) && (sdtlb_if.hit_token_id == 0) &&
-                              (sdtlb_if.hit_s_pfn == 0) && (sdtlb_if.hit_grn == 1'b0));
+        // 空表: 查表不命中, 命中读出全 0
+        set_req(.high(12'hfff), .idx(5'h1f));
         repeat (10) @(sdtlb_if.drv);
+        chk("empty: req_hit = 0", sdtlb_if.req_hit == 1'b0);
+        chk("empty: 命中 Tag 读出全 0", sdtlb_if.req_hit_tag_item == '0);
+        chk("empty: 命中 Data 读出全 0", sdtlb_if.req_hit_data_item == '0);
 
         // ====================================================================
-        // 页式条目
+        // 页式条目: base[4:0] == pa_up (闭区间退化成一个 1GB 页), 填到 0 号条目
         fill_one(
             .base({12'hfff, 5'h1f}),
             .up(5'h1f),
@@ -170,14 +162,26 @@ module tb_sdtlb;
             .grn(1'b0)
         );
         repeat (10) @(sdtlb_if.drv);
-        set_req(.high(12'hfff), .idx(5'h1f), .low(pa_low));
-        chk("fill#1 lands on idx 0", sdtlb_if.req_hit_idx == 0);
-        chk("fill#1: hit", sdtlb_if.req_hit_vld == 1'b1);
-        chk("fill#1: eid / token_id", (sdtlb_if.hit_eid == '1) && (sdtlb_if.hit_token_id == '1));
-        chk("fill#1: s_pfn / grn", (sdtlb_if.hit_s_pfn == 18'h33333) && (sdtlb_if.hit_grn == 1'b0));
-        repeat (10) @(sdtlb_if.drv);
 
-        // [TODO] 以下测试是以前留的, 不再使用
+        // 命中: Tag 与 Data 两个 struct 内容都要对得上
+        set_req(.high(12'hfff), .idx(5'h1f));
+        repeat (10) @(sdtlb_if.drv);
+        chk("page: req_hit = 1", sdtlb_if.req_hit == 1'b1);
+        chk("page: Tag struct (base/up/valid)",
+            (sdtlb_if.req_hit_tag_item.pa_base == {12'hfff, 5'h1f}) &&
+            (sdtlb_if.req_hit_tag_item.pa_up == 5'h1f) &&
+            (sdtlb_if.req_hit_tag_item.valid == 1'b1));
+        chk("page: Data struct (eid/token_id)",
+            (sdtlb_if.req_hit_data_item.eid == '1) && (sdtlb_if.req_hit_data_item.token_id == '1));
+        chk("page: Data struct (s_pfn/grn)",
+            (sdtlb_if.req_hit_data_item.s_pfn == 18'h33333) && (sdtlb_if.req_hit_data_item.grn == 1'b0));
+
+        // 同段高位、相邻页号: 页式条目只覆盖一页, 应该不命中
+        set_req(.high(12'hfff), .idx(5'h1e));
+        repeat (10) @(sdtlb_if.drv);
+        chk("page: 相邻页不命中", sdtlb_if.req_hit == 1'b0);
+
+        // [TODO] 以下测试是以前留的, 不再使用 (接口已改: 命中读出是 struct, 只能作参考)
         /*
         // ================= 段式条目: 段内偏移加进 SLA[47:30] =================
         fill_one({12'h200, 5'd4}, 5'd9, 11'h001, 10'h001, 18'h00010, 1'b1);

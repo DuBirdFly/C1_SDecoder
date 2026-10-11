@@ -1,30 +1,3 @@
-// =============================================================================
-// sdtlb: SDTLB (SDecoder 代换快表), 全相联结构, SDTLB_ENTRIES 个条目
-//
-// 职责 (见 doc/design_plan/SDecoder设计方案/SDecoder设计方案.md §SDTLB 设计):
-//   每个条目 = 一份 Tag (段空间基址 / 上界 / 有效位, 存于 CAM) + 一份 Data
-//   (EID / TokenID / S_PFN / Grn). 本模块做三件事:
-//   1. 查表: 请求交给 Tag 段阵列比较, 对命中向量做优先级编码 (多命中取最小) 与命中
-//      有效判断, 再用命中向量从 Data 段阵列读出该条目的数据.
-//   2. 装填: 把 SDPTW 在 DONE 状态给出的 Page Walk 结果转给两个阵列, 由 Tag 段阵列的
-//      轮转替换指针给出选中, Tag 与 Data 同条目写入.
-//   3. 置无效: 转给 Tag 段阵列 (Data 段没有有效位).
-//
-// 注: SLA 计算 (设计方案 §代换结果计算) 暂时不在本模块里做, 后续再处理 —— 相关端口、偏移
-//     加法与 Tag 侧字段读出都已删除, 将来按设计方案重新实现.
-//
-// 层次与约定:
-//   - Tag 段与 Data 段各自是独立阵列模块 (sdtlb_tag / sdtlb_data), 各自可以独立演进.
-//   - Data 段的读写选中都是 SDTLB_ENTRIES 位 one-hot (自然的全相联形式, 不为 RAM 形式
-//     预留地址口): 写选中由 Tag 段的轮转指针译码而来, 读选中直接用 Tag 段的命中向量,
-//     未命中时向量全 0, 读出自然全 0.
-//   - 命中下标 (req_hit_idx) 做优先级编码 (多命中取最小) 供上层观测; 数据通路不依赖它,
-//     所以多命中时读出的是各命中条目数据的按位或 (按构造不应出现多命中, 已由 sdtlb_tag
-//     里的宽松独热断言守住).
-//   - 条目内容一律由硬件在 Page Walk 完成后装填, 软件只能置无效 (§设计原则 4).
-//   - 本模块到 "命中下标 + 命中条目数据" 为止: SLA 计算, SMD 三元组的组装与异常码上报,
-//     以及未命中后的未命中队列 / Page Walk 流程, 由上层 (或后续版本) 负责.
-// =============================================================================
 `include "sdecoder_constants.svh"
 `include "sdecoder_pkg.svh"
 `default_nettype none
@@ -37,86 +10,98 @@ import sdecoder_pkg::*;
 
     // 代换请求: 查表 (组合)
     input  logic                                req_vld,
-    input  logic [PA_WIDTH-1:0]                 req_pa,
-    output logic                                req_hit_vld,    // 有命中
-    output logic [SDTLB_ENTRIES_IDX_WIDTH-1:0]  req_hit_idx,    // 命中下标, 多命中取最小
+    input  logic [PA_BASE_WIDTH-1:0]            req_pa,
+    output logic                                req_hit,            // 命中
+    output SDTLB_TAG_ITEM_t                     req_hit_tag_item,   // 命中条目的 Tag 段内容
+    output SDTLB_DATA_ITEM_t                    req_hit_data_item,  // 命中条目的 Data 段内容
 
-    // 命中条目的数据 (未命中时为 0)
-    output logic [10:0]                         hit_eid,
-    output logic [ 9:0]                         hit_token_id,
-    output logic [17:0]                         hit_s_pfn,
-    output logic                                hit_grn,
-
-    // 装填: 接 SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目
+    // 装填: SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目
     input  logic                                fill_vld,
-    input  logic [16:0]                         fill_pa_base,     // Tag: 段空间基地址, 以 1 GB 对界
-    input  logic [ 4:0]                         fill_pa_up,       // Tag: 段空间上界 (含)
-    input  logic [10:0]                         fill_eid,         // Data: Entity 标识
-    input  logic [ 9:0]                         fill_token_id,    // Data: 逻辑池标识
-    input  logic [17:0]                         fill_s_pfn,       // Data: SLA 基址, 以 1 GB 对界
+    input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,     // Tag: 段空间基地址, 以 1 GB 对界
+    input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,       // Tag: 段空间上界 (含)
+    input  logic [EID_WIDTH-1:0]                fill_eid,         // Data: Entity 标识
+    input  logic [TOKEN_ID_WIDTH-1:0]           fill_token_id,    // Data: 逻辑池标识
+    input  logic [S_PFN_WIDTH-1:0]              fill_s_pfn,       // Data: SLA 基址, 以 1 GB 对界
     input  logic                                fill_grn,         // Data: 粒度位, 1 段式 0 页式
 
     // 置无效 (刷新): 只作用于 Tag 侧的有效位
     input  logic                                inv_all,
     input  logic                                inv_en,
-    input  logic [PA_WIDTH-1:0]                 inv_pa
+    input  logic [PA_BASE_WIDTH-1:0]            inv_pa
 );
 
-    logic [SDTLB_ENTRIES-1:0]           req_hit;    // Tag 段阵列的逐条目命中
-    logic [SDTLB_ENTRIES-1:0]           fill_sel;   // 本轮装填的 one-hot 选中 (Tag 段阵列给出)
-    // Tag 段阵列: 比较 / 装填选址 / 置无效
-    sdtlb_tag u_sdtlb_tag (
-        .clk          (clk),
-        .rst_n        (rst_n),
-        .req_vld      (req_vld),
-        .req_pa       (req_pa),
-        .req_hit      (req_hit),
-        .fill_vld     (fill_vld),
-        .fill_pa_base (fill_pa_base),
-        .fill_pa_up   (fill_pa_up),
-        .fill_sel     (fill_sel),
-        .inv_all      (inv_all),
-        .inv_en       (inv_en),
-        .inv_pa       (inv_pa)
+    SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
+    SDTLB_DATA_ITEM_t data_item [SDTLB_ENTRIES];
+
+    logic [SDTLB_ENTRIES-1:0] req_hit_vector;
+    logic [SDTLB_ENTRIES-1:0] fill_sel;         // 轮转仲裁器给出的当前指针 (one-hot);
+                                                // 真正写使能是它与 fill_vld 相与 (见下面两处例化)
+
+    assign req_hit = |req_hit_vector;
+
+    inc_arbiter #(
+        .N      (SDTLB_ENTRIES)
+    ) u_inc_arbiter (
+        .clk    (clk),
+        .rst_n  (rst_n),
+        .step   (fill_vld),
+        .sel    (fill_sel)
     );
 
-    // Data 段阵列: 与 Tag 段同条目写入 (fill_sel 作 one-hot 写使能), 按命中向量读出
-    sdtlb_data u_sdtlb_data (
-        .clk           (clk),
-        .rst_n         (rst_n),
-        .fill_vld      (fill_sel),
-        .fill_eid      (fill_eid),
-        .fill_token_id (fill_token_id),
-        .fill_s_pfn    (fill_s_pfn),
-        .fill_grn      (fill_grn),
-        .hit_sel       (req_hit),
-        .hit_eid       (hit_eid),
-        .hit_token_id  (hit_token_id),
-        .hit_s_pfn     (hit_s_pfn),
-        .hit_grn       (hit_grn)
+    sdtlb_tag u_sdtlb_tag(
+        .clk             (clk             ),
+        .rst_n           (rst_n           ),
+
+        .req_vld         (req_vld         ),
+        .req_pa          (req_pa          ),
+        .req_hit_vector  (req_hit_vector  ),
+
+        .fill_pa_base    (fill_pa_base    ),
+        .fill_pa_up      (fill_pa_up      ),
+        .fill_vld_vector (fill_vld & fill_sel),
+
+        .inv_all         (inv_all         ),
+        .inv_en          (inv_en          ),
+        .inv_pa          (inv_pa          ),
+
+        .tag_item        (tag_item        )
     );
 
-    // -------------------------------------------------------------------------
-    // 命中下标: 从最高下标往低扫, 低下标最后赋值, 于是多命中时取索引最小的条目
-    // -------------------------------------------------------------------------
-    assign req_hit_vld = |req_hit;
+    sdtlb_data u_sdtlb_data(
+        .clk             (clk             ),
+        .rst_n           (rst_n           ),
 
-    always_comb begin
-        req_hit_idx = '0;       // 未命中时给 0, 上层以 req_hit_vld 判断是否有效
-        for (int i = SDTLB_ENTRIES - 1; i >= 0; i--) begin
-            if (req_hit[i]) begin
-                req_hit_idx = i[SDTLB_ENTRIES_IDX_WIDTH-1:0];
-            end
-        end
-    end
+        .fill_vld_vector (fill_vld & fill_sel),
+        .fill_eid        (fill_eid        ),
+        .fill_token_id   (fill_token_id   ),
+        .fill_s_pfn      (fill_s_pfn      ),
+        .fill_grn        (fill_grn        ),
 
-    // -------------------------------------------------------------------------
-    // 装填合法性: pa_up 是段空间上界 (含), 不能低于基址的页号, 否则区间为空 —— 这样的
-    // 条目永远命中不了 (设计方案 §命中判断 的闭区间). 上界本身是 5 bit 页号, 不会越界,
-    // 所以这里只需要守住"非空"这一条
-    // -------------------------------------------------------------------------
+        .data_item       (data_item       )
+    );
+
+    onehot0_mux #(
+        .N      (SDTLB_ENTRIES),
+        .WIDTH  (SDTLB_TAG_ITEM_WIDTH)
+    ) u_onehot0_mux_tag (
+        .sel    (req_hit_vector),
+        .din    (tag_item),
+        .dout   (req_hit_tag_item)
+    );
+
+    onehot0_mux #(
+        .N      (SDTLB_ENTRIES),
+        .WIDTH  (SDTLB_DATA_ITEM_WIDTH)
+    ) u_onehot0_mux_data (
+        .sel    (req_hit_vector),
+        .din    (data_item),
+        .dout   (req_hit_data_item)
+    );
+
 `ifdef ASSERT_ON
-    `assert_clk(a_fill_pa_range_valid, (fill_vld == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]));
+    `assert_clk(a_fill_pa_range_valid, (fill_vld == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]))
+    `assert_clk(a_req_hit_vector_onehot0, $onehot0(req_hit_vector))
+    `assert_clk(a_fill_sel_onehot0, $onehot0(fill_sel))
 `endif
 
 endmodule

@@ -13,7 +13,7 @@
 //         .clk (sdtlb_if.clk), .rst_n (sdtlb_if.rst_n),
 //         .req_vld (sdtlb_if.req_vld), ...
 //     );
-//     驱动: sdtlb_if.drv.fill_vld <= 1'b1;   采样: sdtlb_if.mon.req_hit_vld
+//     驱动: sdtlb_if.drv.fill_vld <= 1'b1;   采样: sdtlb_if.mon.req_hit / .req_hit_data_item
 //   virtual interface (传给 UVM 组件时才用, 名字带 _vif 后缀):
 //     virtual sdtlb_if sdtlb_vif;
 //     uvm_config_db#(virtual sdtlb_if)::set(null, "*", "sdtlb_vif", sdtlb_vif);
@@ -30,31 +30,26 @@ import sdecoder_pkg::*;
     timeunit 1ps;
     timeprecision 1ps;
 
-    // 代换请求 (查表)
+    // 代换请求 (查表): 请求地址只到 PA[46:30] (17 bit, 见 sdecoder_pkg 的 PA_BASE_WIDTH)
     logic                               req_vld;
-    logic [PA_WIDTH-1:0]                req_pa;
-    logic                               req_hit_vld;
-    logic [SDTLB_ENTRIES_IDX_WIDTH-1:0] req_hit_idx;
-
-    // 命中条目的读出
-    logic [10:0]                        hit_eid;
-    logic [ 9:0]                        hit_token_id;
-    logic [17:0]                        hit_s_pfn;
-    logic                               hit_grn;
+    logic [PA_BASE_WIDTH-1:0]           req_pa;
+    logic                               req_hit;             // 命中
+    SDTLB_TAG_ITEM_t                    req_hit_tag_item;    // 命中条目的 Tag 段内容
+    SDTLB_DATA_ITEM_t                   req_hit_data_item;   // 命中条目的 Data 段内容
 
     // 装填请求 (Page Walk 结果)
     logic                               fill_vld;
-    logic [16:0]                        fill_pa_base;
-    logic [ 4:0]                        fill_pa_up;
-    logic [10:0]                        fill_eid;
-    logic [ 9:0]                        fill_token_id;
-    logic [17:0]                        fill_s_pfn;
+    logic [PA_BASE_WIDTH-1:0]           fill_pa_base;
+    logic [PA_UP_WIDTH-1:0]             fill_pa_up;
+    logic [EID_WIDTH-1:0]               fill_eid;
+    logic [TOKEN_ID_WIDTH-1:0]          fill_token_id;
+    logic [S_PFN_WIDTH-1:0]             fill_s_pfn;
     logic                               fill_grn;
 
     // 置无效 (刷新) 请求
     logic                               inv_all;
     logic                               inv_en;
-    logic [PA_WIDTH-1:0]                inv_pa;
+    logic [PA_BASE_WIDTH-1:0]           inv_pa;
 
     // driver: 驱动 DUT 输入, 回读 DUT 输出
     clocking drv @(posedge clk);
@@ -73,12 +68,9 @@ import sdecoder_pkg::*;
         output inv_en;
         output inv_pa;
 
-        input  req_hit_vld;
-        input  req_hit_idx;
-        input  hit_eid;
-        input  hit_token_id;
-        input  hit_s_pfn;
-        input  hit_grn;
+        input  req_hit;
+        input  req_hit_tag_item;
+        input  req_hit_data_item;
     endclocking
 
     // monitor: 全部采样
@@ -87,12 +79,9 @@ import sdecoder_pkg::*;
 
         input  req_vld;
         input  req_pa;
-        input  req_hit_vld;
-        input  req_hit_idx;
-        input  hit_eid;
-        input  hit_token_id;
-        input  hit_s_pfn;
-        input  hit_grn;
+        input  req_hit;
+        input  req_hit_tag_item;
+        input  req_hit_data_item;
         input  fill_vld;
         input  fill_pa_base;
         input  fill_pa_up;
