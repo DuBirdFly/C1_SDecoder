@@ -52,7 +52,7 @@ make -C simulation_agent all
 
 ## 目录约定
 
-- `rtl/common/`: 可复用的通用 RTL 模块 (不依赖本项目 package 的独立 module, 如 `round_robin_arbiter` / `onehot0_mux`).
+- `rtl/common/`: 可复用的通用 RTL 模块 (不依赖本项目 package 的独立 module, 如 `inc_arbiter` / `decoder_bin2onehot` / `encoder_onehot2bin` / `onehot0_mux`).
 - `doc/`: 项目文档. 设计方案放在各自的 `<文档名>/` 目录内, 图片放在同级的 `image/<文档名>/`.
 - `doc/ubuntu_env/`: 本机 (Ubuntu) 环境与工具链说明, 一工具一文件: `nodejs.md`, `markdownlint.md`,
   `ruff.md`, `chromium.md`, `mermaid.md`.
