@@ -13,6 +13,5 @@
 
 // Testbench top files
 ./testbench/top/crg.sv
-./testbench/top/wrapper_top.sv
 ./testbench/top/tb_top.sv
 ./testbench/top/tb_sdtlb.sv

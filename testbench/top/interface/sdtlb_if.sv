@@ -1,24 +1,3 @@
-// =============================================================================
-// sdtlb_if: sdtlb (SDTLB 顶层) 的 testbench 接口
-//
-// 结构: clk / rst_n 作为接口端口由 testbench 传入 (可接 crg 的时钟复位), 其余信号按
-//       功能分组声明; 两个 clocking block 分别给 driver 与 monitor 用:
-//         drv : 驱动 DUT 输入 (output), 同时回读 DUT 输出 (input)
-//         mon : 只采样 (input), 供 scoreboard / coverage 使用
-//
-// 用法 (sdtlb 是普通端口, 不是 interface 端口, 所以按名字逐根连接):
-//   实体接口实例 (不是 virtual interface, 名字不带 _vif 后缀):
-//     sdtlb_if sdtlb_if (.clk (clk), .rst_n (rst_n));
-//     sdtlb dut (
-//         .clk (sdtlb_if.clk), .rst_n (sdtlb_if.rst_n),
-//         .req_vld (sdtlb_if.req_vld), ...
-//     );
-//     驱动: sdtlb_if.drv.fill_vld <= 1'b1;   采样: sdtlb_if.mon.req_hit / .req_hit_data_item
-//   virtual interface (传给 UVM 组件时才用, 名字带 _vif 后缀):
-//     virtual sdtlb_if sdtlb_vif;
-//     uvm_config_db#(virtual sdtlb_if)::set(null, "*", "sdtlb_vif", sdtlb_vif);
-// =============================================================================
-
 interface sdtlb_if
 import sdecoder_pkg::*;
 

@@ -1,25 +1,3 @@
-// =============================================================================
-// tb_sdtlb: sdtlb (SDTLB 顶层: Tag 阵列 + Data 阵列) 的单元自检
-// 注: SLA 计算已从 DUT 删除 (后续再处理), 相关检查随之删除;
-//     请求地址与命中读出按新接口: req_pa 只到 PA[46:30] (17 bit),
-//     命中输出是 req_hit + req_hit_tag_item / req_hit_data_item 两个 struct.
-//
-// 跑法 (在仓库根目录):
-//   make -C simulation_agent all TB_TOP=tb_sdtlb
-//
-// 结构: 时钟与复位由 crg 生成 (本 tb 内不出现任何 #NUM 延时); 通过 sdtlb_if 接口连 DUT ——
-//       clk / rst_n 接进接口, DUT 各端口按名字连到接口信号; 同步一律等接口的 drv 时钟块
-//       事件 @(sdtlb_if.drv), 不再直接 @(posedge clk); DUT 输入用 drv 时钟块驱动
-//       (posedge + 1ps 输出偏斜), 组合结果直接读裸接口信号 (命中与两个 struct 都是同拍
-//       组合量, 不适合走时钟块采样) —— 驱动与读出之间隔一个时钟块事件, 组合逻辑早已稳定.
-//       接口的 mon 时钟块留给后续的 monitor / scoreboard 组件.
-//
-// 说明: 只例化 sdtlb, 不依赖 UVM, 也不参与 tb_top 的冒烟流程. 覆盖
-//   空表 / 装填 (Tag 与 Data 同条目) / 按地址区间命中与不命中 / 命中读出的
-//   Tag 与 Data 两个 struct 内容,
-//   末尾打印 "<N> checks, <M> errors" 与 "RESULT: PASS|FAIL", 失败时再 $fatal 提前结束.
-//   注意: VCS 在 $fatal 时退出码仍是 0, 因此判定要看 log/simv.log 里的 RESULT 行.
-// =============================================================================
 `timescale 1ns/1ps
 module tb_sdtlb;
 
@@ -180,6 +158,33 @@ module tb_sdtlb;
         set_req(.high(12'hfff), .idx(5'h1e));
         repeat (10) @(sdtlb_if.drv);
         chk("page: 相邻页不命中", sdtlb_if.req_hit == 1'b0);
+
+        // ====================================================================
+        // 第二个条目: 轮转指针走一格, 该填到 1 号条目 (覆盖"非 0 条目也能被写"
+        // 与"按地址选中正确的条目, 数据不串扰")
+        fill_one(
+            .base({12'h001, 5'd0}),
+            .up(5'd0),
+            .eid(11'h055),
+            .tok(10'h0aa),
+            .pfn(18'h0cccc),
+            .grn(1'b0)
+        );
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h001), .idx(5'd0));
+        repeat (10) @(sdtlb_if.drv);
+        chk("fill#2: 命中且落在 1 号条目",
+            (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_tag_item.pa_base == {12'h001, 5'd0}));
+        chk("fill#2: Data 内容 (不串扰)",
+            (sdtlb_if.req_hit_data_item.eid == 11'h055) &&
+            (sdtlb_if.req_hit_data_item.token_id == 10'h0aa) &&
+            (sdtlb_if.req_hit_data_item.s_pfn == 18'h0cccc));
+
+        // 回到 0 号条目的地址: 仍然命中, 且读回的是它自己的数据
+        set_req(.high(12'hfff), .idx(5'h1f));
+        repeat (10) @(sdtlb_if.drv);
+        chk("fill#1 仍在 (两个条目各自独立)",
+            (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_data_item.s_pfn == 18'h33333));
 
         // [TODO] 以下测试是以前留的, 不再使用 (接口已改: 命中读出是 struct, 只能作参考)
         /*
