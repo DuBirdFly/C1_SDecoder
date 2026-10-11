@@ -35,7 +35,10 @@ import sdecoder_pkg::*;
 
     logic [SDTLB_ENTRIES-1:0] req_hit_vector;
     logic [SDTLB_ENTRIES-1:0] fill_sel;         // 轮转仲裁器给出的当前指针 (one-hot);
-                                                // 真正写使能是它与 fill_vld 相与 (见下面两处例化)
+                                                // 真正写使能是它与 fill_vld 相与 (见下面两处例化).
+                                                // note: 必须写成 {SDTLB_ENTRIES{fill_vld}} & fill_sel,
+                                                // 不能写 fill_vld & fill_sel —— 后者里 1 bit 的
+                                                // fill_vld 会零扩展成 128 bit, 只有 bit0 能通过门控
 
     assign req_hit = |req_hit_vector;
 
@@ -58,7 +61,7 @@ import sdecoder_pkg::*;
 
         .fill_pa_base    (fill_pa_base    ),
         .fill_pa_up      (fill_pa_up      ),
-        .fill_vld_vector (fill_vld & fill_sel),
+        .fill_vld_vector ({SDTLB_ENTRIES{fill_vld}} & fill_sel),
 
         .inv_all         (inv_all         ),
         .inv_en          (inv_en          ),
@@ -71,7 +74,7 @@ import sdecoder_pkg::*;
         .clk             (clk             ),
         .rst_n           (rst_n           ),
 
-        .fill_vld_vector (fill_vld & fill_sel),
+        .fill_vld_vector ({SDTLB_ENTRIES{fill_vld}} & fill_sel),
         .fill_eid        (fill_eid        ),
         .fill_token_id   (fill_token_id   ),
         .fill_s_pfn      (fill_s_pfn      ),
@@ -99,7 +102,6 @@ import sdecoder_pkg::*;
     );
 
 `ifdef ASSERT_ON
-    `assert_clk(a_fill_pa_range_valid, (fill_vld == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]))
     `assert_clk(a_req_hit_vector_onehot0, $onehot0(req_hit_vector))
     `assert_clk(a_fill_sel_onehot0, $onehot0(fill_sel))
 `endif

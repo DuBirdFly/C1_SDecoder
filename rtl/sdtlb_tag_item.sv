@@ -61,6 +61,10 @@ import sdecoder_pkg::*;
 
     assign req_hit = req_vld && tag_item.valid && req_match;
 
+`ifdef ASSERT_ON
+    `assert_clk(a_fill_pa_range_valid, (fill_vld == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]))
+`endif
+
 endmodule
 
 `default_nettype wire
