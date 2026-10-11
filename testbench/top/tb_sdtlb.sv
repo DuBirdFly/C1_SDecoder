@@ -12,12 +12,15 @@ module tb_sdtlb;
     // 时钟与复位由 crg 生成 (SDecoder 是单时钟域时序模块, tb 内不再自己写 #NUM 延时)
     crg #(
         .APB_FREQ ( 20  ),
-        .AXI_FREQ ( 100 )
+        .AXI_FREQ ( 100 ),
+        .CLK_FREQ ( 100 )
     ) u_crg (
         .pclk    (         ),
         .presetn (         ),
-        .aclk    (clk      ),
-        .aresetn (rst_n    )
+        .aclk    (         ),
+        .aresetn (         ),
+        .clk     (clk     ),
+        .rst_n   (rst_n   )
     );
 
     // 接口: clk / rst_n 接进接口, DUT 各端口连接口信号
