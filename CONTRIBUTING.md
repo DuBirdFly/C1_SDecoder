@@ -1,28 +1,52 @@
 # CONTRIBUTING
 
-| 项目 | 内容 |
-| --- | --- |
-| 文档名称 | CONTRIBUTING (编码规范) |
-| 日期 | 2026-10-06 |
-| 范围 | 本仓库的编码规范: SystemVerilog (UVM 使用规范待补) |
-| 说明 | 人读的规范. agent 的常驻入口见 [`AGENTS.md`](AGENTS.md): 那里只放每次都要遵守的约定, 细节一律指向本文件 |
+## 写 Markdown 文档
+
+Markdown 文档遵循 [`doc/md文件编写规范.md`](doc/md文件编写规范.md):
+图表优先 Mermaid, 文件型图片的目录与命名, 一律使用半角标点.
+
+### markdownlint 检查
+
+改动后在**仓库根目录**执行检查 (必须显式带 `--config`: markdownlint-cli2 不向上级目录查找配置):
+
+```bash
+markdownlint-cli2 "doc/**/*.md" --config ./.config/.markdownlint.jsonc
+```
+
+规则集与命令说明见 [`doc/ubuntu_env/markdownlint.md`](doc/ubuntu_env/markdownlint.md);
+
+### Mermaid 检查
+
+文档里含 Mermaid 图时, 再按 [`doc/ubuntu_env/mermaid.md`](doc/ubuntu_env/mermaid.md) 跑一遍语法校验.
+
+## 写 python 文件
+
+### ruff 检查
+
+写完或改完 `.py` 后, 在**仓库根目录**执行检查:
+
+```bash
+ruff check --config ./.config/ruff.toml .             # lint 全仓库
+ruff format --check --config ./.config/ruff.toml .    # 只检查格式, 不落盘
+```
+
+注: 必须显式带 `--config`: ruff 不会去 `.config/` 找配置, 省略后 `.config/ruff.toml` 里的豁免全部失效
+
+- 新写的代码要标类型注解: 函数签名与返回, 模块常量, 以及含义不直观的局部变量, 尽可能写全
+- 检查完顺手删掉工作区里的 `.ruff_cache/` (已被 gitignore, 但不留在工作区)
+
+规则集与命令说明见 [`doc/ubuntu_env/ruff.md`](doc/ubuntu_env/ruff.md);
+按需加载的检查流程见 [`.agents/skills/python-check/SKILL.md`](.agents/skills/python-check/SKILL.md).
 
 ## 写 Verilog / SystemVerilog 文件
 
-改动 `rtl/` 后, 在**仓库根目录**跑一遍编译与冒烟:
+改动 Verilog / SystemVerilog 后, 在**仓库根目录**跑一遍编译与冒烟:
 
 ```bash
 make -C simulation_agent all
 ```
 
-仿真入口有两套, 用法完全一样, 区别只在运行目录:
-
-| 入口 | 给谁用 | 说明 |
-| --- | --- | --- |
-| `simulation/` | 人 | 日常人工仿真 |
-| `simulation_agent/` | agent | `Makefile` 与 `base` 是指向 `simulation/` 的软链, 只有 `run_*_testcase/` 独立, 避免与人工仿真互相覆盖日志与波形 |
-
-下文示例统一用 `simulation_agent/`, 换成 `simulation/` 即人工仿真的命令.
+仿真流程 (变量 / 目标 / 判定口径 / 产物与波形) 见 [`simulation/README.md`](simulation/README.md).
 
 ### 代码风格
 
@@ -79,42 +103,3 @@ end
 - `testbench/` 下的验证代码可以不受限使用 Verilog / SystemVerilog 新语法特性
 - `virtual interface` 使用 `_vif` 结尾
 - 普通 `for` 循环的变量用 `int i/j/k`, `generative for` 的变量用 `genvar_i/j/k`
-
-## 仿真流程
-
-统一入口是 `simulation/Makefile` (agent 走 `simulation_agent/`, 见上), 命令都在**仓库根目录**执行.
-
-| 变量 | 默认 | 作用 |
-| --- | --- | --- |
-| `TB_TOP` | `tb_top` | 仿真的顶层. UVM 冒烟用 `tb_top`;单元自检用 `tb_sdtlb` |
-| `TESTNAME` | `TestBase` | UVM 的 `+UVM_TESTNAME`;单元自检用不到, 只参与运行目录命名 |
-| `DUMP_WAVE` | `1` | 1 = 出 FSDB 波形 (目前 tb 体量小, 默认出);0 = 不出 |
-
-常用目标: `all` (编译 + 仿真 + 收尾清软链), `vcs` (只编译 / elaborate), `simv_only` (只跑已编译
-好的 `simv`), `verdi` (开波形), `clean` (清软链).
-
-```mermaid
-flowchart LR
-    A["改 rtl 或 testbench"] --> B["make -C simulation_agent all"]
-    B --> C["编译: 查 vcs.log 的 Error- / Warning-"]
-    B --> D["仿真: 查 simv.log 的 RESULT 与 UVM_ERROR"]
-    B --> E["波形: output/wave 下的 novas 文件"]
-    D --> F{"通过"}
-    F -->|否| G["按 tb 与波形定位"]
-    F -->|是| H["提交"]
-```
-
-- **判定看日志, 不看退出码**: VCS 即使碰到 `$fatal`, 退出码仍是 0. 单元自检看 `log/simv.log` 里的
-  `RESULT: PASS|FAIL` 行;UVM 冒烟看 `UVM_ERROR` / `UVM_FATAL` 计数;编译阶段看 `log/vcs.log` 里
-  有没有 `Error-[` / `Warning-[`
-- **产物与清理**: 运行目录是 `<入口>/run_single_testcase/<TB_TOP>.<TESTNAME>/` (回归用
-  `run_regress_testcase/`), 已 gitignore, 不入库. `all` / `clean` 只删目录里的软链, **日志与波形
-  会留着** —— 换 `DUMP_WAVE` 或换测试重跑前先删运行目录, 否则会看到上一轮的旧波形 / 旧日志;
-  agent 只清理自己 `simulation_agent/` 下的运行目录, 不动 `simulation/` 的
-- **波形**: 落在运行目录的 `output/wave/` 下 (`novas.vf` + `novas_000.fsdb`), 用
-  `make -C simulation_agent verdi` 打开. 回归由 `script/regression_run.py` 驱动, 那里显式
-  `DUMP_WAVE=0` (回归不存波形), 排查问题按单测跑并开波形
-- **写 tb 的时序口径**: SDecoder 是单时钟域时序模块, tb 内不出现 `#NUM` 延时 —— 时钟与复位由
-  [testbench/top/crg.sv](testbench/top/crg.sv) 生成, 同步等时钟块事件 (如 `@(sdtlb_if.drv)`)
-  或时钟沿, 组合量的稳定靠"隔一个事件"而不是延时. 波形 dump 用的 `$fsdbDumpvars(..., "+all")`
-  不受此限
