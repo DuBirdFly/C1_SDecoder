@@ -5,7 +5,7 @@
 // +UVM_VERBOSITY+UVM_LOW
 
 // 关于 delta_cycle: https://bbs.eetop.cn/thread-916396-1-1.html
-+fsdb+delta
+// +fsdb+delta
 
 // 将 constraint 失败从 warning 升级为 fatae
 +ntb_stop_on_constraint_solver_error=1
