@@ -6,7 +6,7 @@ import sdecoder_pkg::*;
     input  logic                    rst_n
 );
 
-    timeunit 1ps;
+    timeunit 1ns;
     timeprecision 1ps;
 
     // 代换请求 (查表): 请求地址只到 PA[46:30] (17 bit, 见 sdecoder_pkg 的 PA_BASE_WIDTH)
