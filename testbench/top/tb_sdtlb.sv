@@ -19,8 +19,8 @@ module tb_sdtlb;
         .presetn (         ),
         .aclk    (         ),
         .aresetn (         ),
-        .clk     (clk     ),
-        .rst_n   (rst_n   )
+        .clk     (clk      ),
+        .rst_n   (rst_n    )
     );
 
     // 接口: clk / rst_n 接进接口, DUT 各端口连接口信号
@@ -77,7 +77,6 @@ module tb_sdtlb;
         input logic [17:0] pfn,
         input logic        grn
     );
-        @(sdtlb_if.drv);
         sdtlb_if.drv.fill_pa_base  <= base;
         sdtlb_if.drv.fill_pa_up    <= up;
         sdtlb_if.drv.fill_eid      <= eid;
@@ -91,7 +90,6 @@ module tb_sdtlb;
 
     // 按地址置无效, 拉高一拍
     task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] pa);
-        @(sdtlb_if.drv);
         sdtlb_if.drv.inv_en <= 1'b1;
         sdtlb_if.drv.inv_pa <= pa;
         @(sdtlb_if.drv);
@@ -100,7 +98,6 @@ module tb_sdtlb;
 
     // 置无效全部条目, 拉高一拍
     task automatic inv_everything();
-        @(sdtlb_if.drv);
         sdtlb_if.drv.inv_all <= 1'b1;
         @(sdtlb_if.drv);
         sdtlb_if.drv.inv_all <= 1'b0;
@@ -189,70 +186,253 @@ module tb_sdtlb;
         chk("fill#1 仍在 (两个条目各自独立)",
             (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_data_item.s_pfn == 18'h33333));
 
-        // [TODO] 以下测试是以前留的, 不再使用 (接口已改: 命中读出是 struct, 只能作参考)
-        /*
-        // ================= 段式条目: 段内偏移加进 SLA[47:30] =================
-        fill_one({12'h200, 5'd4}, 5'd9, 11'h001, 10'h001, 18'h00010, 1'b1);
-        chk("fill#2 lands on idx 1", idx_obs == 1);
-        chk("fill#2: own data (不串扰)", (sdtlb_if.hit_eid == 11'h001) && (sdtlb_if.hit_grn == 1'b1));
-        set_req(mk_pa(12'h200, 5'd6, pa_low));
-        chk("seg: 偏移 2 加进 SLA[47:30]", sdtlb_if.hit_sla == {18'h00012, pa_low});
-        chk("seg: 无溢出", sdtlb_if.hit_sla_ovf == 1'b0);
-        set_req(mk_pa(12'h200, 5'd4, pa_low));
-        chk("seg: 段基址处偏移 0", sdtlb_if.hit_sla == {18'h00010, pa_low});
+        // ====================================================================
+        // 段式条目 (Grn = 1): pa_up > pa_base[4:0], 一个条目覆盖 4~8 共 5 个 1GB 页
+        fill_one(
+            .base({12'h002, 5'd4}),
+            .up(5'd8),
+            .eid(11'h123),
+            .tok(10'h2aa),
+            .pfn(18'h15555),
+            .grn(1'b1)
+        );
+        repeat (10) @(sdtlb_if.drv);
 
-        set_req(mk_pa(12'h100, 5'd7, pa_low));
-        chk("re-query #1: idx 0 + own data", (sdtlb_if.req_hit_idx == 0) &&
-                                            (sdtlb_if.hit_eid == 11'h123) && (sdtlb_if.hit_s_pfn == 18'h3ffff));
+        // 闭区间内: 左端 / 中间 / 右端 都命中
+        set_req(.high(12'h002), .idx(5'd4));
+        repeat (10) @(sdtlb_if.drv);
+        chk("seg: 左端命中 (闭区间)",
+            (sdtlb_if.req_hit == 1'b1) &&
+            (sdtlb_if.req_hit_tag_item.pa_base == {12'h002, 5'd4}) &&
+            (sdtlb_if.req_hit_tag_item.pa_up == 5'd8));
 
-        // ================= 按地址置无效: 只清覆盖该地址的条目 =================
-        inv_addr(mk_pa(12'h100, 5'd7, 30'h0));
-        set_req(mk_pa(12'h100, 5'd7, pa_low));
-        chk("inv_addr: miss", sdtlb_if.req_hit_vld == 1'b0);
-        chk("inv_addr: hit_* 与 sla 置 0", (sdtlb_if.hit_eid == 0) && (sdtlb_if.hit_s_pfn == 0) &&
-                                         (sdtlb_if.hit_sla == '0) && (sdtlb_if.hit_sla_ovf == 1'b0));
-        set_req(mk_pa(12'h200, 5'd7, pa_low));
-        chk("inv_addr: #2 kept", (sdtlb_if.req_hit_vld == 1'b1) && (sdtlb_if.hit_eid == 11'h001));
+        set_req(.high(12'h002), .idx(5'd6));
+        repeat (10) @(sdtlb_if.drv);
+        chk("seg: 中间命中且 Grn = 1",
+            (sdtlb_if.req_hit == 1'b1) &&
+            (sdtlb_if.req_hit_data_item.s_pfn == 18'h15555) &&
+            (sdtlb_if.req_hit_data_item.grn == 1'b1));
 
-        // ================= 轮转替换指针: 连续装填下标逐个 +1 =================
-        fill_one({12'h300, 5'd0}, 5'd0, 11'h0aa, 10'h0aa, 18'h000aa, 1'b0);
-        prev_idx = idx_obs;
-        rot_ok = 1'b1;
-        for (int i = 1; i < 4; i++) begin
-            fill_one({(12'h300 + i[11:0]), 5'd0}, 5'd0, 11'h0aa, 10'h0aa, 18'h000aa, 1'b0);
-            if (idx_obs !== (prev_idx + 1'b1)) begin
-                rot_ok = 1'b0;
-                $display("FAIL rotation at i=%0d: idx=%0d prev=%0d", i, idx_obs, prev_idx);
-            end
-            prev_idx = idx_obs;
-        end
-        chk("rotation advances by 1 (4 fills)", rot_ok == 1'b1);
+        set_req(.high(12'h002), .idx(5'd8));
+        repeat (10) @(sdtlb_if.drv);
+        chk("seg: 右端命中 (闭区间)", sdtlb_if.req_hit == 1'b1);
 
-        // ================= 全部置无效 =================
+        // 闭区间外 / 段高位不同: 都不命中
+        set_req(.high(12'h002), .idx(5'd3));
+        repeat (10) @(sdtlb_if.drv);
+        chk("seg: 左端外不命中", sdtlb_if.req_hit == 1'b0);
+
+        set_req(.high(12'h002), .idx(5'd9));
+        repeat (10) @(sdtlb_if.drv);
+        chk("seg: 右端外不命中", sdtlb_if.req_hit == 1'b0);
+
+        set_req(.high(12'h003), .idx(5'd6));
+        repeat (10) @(sdtlb_if.drv);
+        chk("seg: 段高位不同不命中", sdtlb_if.req_hit == 1'b0);
+
+        // ====================================================================
+        // req_vld 门控: 地址仍落在段内, 拉低 req_vld 后命中与读出数据都要归 0
+        set_req(.high(12'h002), .idx(5'd6));
+        repeat (10) @(sdtlb_if.drv);
+        chk("req_vld = 1: 命中 (门控前置)", sdtlb_if.req_hit == 1'b1);
+
+        sdtlb_if.drv.req_vld <= 1'b0;
+        repeat (10) @(sdtlb_if.drv);
+        chk("req_vld = 0: 命中与读出数据都归 0",
+            (sdtlb_if.req_hit == 1'b0) &&
+            (sdtlb_if.req_hit_tag_item == '0) &&
+            (sdtlb_if.req_hit_data_item == '0));
+
+        // ====================================================================
+        // 按地址置无效: 只清掉被地址覆盖到的条目
+        // 另填一个页式条目, 用来验证"没被覆盖的条目不受影响"
+        fill_one(
+            .base({12'h010, 5'd20}),
+            .up(5'd20),
+            .eid(11'h0f0),
+            .tok(10'h0f0),
+            .pfn(18'h0f0f0),
+            .grn(1'b0)
+        );
+        repeat (10) @(sdtlb_if.drv);
+
+        // 段高位相同、但落在条目范围外: 不能清掉它
+        inv_addr({12'h010, 5'd19});
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h010), .idx(5'd20));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv: 同段高位但范围外, 条目不被动", sdtlb_if.req_hit == 1'b1);
+
+        // 段内任意一个地址都应清掉整个段条目
+        inv_addr({12'h002, 5'd7});
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h002), .idx(5'd7));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv: 段内任一地址清掉整个段条目", sdtlb_if.req_hit == 1'b0);
+
+        // 段高位不同的条目不受影响
+        set_req(.high(12'h010), .idx(5'd20));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv: 只作用于被覆盖的条目", sdtlb_if.req_hit == 1'b1);
+
+        // 精确命中页式条目时清掉它; 未命中时命中读出全 0
+        inv_addr({12'h010, 5'd20});
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h010), .idx(5'd20));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv: 页式条目被清掉", sdtlb_if.req_hit == 1'b0);
+        chk("inv: 未命中时 Tag / Data 读出全 0",
+            (sdtlb_if.req_hit_tag_item == '0) && (sdtlb_if.req_hit_data_item == '0));
+
+        // 置无效只清有效位: 重新装填即可恢复, 且读回的是新数据
+        fill_one(
+            .base({12'h010, 5'd20}),
+            .up(5'd20),
+            .eid(11'h0e0),
+            .tok(10'h0e0),
+            .pfn(18'h0e0e0),
+            .grn(1'b0)
+        );
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h010), .idx(5'd20));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv: 重新装填后恢复命中, 数据是新的",
+            (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_data_item.s_pfn == 18'h0e0e0));
+
+        // ====================================================================
+        // 置无效全部
+        fill_one(
+            .base({12'h030, 5'd1}),
+            .up(5'd1),
+            .eid(11'h0b0),
+            .tok(10'h0b0),
+            .pfn(18'h0b0b0),
+            .grn(1'b0)
+        );
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h030), .idx(5'd1));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv_all 前置: 条目命中", sdtlb_if.req_hit == 1'b1);
+
         inv_everything();
-        set_req(mk_pa(12'h300, 5'd0, pa_low));
-        chk("inv_all: miss", sdtlb_if.req_hit_vld == 1'b0);
-        chk("inv_all: rd_* / sla 置 0", (sdtlb_if.hit_eid == 0) && (sdtlb_if.hit_grn == 1'b0) && (sdtlb_if.hit_sla == '0));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv_all: 该条目不再命中", sdtlb_if.req_hit == 1'b0);
 
-        // ================= SLA 溢出: S_PFN 全 1 再加偏移 =================
-        fill_one({12'h400, 5'd0}, 5'd31, 11'h002, 10'h002, 18'h3ffff, 1'b1);
-        set_req(mk_pa(12'h400, 5'd1, pa_low));
-        chk("ovf: hit", sdtlb_if.req_hit_vld == 1'b1);
-        chk("ovf: 偏移 1 时报溢出", sdtlb_if.hit_sla_ovf == 1'b1);
-        set_req(mk_pa(12'h400, 5'd0, pa_low));
-        chk("ovf: 偏移 0 时不报", sdtlb_if.hit_sla_ovf == 1'b0);
+        set_req(.high(12'h010), .idx(5'd20));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv_all: 先前填的其它条目也不再命中", sdtlb_if.req_hit == 1'b0);
 
-        // ================= 故意多命中: 优先级取最小 + 断言报出 (见文件头注) =================
-        $display("[TB] 下面故意把同一 tag 装填两次, a_req_hit_onehot0 会报出来, 属预期");
-        fill_one({12'h500, 5'd3}, 5'd3, 11'h111, 10'h111, 18'h00111, 1'b0);
-        dup_first = idx_obs;
-        fill_one({12'h500, 5'd3}, 5'd3, 11'h222, 10'h222, 18'h00222, 1'b0);
-        dup_second = idx_obs;
-        @(sdtlb_if.drv);      // 再等一拍, 让 $onehot0 断言在时钟块事件上采样到重命中
-        chk("dup tag: hit_vld", sdtlb_if.req_hit_vld == 1'b1);
-        chk("dup tag: idx = min", sdtlb_if.req_hit_idx == ((dup_first < dup_second) ? dup_first : dup_second));
-        chk("dup tag: 读出最小下标那条的数据", sdtlb_if.hit_eid == 11'h111);
-        */
+        // 全部置无效后重新装填仍能命中 (写通路没被破坏)
+        fill_one(
+            .base({12'h030, 5'd1}),
+            .up(5'd1),
+            .eid(11'h0a0),
+            .tok(10'h0a0),
+            .pfn(18'h0a0a0),
+            .grn(1'b0)
+        );
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h030), .idx(5'd1));
+        repeat (10) @(sdtlb_if.drv);
+        chk("inv_all 后重新装填可命中",
+            (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_data_item.s_pfn == 18'h0a0a0));
+
+        // ====================================================================
+        // 同拍: 全置无效优先于装填 (inv_all 对每个条目都成立, 与轮转指针当前指到谁无关)
+        sdtlb_if.drv.fill_pa_base  <= {12'h020, 5'd3};
+        sdtlb_if.drv.fill_pa_up    <= 5'd3;
+        sdtlb_if.drv.fill_eid      <= 11'h0c0;
+        sdtlb_if.drv.fill_token_id <= 10'h0c0;
+        sdtlb_if.drv.fill_s_pfn    <= 18'h0c0c0;
+        sdtlb_if.drv.fill_grn      <= 1'b0;
+        sdtlb_if.drv.fill_vld      <= 1'b1;
+        sdtlb_if.drv.inv_all       <= 1'b1;
+        @(sdtlb_if.drv);
+        sdtlb_if.drv.fill_vld <= 1'b0;
+        sdtlb_if.drv.inv_all  <= 1'b0;
+        repeat (10) @(sdtlb_if.drv);
+
+        set_req(.high(12'h020), .idx(5'd3));
+        repeat (10) @(sdtlb_if.drv);
+        chk("同拍: 全置无效赢, 该次装填地址未命中", sdtlb_if.req_hit == 1'b0);
+
+        set_req(.high(12'h030), .idx(5'd1));
+        repeat (10) @(sdtlb_if.drv);
+        chk("同拍: 全置无效把原有条目也清掉了", sdtlb_if.req_hit == 1'b0);
+
+        // ====================================================================
+        // 轮转替换指针, 以及"无效条目同拍被刷新"的竞态
+        // 连填 128 次指针正好绕一圈回到起点条目; 起点条目这时仍持有这一圈第一次装填的地址,
+        // 于是可以让"指针指到它"与"按它自己的地址置无效 + 装填"发生在同一拍
+        fill_one(
+            .base({12'h100, 5'd0}),
+            .up(5'd0),
+            .eid(11'h001),
+            .tok(10'h001),
+            .pfn(18'h00001),
+            .grn(1'b0)
+        );
+        for (int i = 1; i < 128; i++) begin
+            fill_one(
+                .base({12'h100 + 12'(i / 32), 5'(i % 32)}),
+                .up(5'(i % 32)),
+                .eid(11'(i)),
+                .tok(10'(i)),
+                .pfn(18'(i)),
+                .grn(1'b0)
+            );
+        end
+        repeat (10) @(sdtlb_if.drv);
+
+        // 先单独按 ADDR0 置无效: 条目变为无效, 但 pa_base / pa_up 仍是 ADDR0 的值
+        inv_addr({12'h100, 5'd0});
+        repeat (10) @(sdtlb_if.drv);
+
+        // 同拍: 按 ADDR0 装填且按 ADDR0 置无效. 置无效必须先赢 —— 否则条目会被填回成有效,
+        // 查 ADDR0 就会命中 (这正是"有效位不能并进 inv_match"要防的情况)
+        sdtlb_if.drv.fill_pa_base  <= {12'h100, 5'd0};
+        sdtlb_if.drv.fill_pa_up    <= 5'd0;
+        sdtlb_if.drv.fill_eid      <= 11'h7ff;
+        sdtlb_if.drv.fill_token_id <= 10'h3ff;
+        sdtlb_if.drv.fill_s_pfn    <= 18'h3ffff;
+        sdtlb_if.drv.fill_grn      <= 1'b0;
+        sdtlb_if.drv.fill_vld      <= 1'b1;
+        sdtlb_if.drv.inv_en        <= 1'b1;
+        sdtlb_if.drv.inv_pa        <= {12'h100, 5'd0};
+        @(sdtlb_if.drv);
+        sdtlb_if.drv.fill_vld <= 1'b0;
+        sdtlb_if.drv.inv_en   <= 1'b0;
+        repeat (10) @(sdtlb_if.drv);
+
+        set_req(.high(12'h100), .idx(5'd0));
+        repeat (10) @(sdtlb_if.drv);
+        chk("同拍(无效条目): 置无效赢, 该次装填地址未命中", sdtlb_if.req_hit == 1'b0);
+
+        // 再单独装填一次: 指针已随上一次装填步进, 这里验证轮转与写通路都正常
+        fill_one(
+            .base({12'h100, 5'd0}),
+            .up(5'd0),
+            .eid(11'h7fe),
+            .tok(10'h3fe),
+            .pfn(18'h3fffe),
+            .grn(1'b0)
+        );
+        repeat (10) @(sdtlb_if.drv);
+        set_req(.high(12'h100), .idx(5'd0));
+        repeat (10) @(sdtlb_if.drv);
+        chk("轮转: 绕圈后重新装填可命中, 数据正确",
+            (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_data_item.s_pfn == 18'h3fffe));
+
+        // 绕圈时填进去的占位条目各自还在 (抽查第 3 个与最后一个)
+        set_req(.high(12'h100), .idx(5'd2));
+        repeat (10) @(sdtlb_if.drv);
+        chk("轮转: 绕圈里的占位条目仍在 (第 3 个)",
+            (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_data_item.s_pfn == 18'd2));
+
+        set_req(.high(12'h103), .idx(5'd31));
+        repeat (10) @(sdtlb_if.drv);
+        chk("轮转: 绕圈里的占位条目仍在 (第 128 个)",
+            (sdtlb_if.req_hit == 1'b1) && (sdtlb_if.req_hit_data_item.s_pfn == 18'd127));
 
         $display("\n%d checks, %d errors", checks, errors);
         if (errors == 0) begin
