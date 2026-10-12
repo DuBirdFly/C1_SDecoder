@@ -8,7 +8,8 @@ import sdecoder_pkg::*;
     input  logic                                clk,
     input  logic                                rst_n,
 
-    // 代换请求: 查表 (组合)
+    // 代换请求: 查表
+    // req_vld 被采到的那一拍是请求拍, 响应 (req_hit 与读出数据) 下一拍才有效
     input  logic                                req_vld,
     input  logic [PA_BASE_WIDTH-1:0]            req_pa,
     output logic                                req_hit,
@@ -33,12 +34,25 @@ import sdecoder_pkg::*;
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
     SDTLB_DATA_ITEM_t data_item [SDTLB_ENTRIES];
 
-    logic [SDTLB_ENTRIES-1:0] req_hit_vector;
+    // 命中向量由 sdtlb_tag 组合给出 (比较链长, 时序差), 这里打 1 拍后再用:
+    // req_vld / req_pa 被采到的那一拍 (记作 T) 只是请求拍, 响应 (req_hit 与读出数据)
+    // 在 T+1 拍才有效; req_vld 可以拍拍有效, 响应逐拍滞后 1 拍 (流水线)
+    logic [SDTLB_ENTRIES-1:0] tag_hit_vector;
+    logic [SDTLB_ENTRIES-1:0] tag_hit_vector_r1;
     logic [SDTLB_ENTRIES-1:0] fill_sel;
     logic [SDTLB_ENTRIES-1:0] fill_vld_vector;
 
-    assign req_hit = |req_hit_vector;
+    assign req_hit = |tag_hit_vector_r1;
     assign fill_vld_vector = fill_vld ? fill_sel : 0;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            tag_hit_vector_r1 <= '0;
+        end
+        else begin
+            tag_hit_vector_r1 <= tag_hit_vector;
+        end
+    end
 
     inc_arbiter #(
         .N      (SDTLB_ENTRIES)
@@ -55,7 +69,7 @@ import sdecoder_pkg::*;
 
         .req_vld         (req_vld         ),
         .req_pa          (req_pa          ),
-        .req_hit_vector  (req_hit_vector  ),
+        .req_hit_vector  (tag_hit_vector  ),
 
         .fill_pa_base    (fill_pa_base    ),
         .fill_pa_up      (fill_pa_up      ),
@@ -81,11 +95,12 @@ import sdecoder_pkg::*;
         .data_item       (data_item       )
     );
 
+    // 命中读出: 用打 1 拍后的命中向量选路; 数据本身是寄存器输出, 一直稳定
     onehot0_mux #(
         .N      (SDTLB_ENTRIES),
         .WIDTH  (SDTLB_TAG_ITEM_WIDTH)
     ) u_onehot0_mux_tag (
-        .sel    (req_hit_vector),
+        .sel    (tag_hit_vector_r1),
         .din    (tag_item),
         .dout   (req_hit_tag_item)
     );
@@ -94,13 +109,13 @@ import sdecoder_pkg::*;
         .N      (SDTLB_ENTRIES),
         .WIDTH  (SDTLB_DATA_ITEM_WIDTH)
     ) u_onehot0_mux_data (
-        .sel    (req_hit_vector),
+        .sel    (tag_hit_vector_r1),
         .din    (data_item),
         .dout   (req_hit_data_item)
     );
 
 `ifdef ASSERT_ON
-    `assert_clk(a_req_hit_vector_onehot0, $onehot0(req_hit_vector))
+    `assert_clk(a_tag_hit_vector_onehot0, $onehot0(tag_hit_vector_r1))
     `assert_clk(a_fill_sel_onehot0, $onehot0(fill_sel))
 `endif
 

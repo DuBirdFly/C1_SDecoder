@@ -442,6 +442,28 @@ module tb_sdecoder;
         chk("排空后 req_ready 恢复", sdecoder_if.req_ready == 1'b1);
 
         // ====================================================================
+        // 命中 + 下游反压: 命中响应要等到 rsp_free 才能收走; 等待期间命中的那一拍已经过去,
+        // 引擎不能把命中丢掉 (丢了就当成未命中, 误发起 Page Walk)
+        // 用上一步刚回填的页式条目: SLA = {S_PFN, 页内偏移}
+        rd_before = tw_rd_cnt;
+        sdecoder_if.rsp_ready = 1'b0;
+        @(negedge clk);
+        req_send(mk_pa(12'h003, 5'd3, 30'h0def), 1'b0, 8'h81);
+        req_send(mk_pa(12'h003, 5'd3, 30'h001), 1'b0, 8'h82);
+        repeat (5) @(negedge clk);
+        chk("命中+反压: 等待期间不误发起 Page Walk", tw_rd_cnt == rd_before);
+
+        sdecoder_if.rsp_ready = 1'b1;
+        rsp_get();
+        chk("命中+反压: 第 1 个响应正确",
+            (rsp.req_id == 8'h81) && (rsp.fault == 1'b0) && (rsp.sla == {18'h0cccc, 30'h0def}));
+        rsp_get();
+        chk("命中+反压: 第 2 个响应正确",
+            (rsp.req_id == 8'h82) && (rsp.fault == 1'b0) && (rsp.sla == {18'h0cccc, 30'h001}));
+        repeat (5) @(negedge clk);
+        chk("命中+反压: 排空后 req_ready 恢复", sdecoder_if.req_ready == 1'b1);
+
+        // ====================================================================
         $display("\n%d checks, %d errors", checks, errors);
         if (errors == 0) begin
             $display("RESULT: PASS");

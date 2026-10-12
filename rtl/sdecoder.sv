@@ -7,6 +7,7 @@
 //     命中   -> 直接算 SLA 并回响应
 //     未命中 -> 交给 sdptw 做 Page Walk, 完成后回填 SDTLB 并回响应
 //     队头没处理完不会碰后面的请求, 所以响应与请求天然同序 (并行度 1, 见设计方案评审结论 Q7)
+//   注: sdtlb 的命中向量打了 1 拍, 查表要有请求拍 (E_IDLE) 与响应拍 (E_TLB) 两拍
 module sdecoder
 import sdecoder_pkg::*;
 (
@@ -87,19 +88,23 @@ import sdecoder_pkg::*;
 
     // ---- 解析引擎: 逐个处理队头 ----
     typedef enum logic [1:0] {
-        E_IDLE,
-        E_WALK
+        E_IDLE,     // 空闲: 队头在 Mem 空间就发 SDTLB 查表请求, 下一拍进 E_TLB
+        E_TLB,      // SDTLB 查表响应拍: 命中就回响应, 未命中就交给 Page Walk
+        E_WALK      // Page Walk 进行中
     } engine_e;
 
     engine_e                    engine;
 
     wire                        head_in_mem = (head.pa[PA_WIDTH-1] == 1'b0);   // PA[47] = 0
 
-    // SDTLB 查表 (组合): 只在引擎空闲且队头在 Mem 空间时查
+    // SDTLB 查表: 打 1 拍后才有响应, 所以 E_IDLE 发请求、E_TLB 取响应.
+    // E_TLB 里继续发: 命中但下游反压时这一拍用不掉响应, 重发可以让响应一直保持有效
+    // (队头地址不变, 重复查表结果相同)
     logic                       sdtlb_req_hit;
     SDTLB_TAG_ITEM_t            sdtlb_hit_tag;
     SDTLB_DATA_ITEM_t           sdtlb_hit_data;
-    wire                        sdtlb_req_vld = !fifo_empty && (engine == E_IDLE) && head_in_mem;
+    wire                        sdtlb_req_vld = !fifo_empty && head_in_mem &&
+                                                 ((engine == E_IDLE) || (engine == E_TLB));
 
     // 队头命中时算 SLA: {S_PFN + 段内偏移, 页内偏移}
     wire [PA_UP_WIDTH-1:0]      hit_offset  = head.pa[PA_UP_MSB:PA_UP_LSB] -
@@ -113,8 +118,7 @@ import sdecoder_pkg::*;
     logic                       walk_ready;
     logic                       walk_done_vld;
     SDEC_RSP_t                  walk_done_rsp;
-    wire                        walk_vld = !fifo_empty && (engine == E_IDLE) && head_in_mem &&
-                                            !sdtlb_req_hit;
+    wire                        walk_vld = !fifo_empty && (engine == E_TLB) && !sdtlb_req_hit;
     wire                        walk_go  = walk_vld && walk_ready;
 
     // ---- 响应寄存器 ----
@@ -128,29 +132,34 @@ import sdecoder_pkg::*;
     always_comb begin
         head_fin = 1'b0;
         head_rsp = RSP_NONE;
-        if (!fifo_empty && (engine == E_IDLE) && rsp_free) begin
-            if (!head_in_mem) begin
-                // PA[47] = 1: IO 空间, 本 IP 不处理
-                head_fin = 1'b1;
-                head_rsp = '{req_id: head.req_id, fault: 1'b1, fcode: FCODE_ADDR_ILLEGAL,
-                             eid: '0, token_id: '0, sla: '0};
-            end
-            else if (sdtlb_req_hit) begin
-                head_fin = 1'b1;
-                if (hit_sla_ovf) begin
+        if (!fifo_empty && rsp_free) begin
+            if (engine == E_IDLE) begin
+                if (!head_in_mem) begin
+                    // PA[47] = 1: IO 空间, 本 IP 不处理 (不查表, 当拍就能判)
+                    head_fin = 1'b1;
                     head_rsp = '{req_id: head.req_id, fault: 1'b1, fcode: FCODE_ADDR_ILLEGAL,
                                  eid: '0, token_id: '0, sla: '0};
                 end
-                else begin
-                    head_rsp = '{req_id: head.req_id, fault: 1'b0, fcode: FCODE_NONE,
-                                 eid: sdtlb_hit_data.eid, token_id: sdtlb_hit_data.token_id,
-                                 sla: hit_sla};
+            end
+            else if (engine == E_TLB) begin
+                // 查表响应拍: sdtlb_req_hit / 读出数据对应上一拍的查表请求
+                if (sdtlb_req_hit) begin
+                    head_fin = 1'b1;
+                    if (hit_sla_ovf) begin
+                        head_rsp = '{req_id: head.req_id, fault: 1'b1, fcode: FCODE_ADDR_ILLEGAL,
+                                     eid: '0, token_id: '0, sla: '0};
+                    end
+                    else begin
+                        head_rsp = '{req_id: head.req_id, fault: 1'b0, fcode: FCODE_NONE,
+                                     eid: sdtlb_hit_data.eid, token_id: sdtlb_hit_data.token_id,
+                                     sla: hit_sla};
+                    end
                 end
             end
-        end
-        else if (!fifo_empty && (engine == E_WALK) && walk_done_vld && rsp_free) begin
-            head_fin = 1'b1;
-            head_rsp = walk_done_rsp;
+            else if ((engine == E_WALK) && walk_done_vld) begin
+                head_fin = 1'b1;
+                head_rsp = walk_done_rsp;
+            end
         end
     end
 
@@ -163,12 +172,30 @@ import sdecoder_pkg::*;
             engine <= E_IDLE;
         end
         else begin
-            if (walk_go) begin
-                engine <= E_WALK;
-            end
-            else if (head_fin && (engine == E_WALK)) begin
-                engine <= E_IDLE;
-            end
+            case (engine)
+                E_IDLE: begin
+                    // 队头在 Mem 空间: 本拍发查表请求, 下一拍取打 1 拍后的响应
+                    if (sdtlb_req_vld) begin
+                        engine <= E_TLB;
+                    end
+                end
+                E_TLB: begin
+                    if (head_fin) begin
+                        engine <= E_IDLE;           // 命中: 响应已给出
+                    end
+                    else if (walk_go) begin
+                        engine <= E_WALK;           // 未命中: 交给 Page Walk
+                    end
+                end
+                E_WALK: begin
+                    if (head_fin) begin
+                        engine <= E_IDLE;
+                    end
+                end
+                default: begin
+                    engine <= E_IDLE;
+                end
+            endcase
         end
     end
 
