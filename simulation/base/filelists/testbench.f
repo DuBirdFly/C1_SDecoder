@@ -10,8 +10,10 @@
 
 // interface files
 ./testbench/top/interface/sdtlb_if.sv
+./testbench/top/interface/sdecoder_if.sv
 
 // Testbench top files
 ./testbench/top/crg.sv
 ./testbench/top/tb_top.sv
 ./testbench/top/tb_sdtlb.sv
+./testbench/top/tb_sdecoder.sv

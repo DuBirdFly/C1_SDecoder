@@ -10,4 +10,9 @@
 ./rtl/sdtlb_tag.sv
 ./rtl/sdtlb_data.sv
 ./rtl/sdtlb.sv
+
+./rtl/sdior.sv
+./rtl/sdptw.sv
+./rtl/sdecoder.sv
+
 ./rtl/sdecoder-undef.svh
