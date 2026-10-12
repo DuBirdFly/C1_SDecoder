@@ -16,7 +16,7 @@ module tb_sdecoder;
     int                         checks = 0;
 
     SDEC_RSP_t                  rsp;            // 最近一次响应
-    int unsigned                rd_before;      // 走表读次数快照
+    int unsigned                rd_before;      // Page Walk 访存读次数快照
     int unsigned                n_sent;         // 队列满测试里实际发出的请求数
 
     // 时钟与复位由 crg 生成 (单时钟域, tb 内不出现 #NUM 延时)
@@ -218,6 +218,7 @@ module tb_sdecoder;
             n++;
         end
         if (!sdecoder_if.rsp_valid) begin
+            // 只在失败时打内部状态, 便于定位; 探针只用顶层与 sdptw 的信号
             $display("[DBG] 超时: empty=%b full=%b pop=%b eng=%b rspv=%b tw_req_vld=%b tw_req_rdy=%b tw_rsp_vld=%b walker=%b",
                      dut.fifo_empty, dut.fifo_full, dut.head_pop, dut.engine, dut.rsp_vld_r,
                      sdecoder_if.tw_req_valid, sdecoder_if.tw_req_ready, sdecoder_if.tw_rsp_valid,
@@ -302,9 +303,9 @@ module tb_sdecoder;
         chk("段式: 不报异常", rsp.fault == 1'b0);
         chk("段式: EID / TokenID", (rsp.eid == 11'h123) && (rsp.token_id == 10'h2aa));
         chk("段式: SLA = S_PFN + 段内偏移", rsp.sla == {18'h15555 + 18'd2, 30'h0abc});
-        chk("段式: 走表只读一级条目", (tw_rd_cnt - rd_before) == 1);
+        chk("段式: Page Walk 只读一级条目", (tw_rd_cnt - rd_before) == 1);
 
-        // 同一页再来: 已回填 SDTLB, 不再走表
+        // 同一页再来: 已回填 SDTLB, 不再发起 Page Walk
         rd_before = tw_rd_cnt;
         xact(mk_pa(12'h002, 5'd10, 30'h0abc), 1'b0, 8'h23);
         chk("段式: 第二次命中快表", (rsp.fault == 1'b0) && (tw_rd_cnt == rd_before));
@@ -334,7 +335,7 @@ module tb_sdecoder;
         chk("页式: EID / TokenID / SLA",
             (rsp.eid == 11'h0f0) && (rsp.token_id == 10'h0f0) &&
             (rsp.sla == {18'h0cccc, 30'h0def}));
-        chk("页式: 走表读了一级加二级", (tw_rd_cnt - rd_before) == 2);
+        chk("页式: Page Walk 读了一级加二级", (tw_rd_cnt - rd_before) == 2);
 
         rd_before = tw_rd_cnt;
         xact(mk_pa(12'h003, 5'd3, 30'h0def), 1'b0, 8'h34);
@@ -348,12 +349,12 @@ module tb_sdecoder;
             ((tw_rd_cnt - rd_before) == 2));
 
         // ====================================================================
-        // PA[47] = 1: IO 空间, 本 IP 不处理, 直接报地址非法且不走表
+        // PA[47] = 1: IO 空间, 本 IP 不处理, 直接报地址非法且不发起 Page Walk
         rd_before = tw_rd_cnt;
         xact({1'b1, mk_pa(12'h003, 5'd3, 30'h0)[PA_WIDTH-2:0]}, 1'b0, 8'h36);
         chk("PA[47] = 1: 报地址非法",
             (rsp.fault == 1'b1) && (rsp.fcode == FCODE_ADDR_ILLEGAL));
-        chk("PA[47] = 1: 不走表", tw_rd_cnt == rd_before);
+        chk("PA[47] = 1: 不发起 Page Walk", tw_rd_cnt == rd_before);
 
         // ====================================================================
         // 段式 SLA 溢出: S_PFN 加段内偏移产生进位
@@ -364,7 +365,7 @@ module tb_sdecoder;
             (rsp.fault == 1'b1) && (rsp.fcode == FCODE_ADDR_ILLEGAL));
 
         // ====================================================================
-        // 走表访存不可纠错: 报机器检查错, 并登记 ERRINFO
+        // Page Walk 访存不可纠错: 报机器检查错, 并登记 ERRINFO
         set_l1_page(.idx(12'h006), .valid(1'b1));
         set_l2(.idx(5'd1), .eid(11'h011), .tok(10'h011), .pfn(18'h01111), .valid(1'b1));
         inj_err = 2'b10;
@@ -383,7 +384,7 @@ module tb_sdecoder;
             (rsp.fault == 1'b0) && (rsp.sla == {18'h01111, 30'h0}));
 
         // ====================================================================
-        // 按地址置无效: 段条目被清掉后需要重新走表
+        // 按地址置无效: 段条目被清掉后需要重新发起 Page Walk
         rd_before = tw_rd_cnt;
         xact(mk_pa(12'h002, 5'd10, 30'h0abc), 1'b0, 8'h66);
         chk("inv(地址) 前置: 命中快表", (rsp.fault == 1'b0) && (tw_rd_cnt == rd_before));
@@ -391,7 +392,7 @@ module tb_sdecoder;
         inv_by_addr(mk_pa(12'h002, 5'd10, 30'h0)[PA_L1_IDX_MSB:PA_UP_LSB]);
         rd_before = tw_rd_cnt;
         xact(mk_pa(12'h002, 5'd10, 30'h0abc), 1'b0, 8'h67);
-        chk("inv(地址): 置无效后重新走表",
+        chk("inv(地址): 置无效后重新发起 Page Walk",
             (rsp.fault == 1'b0) && ((tw_rd_cnt - rd_before) == 1));
         chk("inv(地址): 结果仍然正确", rsp.sla == {18'h15555 + 18'd2, 30'h0abc});
 
@@ -410,7 +411,7 @@ module tb_sdecoder;
         inv_everything();
         rd_before = tw_rd_cnt;
         xact(mk_pa(12'h003, 5'd3, 30'h0def), 1'b0, 8'h72);
-        chk("inv_all: 置无效后重新走表",
+        chk("inv_all: 置无效后重新发起 Page Walk",
             (rsp.fault == 1'b0) && ((tw_rd_cnt - rd_before) == 2));
         chk("inv_all: 结果仍然正确", rsp.sla == {18'h0cccc, 30'h0def});
 

@@ -5,7 +5,7 @@
 // sdecoder: 含 sdior (IO 寄存器), sdptw (Page Walk), sdtlb (代换快表)
 //   请求按序进未命中队列; 解析引擎只处理队头:
 //     命中   -> 直接算 SLA 并回响应
-//     未命中 -> 交给 sdptw 走表, 走完回填 SDTLB 并回响应
+//     未命中 -> 交给 sdptw 做 Page Walk, 完成后回填 SDTLB 并回响应
 //     队头没处理完不会碰后面的请求, 所以响应与请求天然同序 (并行度 1, 见设计方案评审结论 Q7)
 module sdecoder
 import sdecoder_pkg::*;
@@ -109,7 +109,7 @@ import sdecoder_pkg::*;
     wire                        hit_sla_ovf = hit_sla_hi[S_PFN_WIDTH];
     wire [SLA_WIDTH-1:0]        hit_sla     = {hit_sla_hi[S_PFN_WIDTH-1:0], head.pa[PA_OFFSET_WIDTH-1:0]};
 
-    // ---- 走表 ----
+    // ---- Page Walk ----
     logic                       walk_ready;
     logic                       walk_done_vld;
     SDEC_RSP_t                  walk_done_rsp;
@@ -154,7 +154,7 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 队头出队: 命中/异常当拍出队; 交给走表的请求要等走完才出队
+    // 队头出队: 命中/异常当拍出队; 交给 Page Walk 的请求要等完成才出队
     assign head_pop = head_fin;
 
     // 解析引擎
@@ -296,7 +296,7 @@ import sdecoder_pkg::*;
 
 `ifdef ASSERT_ON
     // 被接收的请求不会丢: 每来一个请求就有一个响应 (由 tb 与形式检查覆盖);
-    // 这里只查内部握手: 走表请求被接收时 walker 一定空闲
+    // 这里只查内部握手: Page Walk 请求被接收时 walker 一定空闲
     `assert_clk(a_walk_vld_implies_ready, (walk_go |-> walk_ready))
 `endif
 

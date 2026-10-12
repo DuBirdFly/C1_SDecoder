@@ -5,14 +5,14 @@
 // sdecoder page table walker: 遍历 SDT_L1 / SDT_L2, 算出 PA 对应的 SMD
 //   并行度 1: 同一时刻只走一个请求; 最坏两次本地读 (一级条目 16B, 二级条目 8B)
 //   状态机: IDLE -> WALK_L1 -> (段命中) DONE / (否则) WALK_L2 -> DONE, 异常进 FAULT
-//   一次走表以 done_vld 脉冲给出结果 (SMD 或异常); 段式/页式成功时同时回填 SDTLB
+//   一次 Page Walk 以 done_vld 脉冲给出结果 (SMD 或异常); 段式/页式成功时同时回填 SDTLB
 module sdptw
 import sdecoder_pkg::*;
 (
     input  logic                        clk,
     input  logic                        rst_n,
 
-    // 未命中队列给出的走表请求
+    // 未命中队列给出的 Page Walk 请求
     input  logic                        walk_vld,
     input  SDEC_REQ_t                   walk_req,
     output logic                        walk_ready,
@@ -39,7 +39,7 @@ import sdecoder_pkg::*;
     output logic [S_PFN_WIDTH-1:0]      fill_s_pfn,
     output logic                        fill_grn,
 
-    // 走表结果 (SMD 或异常): 保持到被 done_ready 收走
+    // Page Walk 结果 (SMD 或异常): 保持到被 done_ready 收走
     output logic                        done_vld,
     output SDEC_RSP_t                   done_rsp,
     input  logic                        done_ready,
@@ -218,7 +218,7 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 走表请求: 空闲时可以接收 (tw_req_valid 不组合依赖 tw_req_ready)
+    // Page Walk 请求: 空闲时可以接收 (tw_req_valid 不组合依赖 tw_req_ready)
     assign walk_ready   = (state == ST_IDLE);
 
     // 访存请求: 发出后保持到被接收; 一级条目 16B, 二级条目 8B
@@ -230,7 +230,7 @@ import sdecoder_pkg::*;
     // 回填 SDTLB: 只在 DONE 那一拍, 刷新 (置无效) 期间禁止
     assign fill_vld     = fill_vld_r && !inv_busy;
 
-    // 走表结果 (结果或异常): 保持到 done_ready 收走, 避免下游忙时丢结果
+    // Page Walk 结果 (结果或异常): 保持到 done_ready 收走, 避免下游忙时丢结果
     assign done_vld     = (state == ST_DONE) || (state == ST_FAULT);
 
 `ifdef ASSERT_ON
