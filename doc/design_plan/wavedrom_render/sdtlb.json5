@@ -1,0 +1,56 @@
+// sdtlb 查表时序: 命中向量打 1 拍后再用
+//
+//   请求拍 —— req_vld / req_pa 被 sdtlb 采到的那一拍, 这一拍还看不到本次请求的响应;
+//   响应拍 —— 请求拍的下一拍, req_hit 与命中读出 (req_hit_tag_item / req_hit_data_item) 才有效.
+//   有效 = clk 上升沿时该位置位 (即图中该拍内的取值); req_vld 可以拍拍有效, 响应逐拍滞后 1 拍.
+//
+//   内部: sdtlb_tag 组合输出 tag_hit_vector (128 条目比较链), 打 1 拍得 tag_hit_vector_r1;
+//         req_hit = |tag_hit_vector_r1, 两个读出 mux 也用 r1 选路, 比较链只到触发器.
+//
+// 图中例子:
+//   拍 1 单拍请求 A (命中) -> 拍 2 出 A 的响应;
+//   拍 4 / 拍 5 背靠背请求 B (命中) 与 C (未命中) -> 响应 B 在拍 5, 响应 C 在拍 6;
+//   拍 5 的组合向量属于 C (未命中), 打拍后的 r1 属于 B (命中) —— 两个箭头就是"1 拍后".
+// 未命中时读出为全 0 (onehot0_mux 的 sel 全 0 时输出全 0), 图中画成 x 表示该拍读出无效.
+
+{
+    "head": { "text": "sdtlb 查表: 请求拍 / 响应拍 (命中向量打 1 拍)" },
+    "signal": [
+        {
+            "name": "clk",
+            "wave": "p........"
+        },
+        {},
+        {
+            "name": "req_vld (请求拍)",
+            "wave": "010011000",
+            "node": ".a..b...."
+        },
+        {
+            "name": "req_pa[16:0]",
+            "wave": "x2xx34xxx",
+            "data": ["A", "B", "C"]
+        },
+        {},
+        {
+            "name": "req_hit (响应拍)",
+            "wave": "001001000",
+            "node": "..c..d..."
+        },
+        {
+            "name": "req_hit_tag_item / req_hit_data_item",
+            "wave": "xx2xx3xxx",
+            "data": ["A 读出", "B 读出"]
+        },
+        {},
+        {
+            "name": "tag_hit_vector (组合)",
+            "wave": "010010000"
+        },
+        {
+            "name": "tag_hit_vector_r1 (打 1 拍)",
+            "wave": "001001000"
+        }
+    ],
+    "edge": ["a~>c", "b~>d"]
+}
