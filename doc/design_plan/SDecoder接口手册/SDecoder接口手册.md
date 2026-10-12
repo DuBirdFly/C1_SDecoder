@@ -60,7 +60,6 @@
 | EID_WIDTH | 11 | Entity 标识位宽 |
 | TOKENID_WIDTH | 10 | 逻辑池标识位宽 |
 | REQ_ID_WIDTH | 8 | 事务标识位宽 |
-| WALK_ID_WIDTH | 3 | Page Walk 访存标识位宽 |
 | SDTLB_ENTRIES | 128 | SDTLB 条目数, 全相联 |
 | MISS_FIFO_DEPTH | 4 | 未命中队列深度 |
 | SDT_L1_ENTRY_BYTES | 16 | 一级条目字节数 |
@@ -154,18 +153,16 @@ SDPTW 通过本接口读取本地存储中的代换表, 是主端口 (master) �
 | tw_req_ready | I | 1 | 本地存储可接收请求 |
 | tw_req_addr | O | PA_WIDTH | 条目字节地址 |
 | tw_req_size | O | 1 | 0 表示读 8B (二级条目), 1 表示读 16B (一级条目) |
-| tw_req_id | O | WALK_ID_WIDTH | Page Walk 访存标识 |
 | tw_rsp_valid | I | 1 | 读数据有效 |
 | tw_rsp_ready | O | 1 | 本 IP 可接收读数据 |
 | tw_rsp_data | I | 128 | 读回数据; `tw_req_size = 0` 时只用 [63:0] |
-| tw_rsp_id | I | WALK_ID_WIDTH | 与对应 `tw_req_id` 相同 |
 | tw_rsp_err | I | 2 | 读错误指示 |
 
 约定:
 
 1. 本 IP 只读不写, 不会发出写请求, 也不会回写 ACCESSED 之类的软件位.
 2. `tw_req_addr` 落在发起访问的物理地址空间, 由本地互连决定是否可达.
-3. 首版同一时刻只有一个未完成的 Page Walk 访存请求, 因此 `tw_req_id` 在本次 Page Walk 期间保持不变, 取值为该请求在未命中队列中的下标. 保留该信号是为了后续支持多个并行 Page Walk.
+3. 首版同一时刻只有一个未完成的 Page Walk 访存请求: 地址本身即可唯一标识一次 Page Walk, 因此访存通路不需要事务标识. 后续支持多个并行 Page Walk 时, 再按槽位号引入标识.
 4. 若 `tw_req_size = 0`, 硬件只解析 `tw_rsp_data[63:0]`; 其余位忽略.
 5. 本接口是延迟敏感主端口: 带宽需求很低 (只有 SDTLB 未命中时才读 1 到 2 个条目), 但一次 Page Walk 的往返时间会直接叠加到上游访存的延迟上. 集成方需保证该端口优先响应, 不被长时间饿死; 本 IP 不实现 QOS 或优先级寄存器.
 
@@ -306,3 +303,4 @@ native 接口在 IP 内部保持不变, 后续交付标准形态时, 在同一�
 | --- | --- | --- | --- |
 | v0.1 | 2026-09-30 | - | 首版, 定义 native 接口 |
 | v0.2 | 2026-09-30 | - | 评审关闭 Q1 到 Q12; 补集成约束 (访存通路优先级, 对界约定, 异常上报对象, 不产生中断, 不区分来源) |
+| v0.3 | 2026-10-12 | - | 删除 Page Walk 访存标识 `tw_req_id` / `tw_rsp_id` 与其位宽参数: 并行度为 1 时该标识不承载信息; 待支持并行 Page Walk 时按槽位号重新引入 |

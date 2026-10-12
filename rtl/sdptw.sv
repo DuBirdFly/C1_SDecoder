@@ -15,7 +15,6 @@ import sdecoder_pkg::*;
     // 未命中队列给出的走表请求
     input  logic                        walk_vld,
     input  SDEC_REQ_t                   walk_req,
-    input  logic [WALK_ID_WIDTH-1:0]    walk_id,
     output logic                        walk_ready,
 
     // 代换表基地址
@@ -26,11 +25,9 @@ import sdecoder_pkg::*;
     input  logic                        tw_req_ready,
     output logic [PA_WIDTH-1:0]         tw_req_addr,
     output logic                        tw_req_size,
-    output logic [WALK_ID_WIDTH-1:0]    tw_req_id,
     input  logic                        tw_rsp_valid,
     output logic                        tw_rsp_ready,
     input  logic [127:0]                tw_rsp_data,
-    input  logic [WALK_ID_WIDTH-1:0]    tw_rsp_id,
     input  logic [1:0]                  tw_rsp_err,
 
     // 回填 SDTLB (刷新期间禁止)
@@ -228,7 +225,6 @@ import sdecoder_pkg::*;
     assign tw_req_valid = ((state == ST_WALK_L1) || (state == ST_WALK_L2)) && !req_sent;
     assign tw_req_addr  = (state == ST_WALK_L2) ? l2_addr : l1_addr;
     assign tw_req_size  = (state == ST_WALK_L2) ? 1'b0 : 1'b1;
-    assign tw_req_id    = walk_id;
     assign tw_rsp_ready = (state == ST_WALK_L1) || (state == ST_WALK_L2);
 
     // 回填 SDTLB: 只在 DONE 那一拍, 刷新 (置无效) 期间禁止

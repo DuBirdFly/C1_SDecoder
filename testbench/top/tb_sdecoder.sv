@@ -58,11 +58,9 @@ module tb_sdecoder;
         .tw_req_ready        (sdecoder_if.tw_req_ready          ),
         .tw_req_addr         (sdecoder_if.tw_req_addr           ),
         .tw_req_size         (sdecoder_if.tw_req_size           ),
-        .tw_req_id           (sdecoder_if.tw_req_id             ),
         .tw_rsp_valid        (sdecoder_if.tw_rsp_valid          ),
         .tw_rsp_ready        (sdecoder_if.tw_rsp_ready          ),
         .tw_rsp_data         (sdecoder_if.tw_rsp_data           ),
-        .tw_rsp_id           (sdecoder_if.tw_rsp_id             ),
         .tw_rsp_err          (sdecoder_if.tw_rsp_err            ),
 
         .cfg_enable          (sdecoder_if.cfg_enable            ),
@@ -109,7 +107,6 @@ module tb_sdecoder;
             sdecoder_if.tw_req_ready <= 1'b1;
             sdecoder_if.tw_rsp_valid <= 1'b0;
             sdecoder_if.tw_rsp_data  <= '0;
-            sdecoder_if.tw_rsp_id    <= '0;
             sdecoder_if.tw_rsp_err   <= '0;
             tw_rd_cnt                <= 0;
         end
@@ -117,7 +114,6 @@ module tb_sdecoder;
             if (sdecoder_if.tw_req_valid && sdecoder_if.tw_req_ready && !sdecoder_if.tw_rsp_valid) begin
                 sdecoder_if.tw_rsp_valid <= 1'b1;
                 sdecoder_if.tw_rsp_data  <= mem_read(sdecoder_if.tw_req_addr);
-                sdecoder_if.tw_rsp_id    <= sdecoder_if.tw_req_id;
                 sdecoder_if.tw_rsp_err   <= inj_err;
                 tw_rd_cnt                <= tw_rd_cnt + 1;
             end
@@ -222,8 +218,8 @@ module tb_sdecoder;
             n++;
         end
         if (!sdecoder_if.rsp_valid) begin
-            $display("[DBG] 超时: empty=%b full=%b pop=%b walk_idx=%0d eng=%b rspv=%b tw_req_vld=%b tw_req_rdy=%b tw_rsp_vld=%b walker=%b",
-                     dut.fifo_empty, dut.fifo_full, dut.head_pop, dut.walk_idx, dut.engine, dut.rsp_vld_r,
+            $display("[DBG] 超时: empty=%b full=%b pop=%b eng=%b rspv=%b tw_req_vld=%b tw_req_rdy=%b tw_rsp_vld=%b walker=%b",
+                     dut.fifo_empty, dut.fifo_full, dut.head_pop, dut.engine, dut.rsp_vld_r,
                      sdecoder_if.tw_req_valid, sdecoder_if.tw_req_ready, sdecoder_if.tw_rsp_valid,
                      dut.u_sdptw.state);
             $fatal(1, "rsp_get 超时: 没有响应");

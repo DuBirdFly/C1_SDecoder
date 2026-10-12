@@ -39,9 +39,8 @@ package sdecoder_pkg;
 
     localparam REQ_ID_WIDTH = 8;
 
-    // 未命中队列 (同时按请求顺序排队): 深度 4, 深度决定了 Page Walk 访存标识的位宽
+    // 未命中队列 (同时按请求顺序排队)
     localparam SDEC_REQ_FIFO_DEPTH = 4;
-    localparam WALK_ID_WIDTH = $clog2(SDEC_REQ_FIFO_DEPTH);
 
     // 异常码 (rsp_fcode 与 SDEC_ERRINFO.FCODE 共用, 见接口手册 异常码)
     localparam FCODE_WIDTH = 3;

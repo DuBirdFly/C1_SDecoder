@@ -31,11 +31,9 @@ import sdecoder_pkg::*;
     logic                       tw_req_ready;
     logic [PA_WIDTH-1:0]        tw_req_addr;
     logic                       tw_req_size;
-    logic [WALK_ID_WIDTH-1:0]   tw_req_id;
     logic                       tw_rsp_valid;
     logic                       tw_rsp_ready;
     logic [127:0]               tw_rsp_data;
-    logic [WALK_ID_WIDTH-1:0]   tw_rsp_id;
     logic [1:0]                 tw_rsp_err;
 
     // 配置与刷新

@@ -368,7 +368,7 @@ flowchart LR
 
 图 3: SDPTW 内部结构. Page Walk 控制从队列取请求, 生成访存, 解析条目, 输出结果或异常.
 
-未命中队列中每个条目保存: 请求地址 Req_PA[47:0], 读写属性 rw, 事务标识 req_id. 队列下标同时用作 Page Walk 访存标识 `tw_req_id`.
+未命中队列中每个条目保存: 请求地址 Req_PA[47:0], 读写属性 rw, 事务标识 req_id.
 
 ### 状态机
 
@@ -488,7 +488,6 @@ Page Walk 得到的结果包含: EID, TokenID, S_PFN, Grn, 段内偏移.
 | SDT_L2_ENTRY_BYTES | 8 | 二级条目字节数 |
 | MISS_FIFO_DEPTH | 4 | 未命中队列深度 |
 | REQ_ID_WIDTH | 8 | 事务标识位宽 |
-| WALK_ID_WIDTH | 3 | Page Walk 访存标识位宽 |
 
 ## 性能预期
 
@@ -543,3 +542,4 @@ Page Walk 时间取决于本地访存往返时间: 最坏两次访存, 即一次
 | --- | --- | --- | --- |
 | v0.1 | 2026-09-30 | - | 首版, 覆盖 SDTLB 与 SDPTW 的初步设计 |
 | v0.2 | 2026-09-30 | - | 评审关闭待确认问题; 补异常上报对象, 对界软件约定, 性能已知限值 |
+| v0.3 | 2026-10-12 | - | 同步接口手册: 删除 Page Walk 访存标识 `tw_req_id` / `tw_rsp_id` 及其位宽参数 |

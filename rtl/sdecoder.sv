@@ -35,11 +35,9 @@ import sdecoder_pkg::*;
     input  logic                        tw_req_ready,
     output logic [PA_WIDTH-1:0]         tw_req_addr,
     output logic                        tw_req_size,
-    output logic [WALK_ID_WIDTH-1:0]    tw_req_id,
     input  logic                        tw_rsp_valid,
     output logic                        tw_rsp_ready,
     input  logic [127:0]                tw_rsp_data,
-    input  logic [WALK_ID_WIDTH-1:0]    tw_rsp_id,
     input  logic [1:0]                  tw_rsp_err,
 
     // 配置与刷新
@@ -82,7 +80,6 @@ import sdecoder_pkg::*;
     logic                       fifo_full;
     logic                       fifo_empty;
     logic                       head_pop;       // 队头已给出响应, 出队
-    logic [WALK_ID_WIDTH-1:0]   walk_idx;       // tw_req_id 用的队列下标
 
     wire                        req_accept = req_valid && req_ready;
 
@@ -163,8 +160,7 @@ import sdecoder_pkg::*;
     // 解析引擎
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            engine   <= E_IDLE;
-            walk_idx <= '0;
+            engine <= E_IDLE;
         end
         else begin
             if (walk_go) begin
@@ -172,12 +168,6 @@ import sdecoder_pkg::*;
             end
             else if (head_fin && (engine == E_WALK)) begin
                 engine <= E_IDLE;
-            end
-
-            // tw_req_id 取本次走表请求在未命中队列中的下标: syn_fifo 不对外暴露读指针,
-            // 这里跟着出队自己数一个 (宽度就是深度, 自然回绕)
-            if (head_pop) begin
-                walk_idx <= walk_idx + 1'b1;
             end
         end
     end
@@ -281,18 +271,15 @@ import sdecoder_pkg::*;
         .rst_n               (rst_n               ),
         .walk_vld            (walk_vld            ),
         .walk_req            (head                ),
-        .walk_id             (walk_idx            ),
         .walk_ready          (walk_ready          ),
         .sdt_l1_base         (sdt_l1_base         ),
         .tw_req_valid        (tw_req_valid        ),
         .tw_req_ready        (tw_req_ready        ),
         .tw_req_addr         (tw_req_addr         ),
         .tw_req_size         (tw_req_size         ),
-        .tw_req_id           (tw_req_id           ),
         .tw_rsp_valid        (tw_rsp_valid        ),
         .tw_rsp_ready        (tw_rsp_ready        ),
         .tw_rsp_data         (tw_rsp_data         ),
-        .tw_rsp_id           (tw_rsp_id           ),
         .tw_rsp_err          (tw_rsp_err          ),
         .fill_vld            (fill_vld            ),
         .fill_pa_base        (fill_pa_base        ),
