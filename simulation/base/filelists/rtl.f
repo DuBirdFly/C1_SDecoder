@@ -4,6 +4,7 @@
 ./rtl/common/decoder_bin2onehot.sv
 ./rtl/common/encoder_onehot2bin.sv
 ./rtl/common/onehot0_mux.sv
+./rtl/common/syn_fifo.sv
 
 ./rtl/sdtlb_tag_item.sv
 ./rtl/sdtlb_data_item.sv
