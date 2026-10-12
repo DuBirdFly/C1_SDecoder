@@ -222,8 +222,8 @@ module tb_sdecoder;
             n++;
         end
         if (!sdecoder_if.rsp_valid) begin
-            $display("[DBG] 超时: cnt=%0d rdp=%0d wrp=%0d eng=%b rspv=%b pp=%b tw_req_vld=%b tw_req_rdy=%b tw_rsp_vld=%b walker=%b",
-                     dut.fifo_cnt, dut.rd_ptr, dut.wr_ptr, dut.engine, dut.rsp_vld_r, dut.head_pop,
+            $display("[DBG] 超时: empty=%b full=%b pop=%b walk_idx=%0d eng=%b rspv=%b tw_req_vld=%b tw_req_rdy=%b tw_rsp_vld=%b walker=%b",
+                     dut.fifo_empty, dut.fifo_full, dut.head_pop, dut.walk_idx, dut.engine, dut.rsp_vld_r,
                      sdecoder_if.tw_req_valid, sdecoder_if.tw_req_ready, sdecoder_if.tw_rsp_valid,
                      dut.u_sdptw.state);
             $fatal(1, "rsp_get 超时: 没有响应");

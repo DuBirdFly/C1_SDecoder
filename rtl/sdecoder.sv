@@ -56,9 +56,6 @@ import sdecoder_pkg::*;
     output logic [PA_WIDTH-1:0]         errinfo_pa
 );
 
-    localparam int unsigned PTR_WIDTH = (SDEC_REQ_FIFO_DEPTH <= 1) ? 1 : $clog2(SDEC_REQ_FIFO_DEPTH);
-    localparam int unsigned CNT_WIDTH = $clog2(SDEC_REQ_FIFO_DEPTH + 1);
-
     localparam SDEC_RSP_t RSP_NONE = '{req_id: '0, fault: 1'b0, fcode: FCODE_NONE,
                                        eid: '0, token_id: '0, sla: '0};
 
@@ -79,18 +76,17 @@ import sdecoder_pkg::*;
     logic [S_PFN_WIDTH-1:0]     fill_s_pfn;
     logic                       fill_grn;
 
-    // ---- 未命中队列: 按请求顺序排队, 深度 4 ----
-    SDEC_REQ_t                  req_fifo [SDEC_REQ_FIFO_DEPTH];
-    logic [PTR_WIDTH-1:0]       rd_ptr;
-    logic [PTR_WIDTH-1:0]       wr_ptr;
-    logic [CNT_WIDTH-1:0]       fifo_cnt;
+    // ---- 未命中队列: 按请求顺序排队, 深度 SDEC_REQ_FIFO_DEPTH, 首字直通 ----
+    SDEC_REQ_t                  head;           // 队头 (组合, 只要 !fifo_empty 就有效)
+    SDEC_REQ_t                  req_in;
+    logic                       fifo_full;
+    logic                       fifo_empty;
+    logic                       head_pop;       // 队头已给出响应, 出队
+    logic [WALK_ID_WIDTH-1:0]   walk_idx;       // tw_req_id 用的队列下标
 
-    wire                        fifo_empty = (fifo_cnt == '0);
-    wire                        fifo_full  = (fifo_cnt == CNT_WIDTH'(SDEC_REQ_FIFO_DEPTH));
     wire                        req_accept = req_valid && req_ready;
 
-    SDEC_REQ_t                  head;
-    assign head = req_fifo[rd_ptr];
+    assign req_in = '{pa: req_pa, rw: req_rw, req_id: req_id};
 
     // ---- 解析引擎: 逐个处理队头 ----
     typedef enum logic [1:0] {
@@ -162,14 +158,13 @@ import sdecoder_pkg::*;
     end
 
     // 队头出队: 命中/异常当拍出队; 交给走表的请求要等走完才出队
-    wire                        head_pop = head_fin;
+    assign head_pop = head_fin;
 
+    // 解析引擎
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             engine   <= E_IDLE;
-            rd_ptr   <= '0;
-            wr_ptr   <= '0;
-            fifo_cnt <= '0;
+            walk_idx <= '0;
         end
         else begin
             if (walk_go) begin
@@ -179,20 +174,11 @@ import sdecoder_pkg::*;
                 engine <= E_IDLE;
             end
 
-            if (req_accept) begin
-                req_fifo[wr_ptr] <= '{pa: req_pa, rw: req_rw, req_id: req_id};
-                wr_ptr           <= wr_ptr + 1'b1;
-            end
-
+            // tw_req_id 取本次走表请求在未命中队列中的下标: syn_fifo 不对外暴露读指针,
+            // 这里跟着出队自己数一个 (宽度就是深度, 自然回绕)
             if (head_pop) begin
-                rd_ptr <= rd_ptr + 1'b1;
+                walk_idx <= walk_idx + 1'b1;
             end
-
-            case ({req_accept, head_pop})
-                2'b10:   fifo_cnt <= fifo_cnt + 1'b1;
-                2'b01:   fifo_cnt <= fifo_cnt - 1'b1;
-                default: ;
-            endcase
         end
     end
 
@@ -228,6 +214,23 @@ import sdecoder_pkg::*;
     wire err_set = head_fin && head_rsp.fault;
 
     // ---- 子模块 ----
+    // 未命中队列: 首字直通, 队头就是 rd_data
+    syn_fifo #(
+        .WIDTH (SDEC_REQ_WIDTH       ),
+        .DEPTH (SDEC_REQ_FIFO_DEPTH  )
+    ) u_req_fifo (
+        .clk          (clk           ),
+        .rst_n        (rst_n         ),
+        .wr_en        (req_accept    ),
+        .wrdata       (req_in        ),
+        .rd_en        (head_pop      ),
+        .rd_data      (head          ),
+        .full         (fifo_full     ),
+        .almost_full  (              ),
+        .empty        (fifo_empty    ),
+        .almost_empty (              )
+    );
+
     sdior u_sdior (
         .clk                 (clk                 ),
         .rst_n               (rst_n               ),
@@ -278,7 +281,7 @@ import sdecoder_pkg::*;
         .rst_n               (rst_n               ),
         .walk_vld            (walk_vld            ),
         .walk_req            (head                ),
-        .walk_id             (rd_ptr              ),
+        .walk_id             (walk_idx            ),
         .walk_ready          (walk_ready          ),
         .sdt_l1_base         (sdt_l1_base         ),
         .tw_req_valid        (tw_req_valid        ),
