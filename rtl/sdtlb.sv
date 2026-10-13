@@ -11,14 +11,14 @@ import sdecoder_pkg::*;
     // 代换请求: 查表
     // req_vld 被采到的那一拍是请求拍, 响应 (req_hit 与读出数据) 下一拍才有效
     input  logic                                req_vld,
-    input  logic [PA_BASE_WIDTH-1:0]            req_pa,
+    input  logic [PA_TAG_WIDTH-1:0]             req_pa,
     output logic                                req_hit,
     output SDTLB_TAG_ITEM_t                     req_hit_tag_item,
     output SDTLB_DATA_ITEM_t                    req_hit_data_item,
 
     // 装填: SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目
     input  logic                                fill_vld,
-    input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
+    input  logic [PA_TAG_WIDTH-1:0]             fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
     input  logic [EID_WIDTH-1:0]                fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]           fill_token_id,
@@ -28,7 +28,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新): 只作用于 Tag 侧的有效位
     input  logic                                inv_all,
     input  logic                                inv_en,
-    input  logic [PA_BASE_WIDTH-1:0]            inv_pa
+    input  logic [PA_TAG_WIDTH-1:0]             inv_pa
 );
 
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];

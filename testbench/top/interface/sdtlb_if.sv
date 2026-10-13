@@ -9,16 +9,17 @@ import sdecoder_pkg::*;
     timeunit 1ns;
     timeprecision 1ps;
 
-    // 代换请求 (查表): 请求地址只到 PA[46:30] (17 bit, 见 sdecoder_pkg 的 PA_BASE_WIDTH)
+    // 代换请求 (查表): 请求地址覆盖 PA[47:30] (18 bit, 见 sdecoder_pkg 的 PA_TAG_WIDTH).
+    // PA[47] = 1 是 IO 空间, 设计上断言它为 0 (SDecoder 不代换 IO), 但 Tag 里依然记录这一位
     logic                               req_vld;
-    logic [PA_BASE_WIDTH-1:0]           req_pa;
+    logic [PA_TAG_WIDTH-1:0]            req_pa;
     logic                               req_hit;             // 命中
     SDTLB_TAG_ITEM_t                    req_hit_tag_item;    // 命中条目的 Tag 段内容
     SDTLB_DATA_ITEM_t                   req_hit_data_item;   // 命中条目的 Data 段内容
 
     // 装填请求 (Page Walk 结果)
     logic                               fill_vld;
-    logic [PA_BASE_WIDTH-1:0]           fill_pa_base;
+    logic [PA_TAG_WIDTH-1:0]            fill_pa_base;
     logic [PA_UP_WIDTH-1:0]             fill_pa_up;
     logic [EID_WIDTH-1:0]               fill_eid;
     logic [TOKEN_ID_WIDTH-1:0]          fill_token_id;
@@ -28,7 +29,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新) 请求
     logic                               inv_all;
     logic                               inv_en;
-    logic [PA_BASE_WIDTH-1:0]           inv_pa;
+    logic [PA_TAG_WIDTH-1:0]            inv_pa;
 
     // driver: 驱动 DUT 输入, 回读 DUT 输出
     clocking drv @(posedge clk);

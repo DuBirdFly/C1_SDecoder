@@ -3,11 +3,12 @@
 
 package sdecoder_pkg;
 
-    localparam PA_BASE_WIDTH = 17; // PA[46:30] 的位宽, 1GB 对界
+    localparam PA_BASE_WIDTH = 17; // PA[46:30] 的位宽, 1GB 对界 (走表请求用的页号宽度)
+    localparam PA_TAG_WIDTH  = 18; // PA[47:30] 的位宽: SDTLB Tag 记录 PA[47] (设计上断言它为 0)
     localparam PA_UP_WIDTH   = 5;  // PA[34:30]
 
     typedef struct packed {
-        logic [PA_BASE_WIDTH-1:0]   pa_base;
+        logic [PA_TAG_WIDTH-1:0]    pa_base;
         logic [PA_UP_WIDTH-1:0]     pa_up;
         logic                       valid;
     } SDTLB_TAG_ITEM_t;
@@ -27,6 +28,7 @@ package sdecoder_pkg;
     localparam SDTLB_DATA_ITEM_WIDTH = $bits(SDTLB_DATA_ITEM_t);
 
     localparam PA_WIDTH = 48;
+
     // SDT_L1 条目 (16B), 位域见设计方案 一级表条目格式
     typedef struct packed {
         logic [31:0]                rsvd;
@@ -36,7 +38,9 @@ package sdecoder_pkg;
         logic [S_PFN_WIDTH-1:0]     s_pfn;
         logic [4:0]                 seg_len;
         logic [4:0]                 seg_base;
-        logic                       type_bit;       // 1: 该 32GB 区间有段式映射
+        // 0: 该 32GB 区间均为页表
+        // 1: 该 32GB 区间有且仅有 1 个段表 (+N个页表)
+        logic                       type_bit;
         logic                       valid;
     } SDT_L1_ITEM_t;
 
