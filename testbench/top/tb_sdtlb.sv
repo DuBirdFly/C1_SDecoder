@@ -82,7 +82,7 @@ module tb_sdtlb;
     // 所以各测试点都是"驱动 -> 取值 -> 再等若干拍才动下一次激励"的次序.
     task automatic set_req(logic [11:0] high, logic [4:0] idx);
         sdtlb_if.drv.req_vld <= 1'b1;
-        sdtlb_if.drv.req_pa  <= {1'b0, high, idx};      // PA[47] = 0 (IO 空间不进快表)
+        sdtlb_if.drv.req_pa  <= {high, idx};
         @(sdtlb_if.drv);                    // 请求拍
         sdtlb_if.drv.req_vld <= 1'b0;
         @(sdtlb_if.drv);                    // 响应拍 (打 1 拍)
@@ -98,7 +98,7 @@ module tb_sdtlb;
         input logic [17:0] pfn,
         input logic        grn
     );
-        sdtlb_if.drv.fill_pa_base  <= {1'b0, base};      // PA[47] = 0
+        sdtlb_if.drv.fill_pa_base  <= base;
         sdtlb_if.drv.fill_pa_up    <= up;
         sdtlb_if.drv.fill_eid      <= eid;
         sdtlb_if.drv.fill_token_id <= tok;
@@ -112,7 +112,7 @@ module tb_sdtlb;
     // 按地址置无效, 拉高一拍
     task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] pa);
         sdtlb_if.drv.inv_en <= 1'b1;
-        sdtlb_if.drv.inv_pa <= {1'b0, pa};
+        sdtlb_if.drv.inv_pa <= pa;
         @(sdtlb_if.drv);
         sdtlb_if.drv.inv_en <= 1'b0;
     endtask
@@ -166,10 +166,9 @@ module tb_sdtlb;
         set_req(.high(12'hfff), .idx(5'h1f));
         chk("page: req_hit = 1", rsp_hit == 1'b1);
         chk("page: Tag struct (base/up/valid)",
-            (rsp_tag.pa_base == {1'b0, 12'hfff, 5'h1f}) &&
+            (rsp_tag.pa_base == {12'hfff, 5'h1f}) &&
             (rsp_tag.pa_up == 5'h1f) &&
             (rsp_tag.valid == 1'b1));
-        chk("page: Tag 记录 PA[47] 且为 0 (IO 空间不进快表)", rsp_tag.pa_base[PA_TAG_WIDTH-1] == 1'b0);
         chk("page: Data struct (eid/token_id)",
             (rsp_data.eid == '1) && (rsp_data.token_id == '1));
         chk("page: Data struct (s_pfn/grn)",

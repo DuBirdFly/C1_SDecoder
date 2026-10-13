@@ -10,18 +10,18 @@ import sdecoder_pkg::*;
 
     // 代换请求: 广播给全部条目做比较
     input  logic                                req_vld,
-    input  logic [PA_TAG_WIDTH-1:0]             req_pa,
+    input  logic [PA_BASE_WIDTH-1:0]            req_pa,
     output logic [SDTLB_ENTRIES-1:0]            req_hit_vector,
 
     // 装填请求
-    input  logic [PA_TAG_WIDTH-1:0]             fill_pa_base,
+    input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
     input  logic [SDTLB_ENTRIES-1:0]            fill_vld_vector,
 
     // 置无效 (刷新) 请求, 优先于装填
     input  logic                                inv_all,
     input  logic                                inv_en,
-    input  logic [PA_TAG_WIDTH-1:0]             inv_pa,
+    input  logic [PA_BASE_WIDTH-1:0]            inv_pa,
 
     output SDTLB_TAG_ITEM_t                     tag_item [SDTLB_ENTRIES]
 );

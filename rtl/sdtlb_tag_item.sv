@@ -10,11 +10,11 @@ import sdecoder_pkg::*;
 
     // 代换请求
     input  logic                        req_vld,
-    input  logic [PA_TAG_WIDTH-1:0]     req_pa,
+    input  logic [PA_BASE_WIDTH-1:0]    req_pa,
     output logic                        req_hit,
 
     // 装填请求
-    input  logic [PA_TAG_WIDTH-1:0]     fill_pa_base,
+    input  logic [PA_BASE_WIDTH-1:0]    fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]      fill_pa_up,
     input  logic                        fill_vld,
 
@@ -23,17 +23,17 @@ import sdecoder_pkg::*;
 
     // 置无效 (刷新) 请求, 置无效指定 pa 范围覆盖的条目
     input  logic                        inv_en,
-    input  logic [PA_TAG_WIDTH-1:0]     inv_pa,
+    input  logic [PA_BASE_WIDTH-1:0]    inv_pa,
 
     // 本条目内容静默输出
     output SDTLB_TAG_ITEM_t             tag_item
 );
 
-    wire req_high_hit  = (req_pa[PA_TAG_WIDTH-1:PA_UP_WIDTH] == tag_item.pa_base[PA_TAG_WIDTH-1:PA_UP_WIDTH]);
+    wire req_high_hit  = (req_pa[PA_BASE_WIDTH-1:PA_UP_WIDTH] == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
     wire req_range_hit = (req_pa[PA_UP_WIDTH-1:0] >= tag_item.pa_base[PA_UP_WIDTH-1:0]) &&
                          (req_pa[PA_UP_WIDTH-1:0] <= tag_item.pa_up);
 
-    wire inv_high_hit  = (inv_pa[PA_TAG_WIDTH-1:PA_UP_WIDTH] == tag_item.pa_base[PA_TAG_WIDTH-1:PA_UP_WIDTH]);
+    wire inv_high_hit  = (inv_pa[PA_BASE_WIDTH-1:PA_UP_WIDTH] == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
     wire inv_range_hit = (inv_pa[PA_UP_WIDTH-1:0] >= tag_item.pa_base[PA_UP_WIDTH-1:0]) &&
                          (inv_pa[PA_UP_WIDTH-1:0] <= tag_item.pa_up);
 
