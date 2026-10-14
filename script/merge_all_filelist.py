@@ -8,8 +8,8 @@
 
 示例:
     python3 merge_all_filelist.py -src_filelist_dir ./base/filelists -src_filelist_name all.f \\
-        -dst_merged_filelist_path ./run_single_testcase/tb_top.TestBase/output/merged.f \\
-        -log ./run_single_testcase/tb_top.TestBase/log/merge_all_filelist/merge.log
+        -dst_merged_filelist_path ./run_single_testcase/tb_sdtlb.TestBase/output/merged.f \\
+        -log ./run_single_testcase/tb_sdtlb.TestBase/log/merge_all_filelist/merge.log
 
 说明:
     顶层 .f = -src_filelist_dir/-src_filelist_name, 其内部 -f 引用的相对路径以被引用

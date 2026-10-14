@@ -26,7 +26,7 @@ REPO_ROOT: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SIM_DIR: str = os.path.join(REPO_ROOT, "simulation")
 
 # 要回归的 TB 顶层列表, 与单点跑的 TB_TOP 对应
-TB_TOPS: list[str] = ["tb_top"]
+TB_TOPS: list[str] = ["tb_sdtlb", "tb_sdptw", "tb_syn_fifo"]
 # 回归用例清单: 依序执行, 名字即 UVM 的 +UVM_TESTNAME
 REGRESS_CASES: list[str] = ["TestBase", "TestRegress"]
 

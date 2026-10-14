@@ -1,6 +1,7 @@
 ######################################################
 # USER CONFIG (single test case)
-TB_TOP ?= tb_top
+# 默认顶层 (冒烟): 挑一个单元自检 tb
+TB_TOP ?= tb_sdtlb
 TESTNAME ?= TestBase
 DUMP_WAVE ?= 1
 
