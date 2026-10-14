@@ -9,9 +9,9 @@
 //               落在段外就走该区间的页表, 再去读二级.
 //     Type = 0: 该 32GB 区间均为页表 -> 直接读二级表 SDT_L2 (8B 条目), 以 PA[34:30] 索引.
 //   一级条目无效时直接收工, 不再去读二级 (L2_BASE 不可信).
-//   本模块只报"读到了什么": 两个原始条目 + walk_l2_read (本次读没读二级) + 结果握手.
+//   本模块只报"读到了什么": 两个原始条目 + rsp_sdt_l2_read (本次读没读二级) + 结果握手.
 //   段区间判定的开闭语义, SLA 拼装, 异常码, req_id 记账都在上层.
-//   注: walk_l2_read 是"过程事实", 上级靠它才能把"段式命中"与"段外且二级条目无效"分开 ——
+//   注: rsp_sdt_l2_read 是"过程事实", 上级靠它才能把"段式命中"与"段外且二级条目无效"分开 ——
 //       这两种情况的一级 / 二级 valid 位完全一样.
 //   访存: AXI4-Lite 读通道 (AR + R), 一次 walk 最多发两次 AR.
 //   状态机: IDLE (收请求) -> AR_L1 -> R_L1 (判段) -> [AR_L2 -> R_L2] -> DONE (保持到被取走)
@@ -25,19 +25,20 @@ import sdecoder_pkg::*;
     input  logic [PA_WIDTH-1:0]         sdt_l1_base,
 
     // Page Walk 请求: 一次一个, 只给 1GB 对齐的页号 PA[46:30]
-    input  logic                        walk_valid,
-    input  logic [PA_BASE_WIDTH-1:0]    walk_req_pa,
-    output logic                        walk_ready,
+    input  logic [PA_BASE_WIDTH-1:0]    req_pa,
+    input  logic                        req_valid,
+    output logic                        req_ready,
 
-    // Page Walk 结果: 保持到被 walk_rsp_ready 取走
-    output logic                        walk_rsp_valid,
-    input  logic                        walk_rsp_ready,
-    output SDT_L1_ITEM_t                walk_sdt_l1_item,
-    output SDT_L2_ITEM_t                walk_sdt_l2_item,
-    output logic                        walk_l2_read,       // 本次读了二级表 (0 = 结果只看一级条目)
+    // Page Walk 结果: 保持到被 rsp_ready 取走
+    output logic                        rsp_valid,
+    input  logic                        rsp_ready,
+    output SDT_L1_ITEM_t                rsp_sdt_l1_item,
+    output SDT_L2_ITEM_t                rsp_sdt_l2_item,
+    output logic                        rsp_sdt_l2_read,       // 本次读了二级表 (0 = 只读了一级条目)
 
-    // 本地存储读: AXI4-Lite 读通道 (AR + R). 读失败 (总线错误 / ECC 多错) 怎么报还没定,
-    // 暂时没有这个入口, 读回什么就按什么判定
+    // 读本地 memory
+    // AXI4-Lite 读通道 (AR + R) 类似物, 暂不含 rresp
+    // tw_* 即 table_walk_*
     output logic [PA_WIDTH-1:0]         tw_araddr,
     output logic                        tw_arvalid,
     input  logic                        tw_arready,
@@ -56,12 +57,12 @@ import sdecoder_pkg::*;
         ST_R_L1,        // 收一级条目, 并判要不要读二级
         ST_AR_L2,       // 发二级读的 AR
         ST_R_L2,        // 收二级条目
-        ST_DONE         // 结果已锁存, 保持到被 walk_rsp_ready 取走
+        ST_DONE         // 结果已锁存, 保持到被 rsp_ready 取走
     } state_e;
 
     state_e                     state;
 
-    logic [PA_BASE_WIDTH-1:0]   req_pa;         // 本次 walk 的 PA[46:30]
+    logic [PA_BASE_WIDTH-1:0]   req_pa_r;       // 本次 walk 的 PA[46:30] (锁存)
 
     // 结果: 在收到条目那一拍锁存, 之后一直保持到被取走
     SDT_L1_ITEM_t               l1_item_r;
@@ -77,38 +78,38 @@ import sdecoder_pkg::*;
     // 一级条目地址: 表基地址 16B 对界 + PA[46:35] * 16B
     wire [PA_WIDTH-1:0]         l1_addr = {sdt_l1_base[PA_WIDTH-1:4], 4'h0} +
                                           {{(PA_WIDTH - 4 - L1_IDX_WIDTH){1'b0}},
-                                            req_pa[PA_BASE_WIDTH-1:PA_UP_WIDTH], 4'h0};
+                                            req_pa_r[PA_BASE_WIDTH-1:PA_UP_WIDTH], 4'h0};
 
     // 二级条目地址: 一级条目给的 L2_BASE[47:3] + PA[34:30] * 8B
     wire [PA_WIDTH-1:0]         l2_addr = {l1_item_r.l2_base, 3'h0} +
                                           {{(PA_WIDTH - 3 - PA_UP_WIDTH){1'b0}},
-                                            req_pa[PA_UP_WIDTH-1:0], 3'h0};
+                                            req_pa_r[PA_UP_WIDTH-1:0], 3'h0};
 
     // 段区间: 闭区间 [SEG_BASE, SEG_BASE + SEG_LEN] (开 / 闭语义待定, 现在按闭区间; 只认段式条目)
     wire [PA_UP_WIDTH:0]        seg_up  = {1'b0, l1_item.seg_base} + {1'b0, l1_item.seg_len};
     wire                        seg_hit = l1_item.type_bit &&
-                                          (req_pa[PA_UP_WIDTH-1:0] >= l1_item.seg_base) &&
-                                          ({1'b0, req_pa[PA_UP_WIDTH-1:0]} <= seg_up);
+                                          (req_pa_r[PA_UP_WIDTH-1:0] >= l1_item.seg_base) &&
+                                          ({1'b0, req_pa_r[PA_UP_WIDTH-1:0]} <= seg_up);
 
     // 段覆盖 -> 段式收工 (只读一级); Type = 0, 或 Type = 1 但 PA 在段外 (走该区间的页表)
     // -> 去读二级; 一级条目无效也收工 (L2_BASE 不可信)
     wire                        l1_stop = !l1_item.valid || seg_hit;
 
-    assign walk_ready       = (state == ST_IDLE);
+    assign req_ready        = (state == ST_IDLE);
 
     assign tw_arvalid       = (state == ST_AR_L1) || (state == ST_AR_L2);
     assign tw_araddr        = (state == ST_AR_L2) ? l2_addr : l1_addr;
     assign tw_rready        = (state == ST_R_L1) || (state == ST_R_L2);
 
-    assign walk_rsp_valid   = (state == ST_DONE);
-    assign walk_sdt_l1_item = l1_item_r;
-    assign walk_sdt_l2_item = l2_item_r;
-    assign walk_l2_read     = l2_read_r;
+    assign rsp_valid        = (state == ST_DONE);
+    assign rsp_sdt_l1_item  = l1_item_r;
+    assign rsp_sdt_l2_item  = l2_item_r;
+    assign rsp_sdt_l2_read  = l2_read_r;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state      <= ST_IDLE;
-            req_pa     <= '0;
+            req_pa_r   <= '0;
             l1_item_r  <= '0;
             l2_item_r  <= '0;
             l2_read_r  <= 1'b0;
@@ -116,8 +117,8 @@ import sdecoder_pkg::*;
         else begin
             case (state)
                 ST_IDLE: begin
-                    if (walk_valid && walk_ready) begin
-                        req_pa <= walk_req_pa;
+                    if (req_valid && req_ready) begin
+                        req_pa_r <= req_pa;
                         state  <= ST_AR_L1;
                     end
                 end
@@ -158,7 +159,7 @@ import sdecoder_pkg::*;
                 end
 
                 ST_DONE: begin
-                    if (walk_rsp_ready) begin
+                    if (rsp_ready) begin
                         state <= ST_IDLE;
                     end
                 end

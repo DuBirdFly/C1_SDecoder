@@ -19,14 +19,14 @@ module tb_sdptw;
     // ---- DUT 端口 ----
     logic [PA_WIDTH-1:0]        sdt_l1_base;
 
-    logic                       walk_valid;
-    logic [PA_BASE_WIDTH-1:0]   walk_req_pa;
-    logic                       walk_ready;
-    logic                       walk_rsp_valid;
-    logic                       walk_rsp_ready;
-    SDT_L1_ITEM_t               walk_sdt_l1_item;
-    SDT_L2_ITEM_t               walk_sdt_l2_item;
-    logic                       walk_l2_read;
+    logic                       req_valid;
+    logic [PA_BASE_WIDTH-1:0]   req_pa;
+    logic                       req_ready;
+    logic                       rsp_valid;
+    logic                       rsp_ready;
+    SDT_L1_ITEM_t               rsp_sdt_l1_item;
+    SDT_L2_ITEM_t               rsp_sdt_l2_item;
+    logic                       rsp_sdt_l2_read;
 
     logic [PA_WIDTH-1:0]        tw_araddr;
     logic                       tw_arvalid;
@@ -35,7 +35,7 @@ module tb_sdptw;
     logic                       tw_rvalid;
     logic                       tw_rready;
 
-    // 最近一次结果 (在 walk_rsp_valid 那一拍采下来)
+    // 最近一次结果 (在 rsp_valid 那一拍采下来)
     SDT_L1_ITEM_t               rsp_l1;
     SDT_L2_ITEM_t               rsp_l2;
     logic                       rsp_l2_read;
@@ -60,14 +60,14 @@ module tb_sdptw;
 
         .sdt_l1_base        (sdt_l1_base        ),
 
-        .walk_valid         (walk_valid         ),
-        .walk_req_pa        (walk_req_pa        ),
-        .walk_ready         (walk_ready         ),
-        .walk_rsp_valid     (walk_rsp_valid     ),
-        .walk_rsp_ready     (walk_rsp_ready     ),
-        .walk_sdt_l1_item   (walk_sdt_l1_item   ),
-        .walk_sdt_l2_item   (walk_sdt_l2_item   ),
-        .walk_l2_read       (walk_l2_read       ),
+        .req_valid          (req_valid          ),
+        .req_pa             (req_pa             ),
+        .req_ready          (req_ready          ),
+        .rsp_valid          (rsp_valid          ),
+        .rsp_ready          (rsp_ready          ),
+        .rsp_sdt_l1_item    (rsp_sdt_l1_item    ),
+        .rsp_sdt_l2_item    (rsp_sdt_l2_item    ),
+        .rsp_sdt_l2_read    (rsp_sdt_l2_read    ),
 
         .tw_araddr          (tw_araddr          ),
         .tw_arvalid         (tw_arvalid         ),
@@ -232,36 +232,36 @@ module tb_sdptw;
         end
     endtask
 
-    // 发一个 walk 请求: 本沿被接收后 walk_valid 拉低 (激励统一在下降沿给)
+    // 发一个 walk 请求: 本沿被接收后 req_valid 拉低 (激励统一在下降沿给)
     task automatic walk_start(input logic [PA_BASE_WIDTH-1:0] pa);
-        while (!walk_ready) @(negedge clk);
+        while (!req_ready) @(negedge clk);
         @(negedge clk);
-        walk_valid  = 1'b1;
-        walk_req_pa = pa;
+        req_valid  = 1'b1;
+        req_pa     = pa;
         @(posedge clk);                     // 本沿完成接收 (ready 已在上一拍确认)
         @(negedge clk);
-        walk_valid  = 1'b0;
+        req_valid  = 1'b0;
     endtask
 
-    // 等结果并在 walk_rsp_valid 那一拍采样 (不改 walk_rsp_ready)
+    // 等结果并在 rsp_valid 那一拍采样 (不改 rsp_ready)
     task automatic wait_rsp();
         int unsigned n;
         n = 0;
-        while (!walk_rsp_valid && (n < TIMEOUT)) begin
+        while (!rsp_valid && (n < TIMEOUT)) begin
             @(negedge clk);
             n++;
         end
-        if (!walk_rsp_valid) begin
+        if (!rsp_valid) begin
             $display("[DBG] 超时: state=%b arvalid=%b arready=%b rvalid=%b rsp_ready=%b",
-                     dut.state, tw_arvalid, tw_arready, tw_rvalid, walk_rsp_ready);
-            $fatal(1, "wait_rsp 超时: 没有 walk_rsp_valid");
+                     dut.state, tw_arvalid, tw_arready, tw_rvalid, rsp_ready);
+            $fatal(1, "wait_rsp 超时: 没有 rsp_valid");
         end
-        rsp_l1      = walk_sdt_l1_item;
-        rsp_l2      = walk_sdt_l2_item;
-        rsp_l2_read = walk_l2_read;
+        rsp_l1      = rsp_sdt_l1_item;
+        rsp_l2      = rsp_sdt_l2_item;
+        rsp_l2_read = rsp_sdt_l2_read;
     endtask
 
-    // 收走结果 (walk_rsp_ready = 1 时, 结果在下一个上升沿被取走)
+    // 收走结果 (rsp_ready = 1 时, 结果在下一个上升沿被取走)
     task automatic take_rsp();
         @(negedge clk);
     endtask
@@ -276,9 +276,9 @@ module tb_sdptw;
     // ========================================================================
     initial begin
         sdt_l1_base    = L1_BASE;
-        walk_valid     = 1'b0;
-        walk_req_pa    = '0;
-        walk_rsp_ready = 1'b1;
+        req_valid      = 1'b0;
+        req_pa         = '0;
+        rsp_ready      = 1'b1;
         tw_arready     = 1'b1;
         rsp_delay      = 0;                 // tw_rdata / tw_rvalid 由下面的从端模型驱动
 
@@ -287,10 +287,10 @@ module tb_sdptw;
 
         // ====================================================================
         // 复位后的静态状态
-        chk("复位后: walk_ready = 1", walk_ready == 1'b1);
-        chk("复位后: walk_rsp_valid = 0", walk_rsp_valid == 1'b0);
+        chk("复位后: req_ready = 1", req_ready == 1'b1);
+        chk("复位后: rsp_valid = 0", rsp_valid == 1'b0);
         chk("复位后: tw_arvalid = 0", tw_arvalid == 1'b0);
-        chk("复位后: walk_l2_read = 0", walk_l2_read == 1'b0);
+        chk("复位后: rsp_sdt_l2_read = 0", rsp_sdt_l2_read == 1'b0);
 
         // ====================================================================
         // Type = 1: 该区间有 1 个段表 + N 个页表. PA 落在段区间内 -> 段式收工, 只读一级
@@ -301,7 +301,7 @@ module tb_sdptw;
         rd_before = rd_cnt;
         walk_one(mk_req_pa(12'h002, 5'd6));
         chk("段式: 只读一级表一次", (rd_cnt - rd_before) == 1);
-        chk("段式: walk_l2_read = 0", rsp_l2_read == 1'b0);
+        chk("段式: rsp_sdt_l2_read = 0", rsp_l2_read == 1'b0);
         chk("段式: 一级条目原样回 (base/len/type/valid)",
             (rsp_l1.valid == 1'b1) && (rsp_l1.type_bit == 1'b1) &&
             (rsp_l1.seg_base == 5'd4) && (rsp_l1.seg_len == 5'd4));
@@ -328,7 +328,7 @@ module tb_sdptw;
         rd_before = rd_cnt;
         walk_one(mk_req_pa(12'h002, 5'd9));
         chk("段外: 读了一级 + 二级 (两次)", (rd_cnt - rd_before) == 2);
-        chk("段外: walk_l2_read = 1", rsp_l2_read == 1'b1);
+        chk("段外: rsp_sdt_l2_read = 1", rsp_l2_read == 1'b1);
         chk("段外: 二级条目内容 (s_pfn / eid / token / valid)",
             (rsp_l2.valid == 1'b1) && (rsp_l2.s_pfn == 18'h0cccc) &&
             (rsp_l2.eid == 11'h0f0) && (rsp_l2.token_id == 10'h0f0));
@@ -357,7 +357,7 @@ module tb_sdptw;
         rd_before = rd_cnt;
         walk_one(mk_req_pa(12'h006, 5'd3));
         chk("Type = 0: 走二级 (两次读)", (rd_cnt - rd_before) == 2);
-        chk("Type = 0: walk_l2_read = 1 且二级内容正确",
+        chk("Type = 0: rsp_sdt_l2_read = 1 且二级内容正确",
             (rsp_l2_read == 1'b1) && (rsp_l2.valid == 1'b1) && (rsp_l2.s_pfn == 18'h0ddd));
         chk("Type = 0: 两次读的地址分别是 一级 / 二级",
             (prev_rd_addr == l1_addr(12'h006)) && (last_rd_addr == l2_addr(12'h006, 5'd3)));
@@ -365,10 +365,10 @@ module tb_sdptw;
         // ====================================================================
         // 二级条目无效: 段表条目 + 段外, 读两次但二级 valid = 0
         // 注意: 这一拍与上面"段式命中"那一拍, 一级 / 二级的 valid 位完全一样 —— 上级只有靠
-        //       walk_l2_read 才能把这两种情况分开 (段式命中 vs 段外且二级无效)
+        //       rsp_sdt_l2_read 才能把这两种情况分开 (段式命中 vs 段外且二级无效)
         rd_before = rd_cnt;
         walk_one(mk_req_pa(12'h002, 5'd10));        // page 10 没写过
-        chk("二级条目无效: 读两次且 walk_l2_read = 1",
+        chk("二级条目无效: 读两次且 rsp_sdt_l2_read = 1",
             ((rd_cnt - rd_before) == 2) && (rsp_l2_read == 1'b1));
         chk("二级条目无效: 二级 valid = 0 (一级仍有效)",
             (rsp_l2.valid == 1'b0) && (rsp_l1.valid == 1'b1));
@@ -395,7 +395,7 @@ module tb_sdptw;
         repeat (3) @(negedge clk);
         chk("存储忙: tw_arvalid 保持", tw_arvalid == 1'b1);
         chk("存储忙: 读地址保持", tw_araddr == l1_addr(12'h002));
-        chk("存储忙: 不再收新请求", walk_ready == 1'b0);
+        chk("存储忙: 不再收新请求", req_ready == 1'b0);
         tw_arready = 1'b1;
         @(negedge clk);                       // 这一拍 AR 被接收
         chk("AR 被接收后: tw_arvalid 撤销 (AXI 要求)", tw_arvalid == 1'b0);
@@ -410,7 +410,7 @@ module tb_sdptw;
         walk_start(mk_req_pa(12'h002, 5'd6));
         repeat (2) @(negedge clk);
         chk("R 迟到: tw_rready 保持 (等着收)", tw_rready == 1'b1);
-        chk("R 迟到: walk_rsp_valid 不提前", walk_rsp_valid == 1'b0);
+        chk("R 迟到: rsp_valid 不提前", rsp_valid == 1'b0);
         wait_rsp();
         chk("R 迟到: 结果仍然正确", (rsp_l2_read == 1'b0) && (rsp_l1.s_pfn == 18'h15555));
         take_rsp();
@@ -418,33 +418,33 @@ module tb_sdptw;
 
         // ====================================================================
         // 下游不收结果: 结果与两个条目都保持, 新请求也不许进
-        walk_rsp_ready = 1'b0;
+        rsp_ready  = 1'b0;
         walk_start(mk_req_pa(12'h002, 5'd6));
         wait_rsp();
-        chk("结果未被取走: walk_rsp_valid 保持", walk_rsp_valid == 1'b1);
-        chk("结果未被取走: walk_ready = 0", walk_ready == 1'b0);
-        walk_valid  = 1'b1;
-        walk_req_pa = mk_req_pa(12'h002, 5'd4);
+        chk("结果未被取走: rsp_valid 保持", rsp_valid == 1'b1);
+        chk("结果未被取走: req_ready = 0", req_ready == 1'b0);
+        req_valid  = 1'b1;
+        req_pa     = mk_req_pa(12'h002, 5'd4);
         repeat (3) @(negedge clk);
-        chk("结果未被取走: 新请求不被接收", walk_ready == 1'b0);
+        chk("结果未被取走: 新请求不被接收", req_ready == 1'b0);
         chk("结果未被取走: 结果保持不变",
-            (walk_rsp_valid == 1'b1) &&
-            (walk_sdt_l1_item == rsp_l1) && (walk_sdt_l2_item == rsp_l2) &&
-            (walk_l2_read == rsp_l2_read));
-        walk_valid     = 1'b0;
-        walk_rsp_ready = 1'b1;
+            (rsp_valid == 1'b1) &&
+            (rsp_sdt_l1_item == rsp_l1) && (rsp_sdt_l2_item == rsp_l2) &&
+            (rsp_sdt_l2_read == rsp_l2_read));
+        req_valid  = 1'b0;
+        rsp_ready  = 1'b1;
         @(negedge clk);
-        chk("结果取走后: walk_rsp_valid 归 0", walk_rsp_valid == 1'b0);
-        chk("结果取走后: walk_ready 恢复", walk_ready == 1'b1);
+        chk("结果取走后: rsp_valid 归 0", rsp_valid == 1'b0);
+        chk("结果取走后: req_ready 恢复", req_ready == 1'b1);
 
         // ====================================================================
         // 背靠背: 上一个结果没取走时挂上第二个请求, 两个结果不能串
         set_l1_seg(.region(12'h00a), .seg_base(5'd0), .seg_len(5'd0),
                    .pfn(18'h00777), .eid(11'h077), .tok(10'h077));
-        walk_valid  = 1'b1;
-        walk_req_pa = mk_req_pa(12'h002, 5'd6);         // A: eid 0x123
-        @(posedge clk);                                 // A 被接收
-        walk_req_pa = mk_req_pa(12'h00a, 5'd0);         // B: eid 0x077
+        req_valid  = 1'b1;
+        req_pa     = mk_req_pa(12'h002, 5'd6);      // A: eid 0x123
+        @(posedge clk);                             // A 被接收
+        req_pa     = mk_req_pa(12'h00a, 5'd0);      // B: eid 0x077
         wait_rsp();
         chk("背靠背: 第 1 个结果是 A", (rsp_l2_read == 1'b0) && (rsp_l1.eid == 11'h123));
         take_rsp();
@@ -452,7 +452,7 @@ module tb_sdptw;
         chk("背靠背: 第 2 个结果是 B",
             (rsp_l2_read == 1'b0) && (rsp_l1.eid == 11'h077) && (rsp_l1.seg_base == 5'd0));
         take_rsp();
-        walk_valid = 1'b0;
+        req_valid  = 1'b0;
 
         // ====================================================================
         repeat (5) @(negedge clk);
