@@ -1,3 +1,7 @@
+# [WARN] 非 make 目标的代码应尽量顶格写 (无 tab)
+#        否则可能报错: "recipe commences before first target"
+# [WARN] 禁用行尾注释
+
 ######################################################
 # USER CONFIG (single test case)
 # 默认顶层 (冒烟): 挑一个单元自检 tb
