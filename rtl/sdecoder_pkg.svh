@@ -3,8 +3,13 @@
 
 package sdecoder_pkg;
 
-    localparam PA_BASE_WIDTH = 17; // PA[46:30] 的位宽, 1GB 对界
+    // PA[47:30] 的位宽, 1GB 对界.
+    // 注: PA[47] = 1 是 IO 空间, SDecoder 只处理 Mem 空间, 请求侧 (req_pa / sdt_l1_base /
+    //     inv_pa 等) 都断言该位为 0; 字段里保留该位只为维持 48 位地址口径 —— 这样 SDTLB 的
+    //     Tag 是 24 位, 与 40 位 Data 正好凑成 64 位条目 (见设计方案 表5 的注)
+    localparam PA_BASE_WIDTH = 18;
     localparam PA_UP_WIDTH   = 5;  // PA[34:30]
+    localparam L2_BASE_WIDTH = 45; // L2_BASE[47:3]
 
     typedef struct packed {
         logic [PA_BASE_WIDTH-1:0]   pa_base;
@@ -31,7 +36,7 @@ package sdecoder_pkg;
     // SDT_L1 条目 (16B), 位域见设计方案 一级表条目格式
     typedef struct packed {
         logic [31:0]                rsvd;
-        logic [44:0]                l2_base;        // L2_BASE[47:3]
+        logic [L2_BASE_WIDTH-1:0]   l2_base;        // L2_BASE[47:3]
         logic [EID_WIDTH-1:0]       eid;
         logic [TOKEN_ID_WIDTH-1:0]  token_id;
         logic [S_PFN_WIDTH-1:0]     s_pfn;

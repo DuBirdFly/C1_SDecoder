@@ -9,8 +9,9 @@ import sdecoder_pkg::*;
     timeunit 1ns;
     timeprecision 1ps;
 
-    // 代换请求 (查表): 请求地址只到 PA[46:30] (17 bit, 见 sdecoder_pkg 的 PA_BASE_WIDTH).
-    // PA[47] = 1 是 IO 空间, SDecoder 直接不接受这一位 (索引与 Tag 都只到 [46:30])
+    // 代换请求 (查表): 请求地址是 PA[47:30] (18 bit, 见 sdecoder_pkg 的 PA_BASE_WIDTH).
+    // PA[47] = 1 是 IO 空间, SDecoder 只处理 Mem 空间, 因此断言 PA[47] 为 0 (字段保留这一位
+    // 只为维持 48 位地址口径, 索引与 Tag 都比较 [47:35], 但装填时该位恒为 0)
     logic                               req_vld;
     logic [PA_BASE_WIDTH-1:0]           req_pa;
     logic                               req_hit;             // 命中

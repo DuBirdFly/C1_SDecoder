@@ -3,7 +3,8 @@
 `default_nettype none
 
 // sdptw: 两级 Page Walk (同一 32GB 区间里段式与页式共存)
-//   一级表 SDT_L1 (16B 条目) 以 PA[46:35] 索引, 条目里的 Type 位说明该区间的组织方式 (见设计方案 表3):
+//   一级表 SDT_L1 (16B 条目) 以 PA[47:35] 索引 (PA[47] 断言为 0), 条目里的 Type 位说明该区间的组织方式
+//   (见设计方案 表3):
 //     Type = 1: 该 32GB 区间有且仅有 1 个段表, 同时还有 N 个页表 -> 先判段:
 //               PA 落在 [SEG_BASE, SEG_BASE + SEG_LEN] 里就按段式收工 (只读一级);
 //               落在段外就走该区间的页表, 再去读二级.
@@ -24,7 +25,7 @@ import sdecoder_pkg::*;
     // 一级表基地址 (IO 寄存器, 16B 对界)
     input  logic [PA_WIDTH-1:0]         sdt_l1_base,
 
-    // Page Walk 请求: 一次一个, 只给 1GB 对齐的页号 PA[46:30]
+    // Page Walk 请求: 一次一个, 只给 1GB 对齐的页号 PA[47:30] (PA[47] 断言为 0)
     input  logic [PA_BASE_WIDTH-1:0]    req_pa,
     input  logic                        req_valid,
     output logic                        req_ready,
@@ -48,8 +49,8 @@ import sdecoder_pkg::*;
     output logic                        tw_rready
 );
 
-    // PA[46:35]: 一级表索引位数
-    localparam int L1_IDX_WIDTH = PA_BASE_WIDTH - PA_UP_WIDTH;      // 12
+    // PA[47:35]: 一级表索引位数 (PA[47] 断言为 0, 故高半区不可达)
+    localparam int L1_IDX_WIDTH = PA_BASE_WIDTH - PA_UP_WIDTH;      // 13
 
     typedef enum logic [2:0] {
         ST_IDLE,        // 空闲: 可以收 walk 请求
@@ -62,7 +63,7 @@ import sdecoder_pkg::*;
 
     state_e                     state;
 
-    logic [PA_BASE_WIDTH-1:0]   req_pa_r;       // 本次 walk 的 PA[46:30] (锁存)
+    logic [PA_BASE_WIDTH-1:0]   req_pa_r;       // 本次 walk 的 PA[47:30] (锁存)
 
     // 结果: 在收到条目那一拍锁存, 之后一直保持到被取走
     SDT_L1_ITEM_t               l1_item_r;
@@ -75,7 +76,7 @@ import sdecoder_pkg::*;
     assign l1_item = tw_rdata;
     assign l2_item = tw_rdata[63:0];
 
-    // 一级条目地址: 表基地址 16B 对界 + PA[46:35] * 16B
+    // 一级条目地址: 表基地址 16B 对界 + PA[47:35] * 16B
     wire [PA_WIDTH-1:0]         l1_addr = {sdt_l1_base[PA_WIDTH-1:4], 4'h0} +
                                           {{(PA_WIDTH - 4 - L1_IDX_WIDTH){1'b0}},
                                             req_pa_r[PA_BASE_WIDTH-1:PA_UP_WIDTH], 4'h0};
@@ -176,6 +177,16 @@ import sdecoder_pkg::*;
     `assert_clk(a_seg_range_valid,
                 (((state == ST_R_L1) && tw_rvalid && tw_rready &&
                   l1_item.valid && l1_item.type_bit) |-> (seg_up <= 31)))
+
+    // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 请求 PA / 一级表基地址 / 二级表
+    // 基地址的 PA[47] 都必须为 0. 字段里保留这一位只为维持 48 位地址口径, 见 sdecoder_pkg
+    `assert_clk(a_req_pa47_zero,
+                ((req_valid && req_ready) |-> !req_pa[PA_BASE_WIDTH-1]))
+    `assert_clk(a_sdt_l1_base47_zero,
+                (!sdt_l1_base[PA_WIDTH-1]))
+    `assert_clk(a_l2_base47_zero,
+                (((state == ST_R_L1) && tw_rvalid && tw_rready && !l1_stop)
+                 |-> !l1_item.l2_base[L2_BASE_WIDTH-1]))
 `endif
 
 endmodule

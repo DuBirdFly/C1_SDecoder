@@ -74,13 +74,17 @@ module tb_sdtlb;
         rsp_data = sdtlb_if.drv.req_hit_data_item;
     endtask
 
-    // 在时钟块事件上给出查表请求: 请求地址 = {段高位 12b, 段内页号 5b} (17 bit, 即 PA[46:30]).
+    // 在时钟块事件上给出查表请求: 请求地址 = {段高位, 段内页号} (PA_BASE_WIDTH bit, 即 PA[47:30];
+    // 本 tb 只打 PA[47] = 0 的地址, 因为 SDecoder 只处理 Mem 空间).
     // 驱动一拍后 req_vld 就自行拉低. 打 1 拍的口径:
     //   "请求拍" —— DUT 刚在这一沿采到 req_vld / req_pa, 本次请求的响应还没出来;
     //   "响应拍" —— 请求拍的下一拍, 这一拍采到的才是本次请求的响应.
     // 本任务等到响应拍才返回, 返回时 rsp_* 即本次请求的响应 (见 sample_rsp);
     // 所以各测试点都是"驱动 -> 取值 -> 再等若干拍才动下一次激励"的次序.
-    task automatic set_req(logic [11:0] high, logic [4:0] idx);
+    task automatic set_req(
+        logic [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] high,
+        logic [PA_UP_WIDTH-1:0]               idx
+    );
         sdtlb_if.drv.req_vld <= 1'b1;
         sdtlb_if.drv.req_pa  <= {high, idx};
         @(sdtlb_if.drv);                    // 请求拍
@@ -89,14 +93,14 @@ module tb_sdtlb;
         sample_rsp();
     endtask
 
-    // 装填一个条目 (drv 块驱动一拍)
+    // 装填一个条目 (drv 块驱动一拍); base 是 PA[47:30], 只打 PA[47] = 0 的值
     task automatic fill_one(
-        input logic [16:0] base,
-        input logic [ 4:0] up,
-        input logic [10:0] eid,
-        input logic [ 9:0] tok,
-        input logic [17:0] pfn,
-        input logic        grn
+        input logic [PA_BASE_WIDTH-1:0]             base,
+        input logic [PA_UP_WIDTH-1:0]               up,
+        input logic [EID_WIDTH-1:0]                 eid,
+        input logic [TOKEN_ID_WIDTH-1:0]            tok,
+        input logic [S_PFN_WIDTH-1:0]               pfn,
+        input logic                                 grn
     );
         sdtlb_if.drv.fill_pa_base  <= base;
         sdtlb_if.drv.fill_pa_up    <= up;

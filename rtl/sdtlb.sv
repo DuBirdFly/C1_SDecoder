@@ -119,6 +119,12 @@ import sdecoder_pkg::*;
     `assert_clk(a_tag_hit_vector_onehot0, $onehot0(tag_hit_vector_r1))
     // fill_sel 是写使能, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
     `assert_clk(a_fill_sel_onehot, $onehot(fill_sel))
+
+    // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 查表 / 装填 / 置无效地址的 PA[47]
+    // 都必须为 0. 保留这一位只为维持 48 位地址口径 (Tag 24 位 + Data 40 位 = 64 位条目)
+    `assert_clk(a_req_pa47_zero,  (req_vld  |-> !req_pa[PA_BASE_WIDTH-1]))
+    `assert_clk(a_fill_pa47_zero, (fill_vld |-> !fill_pa_base[PA_BASE_WIDTH-1]))
+    `assert_clk(a_inv_pa47_zero,  (inv_en   |-> !inv_pa[PA_BASE_WIDTH-1]))
 `endif
 
 endmodule

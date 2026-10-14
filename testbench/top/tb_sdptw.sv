@@ -148,7 +148,7 @@ module tb_sdptw;
     // ========================================================================
     // 表项与请求地址的构造
     // ========================================================================
-    // 一级表索引: PA[46:35]
+    // 一级表索引: PA[47:35] (本 tb 只打 PA[47] = 0 的地址: SDecoder 只处理 Mem 空间)
     function automatic logic [PA_WIDTH-1:0] l1_addr(input logic [PA_BASE_WIDTH-1:PA_UP_WIDTH] region);
         return {L1_BASE[PA_WIDTH-1:4], 4'h0} +
                {{(PA_WIDTH - (PA_BASE_WIDTH - PA_UP_WIDTH) - 4){1'b0}}, region, 4'h0};
@@ -156,7 +156,7 @@ module tb_sdptw;
 
     // 每个一级条目自己的二级表 (32 个 8B 条目 = 256B)
     function automatic logic [PA_WIDTH-1:0] l2_base_of(input logic [PA_BASE_WIDTH-1:PA_UP_WIDTH] region);
-        return L2_BASE + {{(PA_WIDTH - 12){1'b0}}, region, 8'h0};
+        return L2_BASE + {{(PA_WIDTH - (PA_BASE_WIDTH - PA_UP_WIDTH)){1'b0}}, region, 8'h0};
     endfunction
 
     // 二级表索引: PA[34:30]
@@ -168,7 +168,7 @@ module tb_sdptw;
                {{(PA_WIDTH - PA_UP_WIDTH - 3){1'b0}}, page, 3'h0};
     endfunction
 
-    // walk 请求地址: {PA[46:35], PA[34:30]}
+    // walk 请求地址: {PA[47:35], PA[34:30]}
     function automatic logic [PA_BASE_WIDTH-1:0] mk_req_pa(
         input logic [PA_BASE_WIDTH-1:PA_UP_WIDTH]   region,
         input logic [PA_UP_WIDTH-1:0]               page
