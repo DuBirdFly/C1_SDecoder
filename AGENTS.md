@@ -18,3 +18,9 @@
 
 注: AGENTS 应该使用 `simulation_agent` 作为仿真入口, 而不是 `simulation`
 
+注: 手搓 `vcs` 验证 SV 语法 / 语义的一次性探针, 放仓库根的 `.probe/` 下 (已 gitignore); 验证设计与 tb 仍然只用 `simulation_agent`
+
+## 提交
+
+注: 用户没有明确说 "git" / "git commit" 时, 不要自己提交; 改完就停在工作区, 由用户决定何时提交.
+
