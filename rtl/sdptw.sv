@@ -14,7 +14,8 @@
 //   段区间判定的开闭语义, SLA 拼装, 异常码, req_id 记账都在上层.
 //   注: rsp_sdt_l2_read 是"过程事实", 上级靠它才能把"段式命中"与"段外且二级条目无效"分开 ——
 //       这两种情况的一级 / 二级 valid 位完全一样.
-//   访存: AXI4-Lite 读通道 (AR + R), 一次 walk 最多发两次 AR.
+//   访存: AXI4-Lite 读通道 (AR + R), 一次 walk 最多发两次 AR: 一级读整 16B 条目;
+//         二级读 8B 条目, 取 16B 总线上由 AR 地址 bit[3] 选出的那一半
 //   状态机: IDLE (收请求) -> AR_L1 -> R_L1 (判段) -> [AR_L2 -> R_L2] -> DONE (保持到被取走)
 module sdptw
 import sdecoder_pkg::*;
@@ -70,12 +71,6 @@ import sdecoder_pkg::*;
     SDT_L2_ITEM_t               l2_item_r;
     logic                       l2_read_r;
 
-    // 读回的条目: 一级 16B, 二级取低 64 位
-    SDT_L1_ITEM_t               l1_item;
-    SDT_L2_ITEM_t               l2_item;
-    assign l1_item = tw_rdata;
-    assign l2_item = tw_rdata[63:0];
-
     // 一级条目地址: 表基地址 16B 对界 + PA[47:35] * 16B
     wire [PA_WIDTH-1:0]         l1_addr = {sdt_l1_base[PA_WIDTH-1:4], 4'h0} +
                                           {{(PA_WIDTH - 4 - L1_IDX_WIDTH){1'b0}},
@@ -86,7 +81,15 @@ import sdecoder_pkg::*;
                                           {{(PA_WIDTH - 3 - PA_UP_WIDTH){1'b0}},
                                             req_pa_r[PA_UP_WIDTH-1:0], 3'h0};
 
-    // 段区间: 闭区间 [SEG_BASE, SEG_BASE + SEG_LEN] (开 / 闭语义待定, 现在按闭区间; 只认段式条目)
+    // 读回的条目: 一级是整 16B (地址 16B 对界, 16B 总线的两个 8B lane 都有效), 直接取整条;
+    // 二级只读 8B, 按标准 AXI 单拍 (AXI-Lite 相当于突发长度为 1) 的 lane 规则, 这 8B 落在
+    // 16B 总线的哪一半由 AR 地址的 bit[3] 决定: araddr[3] = 0 -> rdata[63:0]
+    // 注: 这里必须用 net 声明 (wire) 或 assign: module 级"变量"的声明处初始化只执行一次
+    //     (time 0 赋一次就不再跟随), 写成 SDT_L1_ITEM_t l1_item = tw_rdata; 会静默读错条目
+    wire SDT_L1_ITEM_t          l1_item = tw_rdata;
+    wire SDT_L2_ITEM_t          l2_item = l2_addr[3] ? tw_rdata[127:64] : tw_rdata[63:0];
+
+    // 段区间: 闭区间 [SEG_BASE, SEG_BASE + SEG_LEN]
     wire [PA_UP_WIDTH:0]        seg_up  = {1'b0, l1_item.seg_base} + {1'b0, l1_item.seg_len};
     wire                        seg_hit = l1_item.type_bit &&
                                           (req_pa_r[PA_UP_WIDTH-1:0] >= l1_item.seg_base) &&

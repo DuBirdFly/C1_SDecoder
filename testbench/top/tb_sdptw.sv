@@ -89,11 +89,15 @@ module tb_sdptw;
 `endif
 
     // ========================================================================
-    // 本地存储模型: AXI4-Lite 读从端 (暂时没有读错误入口), 按字节地址存 16B/8B 条目.
+    // 本地存储模型: AXI4-Lite 读从端 (暂时没有读错误入口).
+    // mem 按 8B 单元存 (key 是 8B 对界地址), 一次读返回"包含该地址的 16B 行":
+    // 一条 16B 总线上的两个 8B lane 都填真实数据 —— 请求地址 bit[3] = 0 时本次数据在
+    // [63:0] (邻居在 [127:64]), bit[3] = 1 时本次数据在 [127:64] (邻居在 [63:0]).
+    // 所以 DUT 若固定取低 64 位, 读奇数页 (bit[3] = 1) 就会拿到邻居的 8B, 检查会报错.
     // AR 被接收后隔 rsp_delay 拍回一拍 R, rvalid 保持到被 rready 取走;
     // 记录读次数, 最近两次读的地址 (一次 walk 最多两次读)
     // ========================================================================
-    logic [127:0]               mem [logic [PA_WIDTH-1:0]];
+    logic [63:0]                mem [logic [PA_WIDTH-1:0]];
     int unsigned                rd_cnt;
     logic [PA_WIDTH-1:0]        last_rd_addr;
     logic [PA_WIDTH-1:0]        prev_rd_addr;
@@ -102,13 +106,21 @@ module tb_sdptw;
     logic                       r_pend;         // 已收 AR, 还没给出 R
     int unsigned                r_wait;
 
-    function automatic logic [127:0] mem_read(input logic [PA_WIDTH-1:0] addr);
+    // 读一个 8B 单元; 没写过的按全 0 读 (有效位为 0)
+    function automatic logic [63:0] mem_read(input logic [PA_WIDTH-1:0] addr);
         if (mem.exists(addr)) begin
             return mem[addr];
         end
         else begin
-            return '0;                          // 没写过的条目按全 0 读 (有效位为 0)
+            return '0;
         end
+    endfunction
+
+    // 读 16B 行: addr 的 [3] 选中的那半是本次数据, 另一半是邻居
+    function automatic logic [127:0] mem_read_line(input logic [PA_WIDTH-1:0] addr);
+        logic [PA_WIDTH-1:0] line_addr;
+        line_addr = {addr[PA_WIDTH-1:4], 4'h0};
+        return {mem_read(line_addr + 8), mem_read(line_addr)};
     endfunction
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -128,7 +140,7 @@ module tb_sdptw;
             if (r_pend) begin
                 if (r_wait == 0) begin
                     tw_rvalid <= 1'b1;
-                    tw_rdata  <= mem_read(last_rd_addr);
+                    tw_rdata  <= mem_read_line(last_rd_addr);
                     r_pend    <= 1'b0;
                 end
                 else begin
@@ -190,7 +202,9 @@ module tb_sdptw;
         item = '{rsvd: '0, l2_base: l2_base_of(region)[PA_WIDTH-1:3], eid: eid, token_id: tok,
                   s_pfn: pfn, seg_len: seg_len, seg_base: seg_base,
                   type_bit: type_bit, valid: valid};
-        mem[l1_addr(region)] = item;
+        // 一级条目 16B: 占满一条 16B 总线的两个 8B lane, 分两个 8B 单元存
+        mem[l1_addr(region)]      = item[63:0];
+        mem[l1_addr(region) + 8]  = item[127:64];
     endtask
 
     // 段式一级条目
@@ -352,6 +366,13 @@ module tb_sdptw;
         // 不读二级, 被下面的 rd_cnt 抓到
         set_l1_item(.region(12'h006), .valid(1'b1), .type_bit(1'b0), .seg_base(5'd0),
                     .seg_len(5'd31), .pfn(18'h0), .eid(11'h0), .tok(10'h0));
+        // 二级条目 8B, 落在 16B 总线的哪一半由 AR 地址的 bit[3] 决定. page 2 / page 3 恰好
+        // 是同一条 16B 行的低 / 高两半 (地址 16 / 24), 两个都写成不同的值:
+        //   page 2 -> araddr[3] = 0 -> 本次数据在 rdata[63:0], 邻居 page 3 在 [127:64]
+        //   page 3 -> araddr[3] = 1 -> 本次数据在 rdata[127:64], 邻居 page 2 在 [63:0]
+        // 固定取低 64 位的话, 读 page 3 会读到邻居 page 2 的 0x0ccc
+        set_l2(.region(12'h006), .page(5'd2), .valid(1'b1),
+               .pfn(18'h0ccc), .eid(11'h0c2), .tok(10'h0c2));
         set_l2(.region(12'h006), .page(5'd3), .valid(1'b1),
                .pfn(18'h0ddd), .eid(11'h0e1), .tok(10'h0e1));
         rd_before = rd_cnt;
@@ -361,6 +382,18 @@ module tb_sdptw;
             (rsp_l2_read == 1'b1) && (rsp_l2.valid == 1'b1) && (rsp_l2.s_pfn == 18'h0ddd));
         chk("Type = 0: 两次读的地址分别是 一级 / 二级",
             (prev_rd_addr == l1_addr(12'h006)) && (last_rd_addr == l2_addr(12'h006, 5'd3)));
+        chk("Type = 0: 奇数页的二级读落在高 8B lane (araddr[3] = 1)",
+            last_rd_addr[3] == 1'b1);
+        chk("Type = 0: 奇数页取高 8B lane, 邻居 page 2 的 0x0ccc 不许串进来",
+            (rsp_l2.s_pfn == 18'h0ddd) && (rsp_l2.eid == 11'h0e1) && (rsp_l2.token_id == 10'h0e1));
+
+        // 反向: 偶数页 (page 2) 的本次数据在低 8B lane, 邻居是高 lane 的 page 3
+        rd_before = rd_cnt;
+        walk_one(mk_req_pa(12'h006, 5'd2));
+        chk("Type = 0: 偶数页的二级读落在低 8B lane (araddr[3] = 0)",
+            ((rd_cnt - rd_before) == 2) && (last_rd_addr[3] == 1'b0));
+        chk("Type = 0: 偶数页取低 8B lane, 邻居 page 3 的 0x0ddd 不许串进来",
+            (rsp_l2_read == 1'b1) && (rsp_l2.s_pfn == 18'h0ccc) && (rsp_l2.eid == 11'h0c2));
 
         // ====================================================================
         // 二级条目无效: 段表条目 + 段外, 读两次但二级 valid = 0
