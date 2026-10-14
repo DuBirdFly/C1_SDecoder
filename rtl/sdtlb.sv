@@ -54,13 +54,14 @@ import sdecoder_pkg::*;
         end
     end
 
-    inc_arbiter #(
-        .N      (SDTLB_ENTRIES)
-    ) u_inc_arbiter (
-        .clk    (clk),
-        .rst_n  (rst_n),
-        .step   (fill_vld),
-        .sel    (fill_sel)
+    // 被替换条目指针: 严格 one-hot 左移循环, 一次装填步进一格 (轮转替换)
+    tlb_victim_pointer #(
+        .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES)
+    ) u_tlb_victim_pointer (
+        .clk                (clk),
+        .rst_n              (rst_n),
+        .step               (fill_vld),
+        .victim_sel         (fill_sel)
     );
 
     sdtlb_tag u_sdtlb_tag(
@@ -116,7 +117,8 @@ import sdecoder_pkg::*;
 
 `ifdef ASSERT_ON
     `assert_clk(a_tag_hit_vector_onehot0, $onehot0(tag_hit_vector_r1))
-    `assert_clk(a_fill_sel_onehot0, $onehot0(fill_sel))
+    // fill_sel 是写使能, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
+    `assert_clk(a_fill_sel_onehot, $onehot(fill_sel))
 `endif
 
 endmodule
