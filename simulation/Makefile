@@ -1,6 +1,8 @@
 # [WARN] 非 make 目标的代码应尽量顶格写 (无 tab)
 #        否则可能报错: "recipe commences before first target"
 # [WARN] 禁用行尾注释
+# [WARN] 软链应用 ln -sfn (而不是 ln -sf): 已存在的"指向目录的软链"会被 ln -sf 解引用,
+#        于是第二轮把链建到目标目录里面 (长出 base/base, rtl/rtl 这种野生链)
 
 ######################################################
 # USER CONFIG (single test case)
@@ -26,9 +28,9 @@ base:
 	@mkdir -p $(RUN_DIR)/log
 	@mkdir -p $(RUN_DIR)/output
 	@mkdir -p $(RUN_DIR)/output/wave
-	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/simulation/base
-	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/rtl
-	@cd $(RUN_DIR) && ln -sf $(REPO_ROOT)/testbench
+	@cd $(RUN_DIR) && ln -sfn $(REPO_ROOT)/simulation/base
+	@cd $(RUN_DIR) && ln -sfn $(REPO_ROOT)/rtl
+	@cd $(RUN_DIR) && ln -sfn $(REPO_ROOT)/testbench
 	@python3 ../script/merge_all_filelist.py \
 		-src_filelist_dir ./base/filelists \
 		-src_filelist_name all.f \
