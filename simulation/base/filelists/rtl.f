@@ -14,4 +14,6 @@
 
 ./rtl/sdptw.sv
 
+./rtl/sdior.sv
+
 ./rtl/sdecoder-undef.svh

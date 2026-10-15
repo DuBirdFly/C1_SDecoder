@@ -60,6 +60,18 @@ package sdecoder_pkg;
     localparam SDTLB_ENTRIES = 128;
     // localparam SDTLB_ENTRIES_IDX_WIDTH = $clog2(SDTLB_ENTRIES);
 
+    // IOR (sdior) 的寄存器地址与字格式: 首版不做 APB 从口, 这里用寄存器序号 (而不是接口手册的
+    // 字节偏移), 见设计方案 IOR 列表 / 接口手册 寄存器列表
+    // 寄存器字宽 64: 地址类寄存器把整条 PA 填在低 PA_WIDTH 位 (即 PA[47:0]); W1P 触发位在字里
+    // 的位置各不相同 (IA 是 bit 0, IS 是 bit 63), 其余位保留
+    localparam SDIOR_ADDR_WIDTH = 2;
+    localparam SDIOR_DATA_WIDTH = 64;
+    localparam SDIOR_IA_W1P_BIT = 0;    // SDecoder_IA: 这一位写 1 才产生 inv_all 脉冲
+    localparam SDIOR_IS_W1P_BIT = 63;   // SDecoder_IS: 这一位写 1 才产生 inv_en 脉冲
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IA = 2'd0;   // W1P: 置无效全部条目
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IS = 2'd1;   // W1P: 置无效指定 PA 的条目
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDT_L1_BASE = 2'd2;   // RW: 一级表基地址
+
 endpackage
 
 `endif // _SDECODER_PKG_SVH_

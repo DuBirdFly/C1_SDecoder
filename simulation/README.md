@@ -26,7 +26,7 @@ make -C simulation_agent all
 
 | 变量 | 默认 | 作用 |
 | --- | --- | --- |
-| `TB_TOP` | `tb_sdtlb` | 仿真的顶层. 单元自检用 `tb_sdtlb` / `tb_sdptw` / `tb_syn_fifo`; UVM 冒烟的 `tb_top` 已挪到 `backup/` |
+| `TB_TOP` | `tb_sdtlb` | 仿真的顶层. 单元自检用 `tb_sdtlb` / `tb_sdptw` / `tb_sdior` / `tb_syn_fifo`; UVM 冒烟的 `tb_top` 已挪到 `backup/` |
 | `TESTNAME` | `TestBase` | UVM 的 `+UVM_TESTNAME`;单元自检用不到, 只参与运行目录命名 |
 | `DUMP_WAVE` | `1` | 1 = 出 FSDB 波形 (目前 tb 体量小, 默认出);0 = 不出 |
 
