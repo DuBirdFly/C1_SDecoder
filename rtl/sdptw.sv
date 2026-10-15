@@ -26,8 +26,9 @@ import sdecoder_pkg::*;
     // 一级表基地址 (IO 寄存器, 16B 对界)
     input  logic [PA_WIDTH-1:0]         sdt_l1_base,
 
-    // Page Walk 请求: 一次一个, 只给 1GB 对齐的页号 PA[47:30] (PA[47] 断言为 0)
-    input  logic [PA_BASE_WIDTH-1:0]    req_pa,
+    // Page Walk 请求: 一次一个, 只给 1GB 对齐的页号 PA[47:30] (PA 的 base 部分, 故叫 req_pa_base;
+    // PA[47] 断言为 0)
+    input  logic [PA_BASE_WIDTH-1:0]    req_pa_base,
     input  logic                        req_valid,
     output logic                        req_ready,
 
@@ -64,7 +65,7 @@ import sdecoder_pkg::*;
 
     state_e                     state;
 
-    logic [PA_BASE_WIDTH-1:0]   req_pa_r;       // 本次 walk 的 PA[47:30] (锁存)
+    logic [PA_BASE_WIDTH-1:0]   req_pa_base_r;       // 本次 walk 的 PA[47:30] (锁存)
 
     // 结果: 在收到条目那一拍锁存, 之后一直保持到被取走
     SDT_L1_ITEM_t               l1_item_r;
@@ -74,12 +75,12 @@ import sdecoder_pkg::*;
     // 一级条目地址: 表基地址 16B 对界 + PA[47:35] * 16B
     wire [PA_WIDTH-1:0]         l1_addr = {sdt_l1_base[PA_WIDTH-1:4], 4'h0} +
                                           {{(PA_WIDTH - 4 - L1_IDX_WIDTH){1'b0}},
-                                            req_pa_r[PA_BASE_WIDTH-1:PA_UP_WIDTH], 4'h0};
+                                            req_pa_base_r[PA_BASE_WIDTH-1:PA_UP_WIDTH], 4'h0};
 
     // 二级条目地址: 一级条目给的 L2_BASE[47:3] + PA[34:30] * 8B
     wire [PA_WIDTH-1:0]         l2_addr = {l1_item_r.l2_base, 3'h0} +
                                           {{(PA_WIDTH - 3 - PA_UP_WIDTH){1'b0}},
-                                            req_pa_r[PA_UP_WIDTH-1:0], 3'h0};
+                                            req_pa_base_r[PA_UP_WIDTH-1:0], 3'h0};
 
     // 读回的条目: 一级是整 16B (地址 16B 对界, 16B 总线的两个 8B lane 都有效), 直接取整条;
     // 二级只读 8B, 按标准 AXI 单拍 (AXI-Lite 相当于突发长度为 1) 的 lane 规则, 这 8B 落在
@@ -92,8 +93,8 @@ import sdecoder_pkg::*;
     // 段区间: 闭区间 [SEG_BASE, SEG_BASE + SEG_LEN]
     wire [PA_UP_WIDTH:0]        seg_up  = {1'b0, l1_item.seg_base} + {1'b0, l1_item.seg_len};
     wire                        seg_hit = l1_item.type_bit &&
-                                          (req_pa_r[PA_UP_WIDTH-1:0] >= l1_item.seg_base) &&
-                                          ({1'b0, req_pa_r[PA_UP_WIDTH-1:0]} <= seg_up);
+                                          (req_pa_base_r[PA_UP_WIDTH-1:0] >= l1_item.seg_base) &&
+                                          ({1'b0, req_pa_base_r[PA_UP_WIDTH-1:0]} <= seg_up);
 
     // 段覆盖 -> 段式收工 (只读一级); Type = 0, 或 Type = 1 但 PA 在段外 (走该区间的页表)
     // -> 去读二级; 一级条目无效也收工 (L2_BASE 不可信)
@@ -113,7 +114,7 @@ import sdecoder_pkg::*;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state      <= ST_IDLE;
-            req_pa_r   <= '0;
+            req_pa_base_r   <= '0;
             l1_item_r  <= '0;
             l2_item_r  <= '0;
             l2_read_r  <= 1'b0;
@@ -122,7 +123,7 @@ import sdecoder_pkg::*;
             case (state)
                 ST_IDLE: begin
                     if (req_valid && req_ready) begin
-                        req_pa_r <= req_pa;
+                        req_pa_base_r <= req_pa_base;
                         state  <= ST_AR_L1;
                     end
                 end
@@ -184,7 +185,7 @@ import sdecoder_pkg::*;
     // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 请求 PA / 一级表基地址 / 二级表
     // 基地址的 PA[47] 都必须为 0. 字段里保留这一位只为维持 48 位地址口径, 见 sdecoder_pkg
     `assert_clk(a_req_pa47_zero,
-                ((req_valid && req_ready) |-> !req_pa[PA_BASE_WIDTH-1]))
+                ((req_valid && req_ready) |-> !req_pa_base[PA_BASE_WIDTH-1]))
     `assert_clk(a_sdt_l1_base47_zero,
                 (!sdt_l1_base[PA_WIDTH-1]))
     `assert_clk(a_l2_base47_zero,

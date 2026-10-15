@@ -23,33 +23,33 @@
         {},
         {
             "name": "req_valid (请求拍)",
-            "wave": "010011000",
+            "wave": "010.1.0..",
             "node": ".a..b...."
         },
         {
-            "name": "req_pa[17:0]",
-            "wave": "x2xx34xxx",
+            "name": "req_pa[47:0]",
+            "wave": "x3x.45x..",
             "data": ["A", "B", "C"]
         },
         {},
         {
             "name": "req_hit (响应拍)",
-            "wave": "001001000",
+            "wave": "0.10.10..",
             "node": "..c..d..."
         },
         {
             "name": "req_hit_tag_item / req_hit_data_item",
-            "wave": "xx2xx3xxx",
-            "data": ["A 读出", "B 读出"]
+            "wave": "x.3x.4x..",
+            "data": ["Q-A", "Q-B"]
         },
         {},
         {
             "name": "tag_hit_vector (组合)",
-            "wave": "010010000"
+            "wave": "010.10..."
         },
         {
             "name": "tag_hit_vector_r1 (打 1 拍)",
-            "wave": "001001000"
+            "wave": "0.10.10.."
         }
     ],
     "edge": ["a~>c", "b~>d"]
