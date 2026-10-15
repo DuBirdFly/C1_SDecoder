@@ -8,15 +8,17 @@ import sdecoder_pkg::*;
     input  logic                                clk,
     input  logic                                rst_n,
 
-    // 代换请求: 查表
+    // 代换请求: 查表. 地址是整条 PA[47:0] (条目里只存 PA[47:30], 见 sdtlb_tag_item)
     // req_valid 被采到的那一拍是请求拍, 响应 (req_hit 与读出数据) 下一拍才有效
     input  logic                                req_valid,
-    input  logic [PA_BASE_WIDTH-1:0]            req_pa,
+    input  logic [PA_WIDTH-1:0]                 req_pa,
     output logic                                req_hit,
     output SDTLB_TAG_ITEM_t                     req_hit_tag_item,
     output SDTLB_DATA_ITEM_t                    req_hit_data_item,
 
-    // 装填: SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目
+    // 装填: SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目.
+    // 注意这里与 req_pa / inv_pa 口径不同: 装填来自 sdptw, 它本来就算在 PA[47:30] 上,
+    // 所以 fill_pa_base 就保持 PA[47:30] (18 位), 不必先补齐到整条 PA 再切回来
     input  logic                                fill_valid,
     input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
@@ -25,10 +27,10 @@ import sdecoder_pkg::*;
     input  logic [S_PFN_WIDTH-1:0]              fill_s_pfn,
     input  logic                                fill_grn,
 
-    // 置无效 (刷新): 只作用于 Tag 侧的有效位
+    // 置无效 (刷新): 只作用于 Tag 侧的有效位; 地址也是整条 PA[47:0]
     input  logic                                inv_all,
     input  logic                                inv_en,
-    input  logic [PA_BASE_WIDTH-1:0]            inv_pa
+    input  logic [PA_WIDTH-1:0]                 inv_pa
 );
 
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
@@ -120,11 +122,12 @@ import sdecoder_pkg::*;
     // fill_sel 是写使能, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
     `assert_clk(a_fill_sel_onehot, $onehot(fill_sel))
 
-    // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 查表 / 装填 / 置无效地址的 PA[47]
-    // 都必须为 0. 保留这一位只为维持 48 位地址口径 (Tag 24 位 + Data 40 位 = 64 位条目)
-    `assert_clk(a_req_pa47_zero,  (req_valid  |-> !req_pa[PA_BASE_WIDTH-1]))
+    // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 查表 / 装填 / 置无效地址的 PA[47] 都必须为 0.
+    // 口径: req_pa / inv_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),
+    //       fill_pa_base 是 PA[47:30] (bit[PA_BASE_WIDTH-1] 才是 PA[47])
+    `assert_clk(a_req_pa47_zero,  (req_valid  |-> !req_pa[PA_WIDTH-1]))
     `assert_clk(a_fill_pa47_zero, (fill_valid |-> !fill_pa_base[PA_BASE_WIDTH-1]))
-    `assert_clk(a_inv_pa47_zero,  (inv_en   |-> !inv_pa[PA_BASE_WIDTH-1]))
+    `assert_clk(a_inv_pa47_zero,  (inv_en   |-> !inv_pa[PA_WIDTH-1]))
 `endif
 
 endmodule

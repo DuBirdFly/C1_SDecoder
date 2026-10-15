@@ -74,26 +74,28 @@ module tb_sdtlb;
         rsp_data = sdtlb_if.drv.req_hit_data_item;
     endtask
 
-    // 在时钟块事件上给出查表请求: 请求地址 = {段高位, 段内页号} (PA_BASE_WIDTH bit, 即 PA[47:30];
-    // 本 tb 只打 PA[47] = 0 的地址, 因为 SDecoder 只处理 Mem 空间).
+    // 在时钟块事件上给出查表请求: 请求地址是整条 PA[47:0] = {段高位 PA[47:35], 段内页号 PA[34:30],
+    // 页内偏移 PA[29:0]}; 默认 offset = 0, 需要查"偏移与命中无关"时再给.
+    // 本 tb 只打 PA[47] = 0 的地址, 因为 SDecoder 只处理 Mem 空间.
     // 驱动一拍后 req_valid 就自行拉低. 打 1 拍的口径:
     //   "请求拍" —— DUT 刚在这一沿采到 req_valid / req_pa, 本次请求的响应还没出来;
     //   "响应拍" —— 请求拍的下一拍, 这一拍采到的才是本次请求的响应.
     // 本任务等到响应拍才返回, 返回时 rsp_* 即本次请求的响应 (见 sample_rsp);
     // 所以各测试点都是"驱动 -> 取值 -> 再等若干拍才动下一次激励"的次序.
     task automatic set_req(
-        logic [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] high,
-        logic [PA_UP_WIDTH-1:0]               idx
+        logic [PA_BASE_WIDTH-PA_UP_WIDTH-1:0]              high,
+        logic [PA_UP_WIDTH-1:0]                            idx,
+        logic [PA_WIDTH-PA_BASE_WIDTH-1:0]                 offset = '0
     );
         sdtlb_if.drv.req_valid <= 1'b1;
-        sdtlb_if.drv.req_pa  <= {high, idx};
+        sdtlb_if.drv.req_pa  <= {high, idx, offset};
         @(sdtlb_if.drv);                    // 请求拍
         sdtlb_if.drv.req_valid <= 1'b0;
         @(sdtlb_if.drv);                    // 响应拍 (打 1 拍)
         sample_rsp();
     endtask
 
-    // 装填一个条目 (drv 块驱动一拍); base 是 PA[47:30], 只打 PA[47] = 0 的值
+    // 装填一个条目 (drv 块驱动一拍); base 是 PA[47:30] (只打 PA[47] = 0 的值)
     task automatic fill_one(
         input logic [PA_BASE_WIDTH-1:0]             base,
         input logic [PA_UP_WIDTH-1:0]               up,
@@ -113,10 +115,10 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_valid      <= 1'b0;
     endtask
 
-    // 按地址置无效, 拉高一拍
+    // 按地址置无效, 拉高一拍; pa 是 PA[47:30], 低 30 位补 0
     task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] pa);
         sdtlb_if.drv.inv_en <= 1'b1;
-        sdtlb_if.drv.inv_pa <= pa;
+        sdtlb_if.drv.inv_pa <= {pa, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);
         sdtlb_if.drv.inv_en <= 1'b0;
     endtask
@@ -183,7 +185,7 @@ module tb_sdtlb;
         // 打 1 拍: 命中向量的比较链在请求拍末才被采到, 请求拍看不到本次请求的响应,
         // 响应要到下一拍才有效 (两次采样分别落在请求拍与响应拍)
         sdtlb_if.drv.req_valid <= 1'b1;
-        sdtlb_if.drv.req_pa  <= {12'hfff, 5'h1f};
+        sdtlb_if.drv.req_pa  <= {12'hfff, 5'h1f, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);                                // 请求拍
         sample_rsp();
         chk("latency: 请求当拍无命中", rsp_hit == 1'b0);
@@ -273,19 +275,30 @@ module tb_sdtlb;
         chk("seg: 段高位不同不命中", rsp_hit == 1'b0);
         repeat (10) @(sdtlb_if.drv);
 
+        // 端口收的是整条 PA[47:0]: 页内偏移 PA[29:0] 与命中无关, 只有 PA[47:35] 与 PA[34:30] 参与判定
+        set_req(.high(12'h002), .idx(5'd6), .offset(48'h0000_0000_00a5));
+        chk("seg: 段内带页内偏移仍命中 (偏移不参与判定)", rsp_hit == 1'b1);
+        repeat (10) @(sdtlb_if.drv);
+
+        // 段区间是 [4, 8]: 请求 PA[34:30] = 9 (段外) 时, 就算页内偏移的低 5 位是 5 (落在段内)
+        // 也必须不命中 —— 若实现把范围判定切成了整条 PA 的低 5 位 (PA[4:0]), 这里就会误命中
+        set_req(.high(12'h002), .idx(5'd9), .offset(48'h0000_0000_0005));
+        chk("seg: 段外不命中 (范围判定看 PA[34:30], 不是 PA[4:0])", rsp_hit == 1'b0);
+        repeat (10) @(sdtlb_if.drv);
+
         // ====================================================================
         // 流水线: req_valid 可以拍拍有效 (本拍给地址, 下一拍换新地址且 req_valid 保持),
         // 响应逐拍滞后 1 拍出现, 且不会串到别的地址上
         sdtlb_if.drv.req_valid <= 1'b1;
-        sdtlb_if.drv.req_pa  <= {12'hfff, 5'h1f};       // A: 命中 (s_pfn 18'h33333)
+        sdtlb_if.drv.req_pa  <= {12'hfff, 5'h1f, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};   // A: 命中
         @(sdtlb_if.drv);                                // 请求拍 A
-        sdtlb_if.drv.req_pa  <= {12'h001, 5'd0};        // B: 命中 (s_pfn 18'h0cccc)
+        sdtlb_if.drv.req_pa  <= {12'h001, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};    // B: 命中
         @(sdtlb_if.drv);                                // 请求拍 B; 响应拍 A
         sample_rsp();
         chk("pipeline: 第 2 拍出 A 的响应",
             (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'hfff, 5'h1f}) &&
             (rsp_data.s_pfn == 18'h33333));
-        sdtlb_if.drv.req_pa  <= {12'h002, 5'd9};        // C: 未命中 (段右端外)
+        sdtlb_if.drv.req_pa  <= {12'h002, 5'd9, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};    // C: 未命中
         @(sdtlb_if.drv);                                // 请求拍 C; 响应拍 B
         sample_rsp();
         chk("pipeline: 第 3 拍出 B 的响应",
@@ -469,7 +482,7 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_grn      <= 1'b0;
         sdtlb_if.drv.fill_valid      <= 1'b1;
         sdtlb_if.drv.inv_en        <= 1'b1;
-        sdtlb_if.drv.inv_pa        <= {12'h100, 5'd0};
+        sdtlb_if.drv.inv_pa        <= {12'h100, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);
         sdtlb_if.drv.fill_valid <= 1'b0;
         sdtlb_if.drv.inv_en   <= 1'b0;

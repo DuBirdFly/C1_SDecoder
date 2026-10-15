@@ -13,7 +13,7 @@ import sdecoder_pkg::*;
     // PA[47] = 1 是 IO 空间, SDecoder 只处理 Mem 空间, 因此断言 PA[47] 为 0 (字段保留这一位
     // 只为维持 48 位地址口径, 索引与 Tag 都比较 [47:35], 但装填时该位恒为 0)
     logic                               req_valid;
-    logic [PA_BASE_WIDTH-1:0]           req_pa;
+    logic [PA_WIDTH-1:0]                req_pa;
     logic                               req_hit;             // 命中
     SDTLB_TAG_ITEM_t                    req_hit_tag_item;    // 命中条目的 Tag 段内容
     SDTLB_DATA_ITEM_t                   req_hit_data_item;   // 命中条目的 Data 段内容
@@ -30,7 +30,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新) 请求
     logic                               inv_all;
     logic                               inv_en;
-    logic [PA_BASE_WIDTH-1:0]           inv_pa;
+    logic [PA_WIDTH-1:0]                inv_pa;
 
     // driver: 驱动 DUT 输入, 回读 DUT 输出
     clocking drv @(posedge clk);

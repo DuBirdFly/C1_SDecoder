@@ -21,7 +21,7 @@ module tb_sdior;
     logic [PA_WIDTH-1:0]            sdt_l1_base;
     logic                           inv_all;
     logic                           inv_en;
-    logic [PA_BASE_WIDTH-1:0]       inv_pa;
+    logic [PA_WIDTH-1:0]            inv_pa;
 
     // 读任务采样回来的值 (组合读, 在"读当拍"的沿上取)
     logic [SDIOR_DATA_WIDTH-1:0]    rd_data;
@@ -216,11 +216,11 @@ module tb_sdior;
 
         // ====================================================================
         // 0x1 SDecoder_IS (W1P): 触发位 bit[63] 写 1 才当拍发 1 拍 inv_en,
-        // 字的低 48 位是整条 PA, 置无效取其中的 PA[47:30]
+        // 字的低 48 位是整条 PA, 原样送到 inv_pa (sdtlb 内部只用 PA[47:30])
         cyc_before = inv_en_cycles;
         cfg_write_start(ADDR_SDECODER_IS, w1p_is(IS_PA_A));
         chk("写 SDecoder_IS: 当拍 inv_en = 1",       inv_en == 1'b1);
-        chk("写 SDecoder_IS: 当拍 inv_pa = PA[47:30]", inv_pa == IS_BASE_A);
+        chk("写 SDecoder_IS: 当拍 inv_pa = 整条 PA[47:0]", inv_pa == IS_PA_A);
         chk("写 SDecoder_IS: 当拍 inv_all = 0",      inv_all == 1'b0);
         cfg_write_end();
         chk("写 SDecoder_IS: inv_en 只占 1 个上升沿",
@@ -244,7 +244,7 @@ module tb_sdior;
         cfg_write_end();
         cfg_write_start(ADDR_SDECODER_IS, w1p_is(IS_PA_C));
         chk("连写 IS 第 2 次: inv_en = 1",           inv_en == 1'b1);
-        chk("连写 IS 第 2 次: inv_pa 跟着换",         inv_pa == IS_BASE_C);
+        chk("连写 IS 第 2 次: inv_pa 跟着换",         inv_pa == IS_PA_C);
         cfg_write_end();
         chk("连写 IS 两次: inv_en 一共占 2 个上升沿",
             (inv_en_cycles - cyc_before) == 2);

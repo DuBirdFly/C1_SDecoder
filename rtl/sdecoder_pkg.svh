@@ -33,6 +33,10 @@ package sdecoder_pkg;
 
     localparam PA_WIDTH = 48;
 
+    // 整条 PA[47:0] 上的字段坐标 (端口收整条 PA, 切片时用这两个常量, 不用手写 30/35)
+    localparam PA_BASE_LSB = PA_WIDTH - PA_BASE_WIDTH;      // 30: PA[47:30] 的 LSB (也是 PA[34:30] 的 LSB)
+    localparam PA_HIGH_LSB = PA_BASE_LSB + PA_UP_WIDTH;     // 35: PA[47:35] 的 LSB
+
     // SDT_L1 条目 (16B), 位域见设计方案 一级表条目格式
     typedef struct packed {
         logic [31:0]                rsvd;

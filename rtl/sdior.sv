@@ -9,8 +9,8 @@
 //   寄存器字宽 64 (见 sdecoder_pkg 的 SDIOR_DATA_WIDTH): 地址类寄存器把整条 PA 填在低 PA_WIDTH 位.
 //     0: SDecoder_IA   W1P: 触发位是字的 bit[0], 写了它就当拍发出 1 拍 inv_all (置无效全部条目)
 //     1: SDecoder_IS   W1P: 触发位是字的 bit[63], 写了它就当拍发出 1 拍 inv_en;
-//                            字的低 PA_WIDTH 位是整条 PA[47:0], 置无效只用到 PA[47:30] (inv_pa),
-//                            即 1GB 粒度, 所以 PA[29:0] 必须为 0
+//                            字的低 PA_WIDTH 位是整条 PA[47:0], 直接送给 sdtlb (inv_pa).
+//                            置无效在 sdtlb 里只用到 PA[47:30], 即 1GB 粒度, 所以 PA[29:0] 必须为 0
 //     2: SDT_L1_BASE   RW : 一级表基地址 PA[47:0], 16B 对界, 复位值 0
 //   时序: 写是同步的 (cfg_wr 在 clk 上升沿生效), 读是组合的 (cfg_rd 当拍给出 cfg_rdata).
 //   W1P 寄存器不留存值: 触发的那一拍把写数据直接送到 inv_pa, 所以 inv_* 天然只有 1 拍, 读回 0.
@@ -33,7 +33,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新): 给 sdtlb, inv_all / inv_en 各只有 1 拍
     output logic                            inv_all,
     output logic                            inv_en,
-    output logic [PA_BASE_WIDTH-1:0]        inv_pa
+    output logic [PA_WIDTH-1:0]             inv_pa
 );
 
     wire wr_ia = cfg_wr && (cfg_addr == ADDR_SDECODER_IA);
@@ -57,7 +57,7 @@ import sdecoder_pkg::*;
     // SDecoder_IA / SDecoder_IS 是 W1P 寄存器: 触发位当拍透传, 不留存值, 所以脉冲只有 1 拍
     assign inv_all = pulse_ia;
     assign inv_en  = pulse_is;
-    assign inv_pa  = cfg_wdata[PA_WIDTH-1 -: PA_BASE_WIDTH];    // 整条 PA 里的 PA[47:30]
+    assign inv_pa  = cfg_wdata[PA_WIDTH-1:0];                   // 寄存器低位就是整条 PA[47:0]
 
     // 读是组合的: 只有读写寄存器给出值, W1P 寄存器读回 0
     // 注: 每个分支都要把整字赋满 —— 只写 cfg_rdata[PA_WIDTH-1:0] 的话, 高位在 always_comb 里

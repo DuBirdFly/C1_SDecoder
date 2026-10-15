@@ -10,7 +10,7 @@ import sdecoder_pkg::*;
 
     // 代换请求
     input  logic                        req_valid,
-    input  logic [PA_BASE_WIDTH-1:0]    req_pa,
+    input  logic [PA_WIDTH-1:0]         req_pa,
     output logic                        req_hit,
 
     // 装填请求
@@ -23,19 +23,25 @@ import sdecoder_pkg::*;
 
     // 置无效 (刷新) 请求, 置无效指定 pa 范围覆盖的条目
     input  logic                        inv_en,
-    input  logic [PA_BASE_WIDTH-1:0]    inv_pa,
+    input  logic [PA_WIDTH-1:0]         inv_pa,
 
     // 本条目内容静默输出
     output SDTLB_TAG_ITEM_t             tag_item
 );
 
-    wire req_high_hit  = (req_pa[PA_BASE_WIDTH-1:PA_UP_WIDTH] == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
-    wire req_range_hit = (req_pa[PA_UP_WIDTH-1:0] >= tag_item.pa_base[PA_UP_WIDTH-1:0]) &&
-                         (req_pa[PA_UP_WIDTH-1:0] <= tag_item.pa_up);
+    // req_pa / inv_pa 收的是整条 PA[47:0], 而条目里只存 PA[47:30] (pa_base) 与段上限 PA[34:30]
+    // (pa_up), 所以命中判定要按"整条 PA 上的位段"切片, 坐标与设计方案 表5 的命中条件一致;
+    // fill_pa_base 收的就是 PA[47:30] (来自只算页号的 sdptw), 可以直接存 / 直接比低位
+    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] req_high = req_pa[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
+    wire [PA_UP_WIDTH-1:0]               req_up   = req_pa[PA_BASE_LSB +: PA_UP_WIDTH];
+    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] inv_high = inv_pa[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
+    wire [PA_UP_WIDTH-1:0]               inv_up   = inv_pa[PA_BASE_LSB +: PA_UP_WIDTH];
 
-    wire inv_high_hit  = (inv_pa[PA_BASE_WIDTH-1:PA_UP_WIDTH] == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
-    wire inv_range_hit = (inv_pa[PA_UP_WIDTH-1:0] >= tag_item.pa_base[PA_UP_WIDTH-1:0]) &&
-                         (inv_pa[PA_UP_WIDTH-1:0] <= tag_item.pa_up);
+    wire req_high_hit  = (req_high == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
+    wire req_range_hit = (req_up >= tag_item.pa_base[PA_UP_WIDTH-1:0]) && (req_up <= tag_item.pa_up);
+
+    wire inv_high_hit  = (inv_high == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
+    wire inv_range_hit = (inv_up >= tag_item.pa_base[PA_UP_WIDTH-1:0]) && (inv_up <= tag_item.pa_up);
 
     // req_match: 请求地址命中本条目 (不含有效位)
     wire req_match = req_high_hit && req_range_hit;
@@ -62,7 +68,9 @@ import sdecoder_pkg::*;
     assign req_hit = req_valid && tag_item.valid && req_match;
 
 `ifdef ASSERT_ON
-    `assert_clk(a_fill_pa_range_valid, (fill_valid == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]))
+    // fill_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]
+    `assert_clk(a_fill_pa_range_valid,
+                ((fill_valid == 1'b0) || (fill_pa_up >= fill_pa_base[PA_UP_WIDTH-1:0])))
 `endif
 
 endmodule
