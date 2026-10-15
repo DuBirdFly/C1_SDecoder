@@ -9,14 +9,14 @@ import sdecoder_pkg::*;
     input  logic                        rst_n,
 
     // 代换请求
-    input  logic                        req_vld,
+    input  logic                        req_valid,
     input  logic [PA_BASE_WIDTH-1:0]    req_pa,
     output logic                        req_hit,
 
     // 装填请求
     input  logic [PA_BASE_WIDTH-1:0]    fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]      fill_pa_up,
-    input  logic                        fill_vld,
+    input  logic                        fill_valid,
 
     // 置无效 (刷新) 请求, 置无效全部 TLB ENTRIES
     input  logic                        inv_all,
@@ -54,15 +54,15 @@ import sdecoder_pkg::*;
         else if (inv_all || inv_match) begin
             tag_item.valid <= 1'b0;
         end
-        else if (fill_vld) begin
-            tag_item <= '{pa_base: fill_pa_base, pa_up: fill_pa_up, valid: fill_vld};
+        else if (fill_valid) begin
+            tag_item <= '{pa_base: fill_pa_base, pa_up: fill_pa_up, valid: fill_valid};
         end
     end
 
-    assign req_hit = req_vld && tag_item.valid && req_match;
+    assign req_hit = req_valid && tag_item.valid && req_match;
 
 `ifdef ASSERT_ON
-    `assert_clk(a_fill_pa_range_valid, (fill_vld == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]))
+    `assert_clk(a_fill_pa_range_valid, (fill_valid == 1'b0) || (fill_pa_up >= fill_pa_base[4:0]))
 `endif
 
 endmodule

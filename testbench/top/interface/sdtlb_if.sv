@@ -12,14 +12,14 @@ import sdecoder_pkg::*;
     // 代换请求 (查表): 请求地址是 PA[47:30] (18 bit, 见 sdecoder_pkg 的 PA_BASE_WIDTH).
     // PA[47] = 1 是 IO 空间, SDecoder 只处理 Mem 空间, 因此断言 PA[47] 为 0 (字段保留这一位
     // 只为维持 48 位地址口径, 索引与 Tag 都比较 [47:35], 但装填时该位恒为 0)
-    logic                               req_vld;
+    logic                               req_valid;
     logic [PA_BASE_WIDTH-1:0]           req_pa;
     logic                               req_hit;             // 命中
     SDTLB_TAG_ITEM_t                    req_hit_tag_item;    // 命中条目的 Tag 段内容
     SDTLB_DATA_ITEM_t                   req_hit_data_item;   // 命中条目的 Data 段内容
 
     // 装填请求 (Page Walk 结果)
-    logic                               fill_vld;
+    logic                               fill_valid;
     logic [PA_BASE_WIDTH-1:0]           fill_pa_base;
     logic [PA_UP_WIDTH-1:0]             fill_pa_up;
     logic [EID_WIDTH-1:0]               fill_eid;
@@ -36,9 +36,9 @@ import sdecoder_pkg::*;
     clocking drv @(posedge clk);
         default input #1 output #1;
 
-        output req_vld;
+        output req_valid;
         output req_pa;
-        output fill_vld;
+        output fill_valid;
         output fill_pa_base;
         output fill_pa_up;
         output fill_eid;
@@ -58,12 +58,12 @@ import sdecoder_pkg::*;
     clocking mon @(posedge clk);
         default input #1 output #1;
 
-        input  req_vld;
+        input  req_valid;
         input  req_pa;
         input  req_hit;
         input  req_hit_tag_item;
         input  req_hit_data_item;
-        input  fill_vld;
+        input  fill_valid;
         input  fill_pa_base;
         input  fill_pa_up;
         input  fill_eid;

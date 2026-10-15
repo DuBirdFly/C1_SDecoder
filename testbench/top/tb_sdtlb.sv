@@ -37,10 +37,10 @@ module tb_sdtlb;
     // DUT 按名字连到接口信号
     sdtlb dut (
         .clk(clk), .rst_n(rst_n),
-        .req_vld(sdtlb_if.req_vld), .req_pa(sdtlb_if.req_pa),
+        .req_valid(sdtlb_if.req_valid), .req_pa(sdtlb_if.req_pa),
         .req_hit(sdtlb_if.req_hit),
         .req_hit_tag_item(sdtlb_if.req_hit_tag_item), .req_hit_data_item(sdtlb_if.req_hit_data_item),
-        .fill_vld(sdtlb_if.fill_vld), .fill_pa_base(sdtlb_if.fill_pa_base), .fill_pa_up(sdtlb_if.fill_pa_up),
+        .fill_valid(sdtlb_if.fill_valid), .fill_pa_base(sdtlb_if.fill_pa_base), .fill_pa_up(sdtlb_if.fill_pa_up),
         .fill_eid(sdtlb_if.fill_eid), .fill_token_id(sdtlb_if.fill_token_id),
         .fill_s_pfn(sdtlb_if.fill_s_pfn), .fill_grn(sdtlb_if.fill_grn),
         .inv_all(sdtlb_if.inv_all), .inv_en(sdtlb_if.inv_en), .inv_pa(sdtlb_if.inv_pa)
@@ -76,8 +76,8 @@ module tb_sdtlb;
 
     // 在时钟块事件上给出查表请求: 请求地址 = {段高位, 段内页号} (PA_BASE_WIDTH bit, 即 PA[47:30];
     // 本 tb 只打 PA[47] = 0 的地址, 因为 SDecoder 只处理 Mem 空间).
-    // 驱动一拍后 req_vld 就自行拉低. 打 1 拍的口径:
-    //   "请求拍" —— DUT 刚在这一沿采到 req_vld / req_pa, 本次请求的响应还没出来;
+    // 驱动一拍后 req_valid 就自行拉低. 打 1 拍的口径:
+    //   "请求拍" —— DUT 刚在这一沿采到 req_valid / req_pa, 本次请求的响应还没出来;
     //   "响应拍" —— 请求拍的下一拍, 这一拍采到的才是本次请求的响应.
     // 本任务等到响应拍才返回, 返回时 rsp_* 即本次请求的响应 (见 sample_rsp);
     // 所以各测试点都是"驱动 -> 取值 -> 再等若干拍才动下一次激励"的次序.
@@ -85,10 +85,10 @@ module tb_sdtlb;
         logic [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] high,
         logic [PA_UP_WIDTH-1:0]               idx
     );
-        sdtlb_if.drv.req_vld <= 1'b1;
+        sdtlb_if.drv.req_valid <= 1'b1;
         sdtlb_if.drv.req_pa  <= {high, idx};
         @(sdtlb_if.drv);                    // 请求拍
-        sdtlb_if.drv.req_vld <= 1'b0;
+        sdtlb_if.drv.req_valid <= 1'b0;
         @(sdtlb_if.drv);                    // 响应拍 (打 1 拍)
         sample_rsp();
     endtask
@@ -108,9 +108,9 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_token_id <= tok;
         sdtlb_if.drv.fill_s_pfn    <= pfn;
         sdtlb_if.drv.fill_grn      <= grn;
-        sdtlb_if.drv.fill_vld      <= 1'b1;
+        sdtlb_if.drv.fill_valid      <= 1'b1;
         @(sdtlb_if.drv);
-        sdtlb_if.drv.fill_vld      <= 1'b0;
+        sdtlb_if.drv.fill_valid      <= 1'b0;
     endtask
 
     // 按地址置无效, 拉高一拍
@@ -129,9 +129,9 @@ module tb_sdtlb;
     endtask
 
     initial begin
-        sdtlb_if.drv.req_vld     <= 1'b0;
+        sdtlb_if.drv.req_valid     <= 1'b0;
         sdtlb_if.drv.req_pa      <= '0;
-        sdtlb_if.drv.fill_vld      <= 1'b0;
+        sdtlb_if.drv.fill_valid      <= 1'b0;
         sdtlb_if.drv.fill_pa_base  <= '0;
         sdtlb_if.drv.fill_pa_up    <= '0;
         sdtlb_if.drv.fill_eid      <= '0;
@@ -182,13 +182,13 @@ module tb_sdtlb;
         // ====================================================================
         // 打 1 拍: 命中向量的比较链在请求拍末才被采到, 请求拍看不到本次请求的响应,
         // 响应要到下一拍才有效 (两次采样分别落在请求拍与响应拍)
-        sdtlb_if.drv.req_vld <= 1'b1;
+        sdtlb_if.drv.req_valid <= 1'b1;
         sdtlb_if.drv.req_pa  <= {12'hfff, 5'h1f};
         @(sdtlb_if.drv);                                // 请求拍
         sample_rsp();
         chk("latency: 请求当拍无命中", rsp_hit == 1'b0);
         chk("latency: 请求当拍读出全 0", (rsp_tag == '0) && (rsp_data == '0));
-        sdtlb_if.drv.req_vld <= 1'b0;
+        sdtlb_if.drv.req_valid <= 1'b0;
         @(sdtlb_if.drv);                                // 响应拍
         sample_rsp();
         chk("latency: 下一拍才命中", rsp_hit == 1'b1);
@@ -274,9 +274,9 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 流水线: req_vld 可以拍拍有效 (本拍给地址, 下一拍换新地址且 req_vld 保持),
+        // 流水线: req_valid 可以拍拍有效 (本拍给地址, 下一拍换新地址且 req_valid 保持),
         // 响应逐拍滞后 1 拍出现, 且不会串到别的地址上
-        sdtlb_if.drv.req_vld <= 1'b1;
+        sdtlb_if.drv.req_valid <= 1'b1;
         sdtlb_if.drv.req_pa  <= {12'hfff, 5'h1f};       // A: 命中 (s_pfn 18'h33333)
         @(sdtlb_if.drv);                                // 请求拍 A
         sdtlb_if.drv.req_pa  <= {12'h001, 5'd0};        // B: 命中 (s_pfn 18'h0cccc)
@@ -291,7 +291,7 @@ module tb_sdtlb;
         chk("pipeline: 第 3 拍出 B 的响应",
             (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h001, 5'd0}) &&
             (rsp_data.s_pfn == 18'h0cccc));
-        sdtlb_if.drv.req_vld <= 1'b0;
+        sdtlb_if.drv.req_valid <= 1'b0;
         @(sdtlb_if.drv);                                // 响应拍 C
         sample_rsp();
         chk("pipeline: 第 4 拍出 C 的响应 (未命中)",
@@ -299,13 +299,13 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // req_vld 门控: 地址仍落在段内, 但请求只拍了一拍; 响应只在该请求的下一拍有效,
+        // req_valid 门控: 地址仍落在段内, 但请求只拍了一拍; 响应只在该请求的下一拍有效,
         // 再往后 req_hit 与读出数据都要归 0
         set_req(.high(12'h002), .idx(5'd6));
-        chk("req_vld: 请求拍有效 -> 下一拍命中", rsp_hit == 1'b1);
+        chk("req_valid: 请求拍有效 -> 下一拍命中", rsp_hit == 1'b1);
         repeat (10) @(sdtlb_if.drv);
         sample_rsp();
-        chk("req_vld: 请求已撤 -> 命中与读出数据都归 0",
+        chk("req_valid: 请求已撤 -> 命中与读出数据都归 0",
             (rsp_hit == 1'b0) &&
             (rsp_tag == '0) &&
             (rsp_data == '0));
@@ -416,10 +416,10 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_token_id <= 10'h0c0;
         sdtlb_if.drv.fill_s_pfn    <= 18'h0c0c0;
         sdtlb_if.drv.fill_grn      <= 1'b0;
-        sdtlb_if.drv.fill_vld      <= 1'b1;
+        sdtlb_if.drv.fill_valid      <= 1'b1;
         sdtlb_if.drv.inv_all       <= 1'b1;
         @(sdtlb_if.drv);
-        sdtlb_if.drv.fill_vld <= 1'b0;
+        sdtlb_if.drv.fill_valid <= 1'b0;
         sdtlb_if.drv.inv_all  <= 1'b0;
         repeat (10) @(sdtlb_if.drv);
 
@@ -467,11 +467,11 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_token_id <= 10'h3ff;
         sdtlb_if.drv.fill_s_pfn    <= 18'h3ffff;
         sdtlb_if.drv.fill_grn      <= 1'b0;
-        sdtlb_if.drv.fill_vld      <= 1'b1;
+        sdtlb_if.drv.fill_valid      <= 1'b1;
         sdtlb_if.drv.inv_en        <= 1'b1;
         sdtlb_if.drv.inv_pa        <= {12'h100, 5'd0};
         @(sdtlb_if.drv);
-        sdtlb_if.drv.fill_vld <= 1'b0;
+        sdtlb_if.drv.fill_valid <= 1'b0;
         sdtlb_if.drv.inv_en   <= 1'b0;
         repeat (10) @(sdtlb_if.drv);
 

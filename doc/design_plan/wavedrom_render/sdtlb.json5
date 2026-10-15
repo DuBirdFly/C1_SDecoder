@@ -1,8 +1,8 @@
 // sdtlb 查表时序: 命中向量打 1 拍后再用
 //
-//   请求拍 —— req_vld / req_pa 被 sdtlb 采到的那一拍, 这一拍还看不到本次请求的响应;
+//   请求拍 —— req_valid / req_pa 被 sdtlb 采到的那一拍, 这一拍还看不到本次请求的响应;
 //   响应拍 —— 请求拍的下一拍, req_hit 与命中读出 (req_hit_tag_item / req_hit_data_item) 才有效.
-//   有效 = clk 上升沿时该位置位 (即图中该拍内的取值); req_vld 可以拍拍有效, 响应逐拍滞后 1 拍.
+//   有效 = clk 上升沿时该位置位 (即图中该拍内的取值); req_valid 可以拍拍有效, 响应逐拍滞后 1 拍.
 //
 //   内部: sdtlb_tag 组合输出 tag_hit_vector (128 条目比较链), 打 1 拍得 tag_hit_vector_r1;
 //         req_hit = |tag_hit_vector_r1, 两个读出 mux 也用 r1 选路, 比较链只到触发器.
@@ -22,12 +22,12 @@
         },
         {},
         {
-            "name": "req_vld (请求拍)",
+            "name": "req_valid (请求拍)",
             "wave": "010011000",
             "node": ".a..b...."
         },
         {
-            "name": "req_pa[16:0]",
+            "name": "req_pa[17:0]",
             "wave": "x2xx34xxx",
             "data": ["A", "B", "C"]
         },

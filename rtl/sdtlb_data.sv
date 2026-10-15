@@ -8,7 +8,7 @@ import sdecoder_pkg::*;
     input  logic                                clk,
     input  logic                                rst_n,
 
-    input  logic [SDTLB_ENTRIES-1:0]            fill_vld_vector,
+    input  logic [SDTLB_ENTRIES-1:0]            fill_valid_vector,
     input  logic [EID_WIDTH-1:0]                fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]           fill_token_id,
     input  logic [S_PFN_WIDTH-1:0]              fill_s_pfn,
@@ -24,7 +24,7 @@ import sdecoder_pkg::*;
                 .clk           (clk),
                 .rst_n         (rst_n),
 
-                .fill_vld      (fill_vld_vector[genvar_i]),
+                .fill_valid    (fill_valid_vector[genvar_i]),
                 .fill_eid      (fill_eid),
                 .fill_token_id (fill_token_id),
                 .fill_s_pfn    (fill_s_pfn),
