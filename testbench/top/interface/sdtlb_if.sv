@@ -25,7 +25,6 @@ import sdecoder_pkg::*;
     logic [EID_WIDTH-1:0]               fill_eid;
     logic [TOKEN_ID_WIDTH-1:0]          fill_token_id;
     logic [S_PFN_WIDTH-1:0]             fill_s_pfn;
-    logic                               fill_grn;
 
     // 置无效 (刷新) 请求
     logic                               inv_all;
@@ -44,7 +43,6 @@ import sdecoder_pkg::*;
         output fill_eid;
         output fill_token_id;
         output fill_s_pfn;
-        output fill_grn;
         output inv_all;
         output inv_en;
         output inv_pa;
@@ -69,7 +67,6 @@ import sdecoder_pkg::*;
         input  fill_eid;
         input  fill_token_id;
         input  fill_s_pfn;
-        input  fill_grn;
         input  inv_all;
         input  inv_en;
         input  inv_pa;

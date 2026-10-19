@@ -13,7 +13,6 @@ import sdecoder_pkg::*;
     input  logic [EID_WIDTH-1:0]        fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]   fill_token_id,
     input  logic [S_PFN_WIDTH-1:0]      fill_s_pfn,
-    input  logic                        fill_grn,
 
     // 本条目内容静默输出
     output SDTLB_DATA_ITEM_t            data_item
@@ -27,8 +26,7 @@ import sdecoder_pkg::*;
             data_item <= '{
                 eid:      fill_eid,
                 token_id: fill_token_id,
-                s_pfn:    fill_s_pfn,
-                grn:      fill_grn
+                s_pfn:    fill_s_pfn
             };
         end
     end

@@ -26,7 +26,7 @@ flowchart LR
 本方案描述 SDecoder IP 内部的以下核心模块:
 
 - **SDTLB**: 代换快表, 缓存已经算出来的 PA 到 SLMD 映射, 覆盖绝大多数访存
-- **MFIFO**: 未命中队列, 暂存 SDTLB 未命中的 `PA[47:0]` 和 `req_id`, 深度 4, 让命中路径不被未命中阻塞
+- **MISS_FIFO**: 未命中队列, 暂存 SDTLB 未命中的 `PA[47:0]` 和 `req_id`, 深度 4, 让命中路径不被未命中阻塞
 - **SDPTW**: Page Walk 模块, SDTLB 未命中时按两级代换表算出结果, 并把结果回填 SDTLB
 - **SDIOR**: IO 寄存器模块, 提供 SDecoder 的控制/配置寄存器
 - **SLMD_CALC**: SLMD 计算模块, 用于计算 SLMD 值 (主要是 SLA, EID 和 TokenID 原样透传)
@@ -38,7 +38,7 @@ flowchart LR
 | SDecoder | SWLink Decoder |
 | SDTLB | SDecoder TLB |
 | SDPTW | SDecoder Page Table Walker |
-| MFIFO | Miss FIFO |
+| MISS_FIFO | Miss FIFO |
 | SLMD | SWLink Memory Descriptor |
 | EID | Entity Identifier |
 | TokenID | Token Identifier |
@@ -198,8 +198,8 @@ flowchart LR
     REQ{{"PA 代换请求接口<br/>req_* + req_id"}} <-->|"req_valid / req_ready"| SDTLB["SDTLB<br/>128 条目全相联"]
     REQ -.->|"PA[34:0]"| CALC["SLMD_CALC<br/>SLA 计算与 SLMD 组装"]
     SDTLB -->|"命中 (含 req_id)"| CALC
-    SDTLB -->|"未命中 (PA + req_id)"| MFIFO["未命中队列<br/>深度 4"]
-    MFIFO --> SDPTW["SDPTW<br/>两级 Page Walk"]
+    SDTLB -->|"未命中 (PA + req_id)"| MISS_FIFO["MISS_FIFO<br/>深度 4"]
+    MISS_FIFO --> SDPTW["SDPTW<br/>两级 Page Walk"]
     SDPTW -->|"读条目"| TW{{"Page Walk 访存接口<br/>tw_*"}}
     SDPTW -->|"回填"| SDTLB
     SDPTW -->|"结果 + req_id"| CALC
@@ -209,7 +209,7 @@ flowchart LR
 
 SDIOR 是相对独立的寄存器模块, 图上只画它与配置与刷新接口的连接; 它与其他模块的控制关系在 SDIOR 设计一节说明.
 
-初版采用做法 B (hit-under-miss, 允许乱序响应): SDTLB 未命中时, 把 `PA[47:0]` 和 `req_id` 写入未命中队列 (深度 4); SDPTW 按队列顺序走表; 命中路径直通 SLMD_CALC, 不需要等未命中. SDPTW 只输出原始条目, `rsp_sdt_l2_read` 和 `req_id`, 不直接产生响应码; 段/页选择, SLA 拼装和 `rsp_fcode` 由 SLMD_CALC 完成. 响应可以乱序, 用 `rsp_id` 回显 `req_id` 匹配. 未命中队列满或响应 FIFO 将满时, 顶层拉低 `req_ready`; 四种做法与取舍见 [未命中队列与响应保序](未命中队列与响应保序.md).
+初版采用做法 B (hit-under-miss, 允许乱序响应): SDTLB 未命中时, 把 `PA[47:0]` 和 `req_id` 写入 MISS_FIFO (深度 4); SDPTW 按队列顺序走表; 命中路径直通 SLMD_CALC, 不需要等未命中. SDPTW 只输出原始条目, `rsp_sdt_l2_read` 和 `req_id`, 不直接产生响应码; 段/页选择, SLA 拼装和 `rsp_fcode` 由 SLMD_CALC 完成. 响应可以乱序, 用 `rsp_id` 回显 `req_id` 匹配. MISS_FIFO 满或响应 FIFO 将满时, 顶层拉低 `req_ready`; 四种做法与取舍见 [MISS_FIFO 与响应保序](未命中队列与响应保序.md).
 
 ### 接口
 
@@ -242,6 +242,8 @@ SDecoder 对外使用 native 接口 (自定义 valid/ready 握手), 不引入 AM
 | `SDIOR_DATA_WIDTH` | 64 | `cfg_*` 寄存器字宽 |
 
 一级/二级条目宽度由表项格式固定 (16B / 8B), 不作为可配参数; 见代换表结构和计算表项地址.
+
+`MISS_FIFO_DEPTH` 和 `RSP_FIFO_DEPTH` 是内部缓冲深度, 不对应接口信号. `RSP_FIFO_DEPTH = 2` 的原因: 命中通路本身有 1 拍 (SDTLB hit 向量打拍), 加上 SLMD_CALC 组装, 最坏情况下可能有 1-2 个命中响应在途; 再叠加一个未命中结果, 2 深可以吸收下游 `rsp_ready` 反压一拍, 并在命中/未命中同拍就绪时先收一个, 另一个等下一拍. 1 深在连续命中且下游反压时会溢出, 更深对首版没有明显收益. `req_ready` 在 FIFO 将满时拉低, `rsp_ready` 低时 FIFO 头保持; FIFO 只做暂存, 不重排, 乱序来自命中绕过未命中.
 
 #### 代换请求接口
 
@@ -456,7 +458,7 @@ flowchart LR
 - 装填在时钟沿更新 Tag/Data 与 `Valid`; 查表只读, 同拍请求看到的是装填前的条目.
 - 请求的 `PA[29:0]` 不参与查表, 直接送到 SLMD_CALC 拼 SLA 的低位.
 - 未命中时 SDTLB 不产生响应, 由顶层启动 SDPTW.
-- SDTLB 支持连续查表; 未命中不阻塞后续命中, 未命中请求带 `req_id` 进入 MFIFO.
+- SDTLB 支持连续查表; 未命中不阻塞后续命中, 未命中请求带 `req_id` 进入 MISS_FIFO.
 
 命中后的 SLA:
 
@@ -495,30 +497,30 @@ SLA[29:0]  = PA[29:0]
 - `inv_pa[29:0]` 不使用; 置无效是 1GB 粒度, 软件必须把低 30 位写 0.
 - 置无效只清 `Valid`; Tag/Data 的其他字段可以保留.
 - 同一 entry 上置无效优先于装填; 同一拍冲突时装填丢弃.
-- **初版限制**: 不实现 epoch / flush / busy. 如果未命中队列里的请求或一次 walk 在 `inv_all` 之前已经读到旧条目, 它在 `inv_all` 之后仍可能把旧映射回填进 SDTLB; 软件在改表 / 置无效前应保证没有未完成的请求 (含 MFIFO 里的), 或者接受这个风险.
+- **初版限制**: 不实现 epoch / flush / busy. 如果未命中队列里的请求或一次 walk 在 `inv_all` 之前已经读到旧条目, 它在 `inv_all` 之后仍可能把旧映射回填进 SDTLB; 软件在改表 / 置无效前应保证没有未完成的请求 (含 MISS_FIFO 里的), 或者接受这个风险.
 
 ## SDPTW 设计
 
 ### 概述
 
-SDPTW 从 SDTLB 的未命中队列 MFIFO 取请求, 按两级代换表读出原始条目, 并给出 "是否读了二级表" 的过程标志; 它不判断异常, 异常由 SLMD_CALC 统一产生.
+SDPTW 从 SDTLB 的未命中队列 MISS_FIFO 取请求, 按两级代换表读出原始条目, 并给出 "是否读了二级表" 的过程标志; 它不判断异常, 异常由 SLMD_CALC 统一产生.
 
 | 项目 | 规格 |
 | --- | --- |
-| 功能 | 从 MFIFO 取请求, 读 SDT_L1 / SDT_L2, 输出原始条目 |
+| 功能 | 从 MISS_FIFO 取请求, 读 SDT_L1 / SDT_L2, 输出原始条目 |
 | 并行度 | 1, 同一时刻只处理一个 walk |
-| 队列 | MFIFO, 深度 4, 表项 `PA[47:0]` + `req_id` |
+| 队列 | MISS_FIFO, 深度 4, 表项 `PA[47:0]` + `req_id` |
 | 最坏访存 | 2 次: 一级 16B, 二级 8B |
 | 读数据宽度 | 16B (`tw_rdata`) |
 | 结果 | 一级条目, 二级条目, `rsp_sdt_l2_read`, `req_id`, 请求 `PA[34:0]` |
 | 异常 | 不产生; 由 SLMD_CALC 检查 |
 | 完成 | 结果保持到 SLMD_CALC 取走 |
 
-- 初版 hit-under-miss: SDPTW 单 walker 按 MFIFO 顺序处理未命中; 命中不受 SDPTW 忙影响; MFIFO 满时顶层反压上游.
+- 初版 hit-under-miss: SDPTW 单 walker 按 MISS_FIFO 顺序处理未命中; 命中不受 SDPTW 忙影响; MISS_FIFO 满时顶层反压上游.
 - 一次 walk 只发一个 AR, 收到 R 后再决定是否发第二个 AR; 不支持 burst / 写 / 乱序.
 - 首版不实现读错误响应 (`tw_rresp` 不在接口里); 本地存储读失败属于集成或系统问题, 不在 SDPTW 里恢复.
 
-### 未命中队列 MFIFO
+### 未命中队列 MISS_FIFO
 
 - 深度 4, 表项 56 bit: `PA[47:0]` (48) + `req_id` (8).
 - SDTLB 未命中时写入; SDPTW 在 `IDLE` 取出一条并锁存; 取出后该表项空出.
@@ -545,7 +547,7 @@ stateDiagram-v2
 
 状态说明:
 
-- `IDLE`: 等 MFIFO 非空; 接收时锁存 `PA[47:0]` 和 `req_id`.
+- `IDLE`: 等 MISS_FIFO 非空; 接收时锁存 `PA[47:0]` 和 `req_id`.
 - `AR_L1`: 发一级读地址, 等 `arready`.
 - `R_L1`: 收 16B 一级条目; 若 `l1_stop`, 直接 `DONE` (段命中或一级无效); 否则发二级读.
 - `AR_L2`: 发二级读地址, 等 `arready`.
@@ -554,7 +556,7 @@ stateDiagram-v2
 
 ### Page Walk 流程
 
-1. 顶层在 SDTLB 未命中时, 把 `PA[47:0]` 和 `req_id` 写入 MFIFO; SDPTW 在 `IDLE` 从 MFIFO 取请求, 锁存 `PA[47:0]` 和 `req_id`, 用 `PA[47:30]` 走表.
+1. 顶层在 SDTLB 未命中时, 把 `PA[47:0]` 和 `req_id` 写入 MISS_FIFO; SDPTW 在 `IDLE` 从 MISS_FIFO 取请求, 锁存 `PA[47:0]` 和 `req_id`, 用 `PA[47:30]` 走表.
 2. 一级表地址: `{SDT_L1_BASE[47:4], 4'h0} + PA[47:35] * 16`; 读 16B.
 3. 收到一级条目后判段:
    - `l1.valid = 0`: 不再读二级 (`L2_BASE` 不可信), 直接 `DONE`.
@@ -576,8 +578,8 @@ stateDiagram-v2
 - 一级条目: 16B 原始条目.
 - 二级条目: 8B 原始条目; 没读二级时清 0.
 - `rsp_sdt_l2_read`: 本次是否读了二级; 0 表示只读了一级.
-- `req_id`: 从 MFIFO 表项带出, 用于 SLMD_CALC 生成 `rsp_id`.
-- 请求 `PA[34:0]`: 段偏移用 `PA[34:30]`, 页内偏移用 `PA[29:0]`; 从 MFIFO 表项带出.
+- `req_id`: 从 MISS_FIFO 表项带出, 用于 SLMD_CALC 生成 `rsp_id`.
+- 请求 `PA[34:0]`: 段偏移用 `PA[34:30]`, 页内偏移用 `PA[29:0]`; 从 MISS_FIFO 表项带出.
 - 结果有效在 `DONE` 拉高; 结果保持到 SLMD_CALC 取走 (`result_taken`).
 - `rsp_sdt_l2_read` 是 SLMD_CALC 区分 "段命中" 和 "一级无效 / 段外且二级无效" 的关键; 这两种情况的一级/二级 Valid 看起来一样.
 - 异常由 SLMD_CALC 产生; SDPTW 不输出 `rsp_fcode`.
@@ -700,7 +702,7 @@ SDIOR 是相对独立的 IO 寄存器模块, 提供三个 64 bit 寄存器: 全�
    - 大范围变化: 写 `SDecoder_IA`, 清全部条目.
    - 局部变化: 写 `SDecoder_IS`, 清覆盖该 `PA[47:30]` 的条目.
 3. 修改 `SDT_L1_BASE` 后必须写一次 `SDecoder_IA`, 否则会残留按旧基地址算出的条目.
-4. 首版没有 enable / busy: 软件在改表 / 置无效前应保证没有未完成的请求 (含 MFIFO 里的); 详细限制见 SDTLB 的 "置无效".
+4. 首版没有 enable / busy: 软件在改表 / 置无效前应保证没有未完成的请求 (含 MISS_FIFO 里的); 详细限制见 SDTLB 的 "置无效".
 
 ### 与其他模块的连接
 

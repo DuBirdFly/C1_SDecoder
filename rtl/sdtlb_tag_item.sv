@@ -30,7 +30,7 @@ import sdecoder_pkg::*;
 );
 
     // req_pa / inv_pa 收的是整条 PA[47:0], 而条目里只存 PA[47:30] (pa_base) 与段上限 PA[34:30]
-    // (pa_up), 所以命中判定要按"整条 PA 上的位段"切片, 坐标与设计方案 表5 的命中条件一致;
+    // (pa_up), 所以命中判定要按"整条 PA 上的位段"切片, 坐标与设计方案 SDTLB 命中条件一致;
     // fill_pa_base 收的就是 PA[47:30] (来自只算页号的 sdptw), 可以直接存 / 直接比低位
     wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] req_high = req_pa[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
     wire [PA_UP_WIDTH-1:0]               req_up   = req_pa[PA_BASE_LSB +: PA_UP_WIDTH];

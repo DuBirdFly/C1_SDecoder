@@ -42,7 +42,7 @@ module tb_sdtlb;
         .req_hit_tag_item(sdtlb_if.req_hit_tag_item), .req_hit_data_item(sdtlb_if.req_hit_data_item),
         .fill_valid(sdtlb_if.fill_valid), .fill_pa_base(sdtlb_if.fill_pa_base), .fill_pa_up(sdtlb_if.fill_pa_up),
         .fill_eid(sdtlb_if.fill_eid), .fill_token_id(sdtlb_if.fill_token_id),
-        .fill_s_pfn(sdtlb_if.fill_s_pfn), .fill_grn(sdtlb_if.fill_grn),
+        .fill_s_pfn(sdtlb_if.fill_s_pfn),
         .inv_all(sdtlb_if.inv_all), .inv_en(sdtlb_if.inv_en), .inv_pa(sdtlb_if.inv_pa)
     );
 
@@ -101,15 +101,13 @@ module tb_sdtlb;
         input logic [PA_UP_WIDTH-1:0]               up,
         input logic [EID_WIDTH-1:0]                 eid,
         input logic [TOKEN_ID_WIDTH-1:0]            tok,
-        input logic [S_PFN_WIDTH-1:0]               pfn,
-        input logic                                 grn
+        input logic [S_PFN_WIDTH-1:0]               pfn
     );
         sdtlb_if.drv.fill_pa_base  <= base;
         sdtlb_if.drv.fill_pa_up    <= up;
         sdtlb_if.drv.fill_eid      <= eid;
         sdtlb_if.drv.fill_token_id <= tok;
         sdtlb_if.drv.fill_s_pfn    <= pfn;
-        sdtlb_if.drv.fill_grn      <= grn;
         sdtlb_if.drv.fill_valid      <= 1'b1;
         @(sdtlb_if.drv);
         sdtlb_if.drv.fill_valid      <= 1'b0;
@@ -139,7 +137,6 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_eid      <= '0;
         sdtlb_if.drv.fill_token_id <= '0;
         sdtlb_if.drv.fill_s_pfn    <= '0;
-        sdtlb_if.drv.fill_grn      <= 1'b0;
         sdtlb_if.drv.inv_all     <= 1'b0;
         sdtlb_if.drv.inv_en      <= 1'b0;
         sdtlb_if.drv.inv_pa      <= '0;
@@ -163,8 +160,7 @@ module tb_sdtlb;
             .up(5'h1f),
             .eid('1),
             .tok('1),
-            .pfn(18'h33333),
-            .grn(1'b0)
+            .pfn(18'h33333)
         );
         repeat (10) @(sdtlb_if.drv);
 
@@ -177,8 +173,8 @@ module tb_sdtlb;
             (rsp_tag.valid == 1'b1));
         chk("page: Data struct (eid/token_id)",
             (rsp_data.eid == '1) && (rsp_data.token_id == '1));
-        chk("page: Data struct (s_pfn/grn)",
-            (rsp_data.s_pfn == 18'h33333) && (rsp_data.grn == 1'b0));
+        chk("page: Data struct (s_pfn)",
+            (rsp_data.s_pfn == 18'h33333));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -211,8 +207,7 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h055),
             .tok(10'h0aa),
-            .pfn(18'h0cccc),
-            .grn(1'b0)
+            .pfn(18'h0cccc)
         );
         repeat (10) @(sdtlb_if.drv);
 
@@ -232,14 +227,13 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 段式条目 (Grn = 1): pa_up > pa_base[4:0], 一个条目覆盖 4~8 共 5 个 1GB 页
+        // 段式条目: pa_up > pa_base[4:0], 一个条目覆盖 4~8 共 5 个 1GB 页
         fill_one(
             .base({12'h002, 5'd4}),
             .up(5'd8),
             .eid(11'h123),
             .tok(10'h2aa),
-            .pfn(18'h15555),
-            .grn(1'b1)
+            .pfn(18'h15555)
         );
         repeat (10) @(sdtlb_if.drv);
 
@@ -252,10 +246,9 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h002), .idx(5'd6));
-        chk("seg: 中间命中且 Grn = 1",
+        chk("seg: 中间命中",
             (rsp_hit == 1'b1) &&
-            (rsp_data.s_pfn == 18'h15555) &&
-            (rsp_data.grn == 1'b1));
+            (rsp_data.s_pfn == 18'h15555));
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h002), .idx(5'd8));
@@ -332,8 +325,7 @@ module tb_sdtlb;
             .up(5'd20),
             .eid(11'h0f0),
             .tok(10'h0f0),
-            .pfn(18'h0f0f0),
-            .grn(1'b0)
+            .pfn(18'h0f0f0)
         );
         repeat (10) @(sdtlb_if.drv);
 
@@ -371,8 +363,7 @@ module tb_sdtlb;
             .up(5'd20),
             .eid(11'h0e0),
             .tok(10'h0e0),
-            .pfn(18'h0e0e0),
-            .grn(1'b0)
+            .pfn(18'h0e0e0)
         );
         repeat (10) @(sdtlb_if.drv);
 
@@ -388,8 +379,7 @@ module tb_sdtlb;
             .up(5'd1),
             .eid(11'h0b0),
             .tok(10'h0b0),
-            .pfn(18'h0b0b0),
-            .grn(1'b0)
+            .pfn(18'h0b0b0)
         );
         repeat (10) @(sdtlb_if.drv);
         set_req(.high(12'h030), .idx(5'd1));
@@ -411,8 +401,7 @@ module tb_sdtlb;
             .up(5'd1),
             .eid(11'h0a0),
             .tok(10'h0a0),
-            .pfn(18'h0a0a0),
-            .grn(1'b0)
+            .pfn(18'h0a0a0)
         );
         repeat (10) @(sdtlb_if.drv);
 
@@ -428,7 +417,6 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_eid      <= 11'h0c0;
         sdtlb_if.drv.fill_token_id <= 10'h0c0;
         sdtlb_if.drv.fill_s_pfn    <= 18'h0c0c0;
-        sdtlb_if.drv.fill_grn      <= 1'b0;
         sdtlb_if.drv.fill_valid      <= 1'b1;
         sdtlb_if.drv.inv_all       <= 1'b1;
         @(sdtlb_if.drv);
@@ -453,8 +441,7 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h001),
             .tok(10'h001),
-            .pfn(18'h00001),
-            .grn(1'b0)
+            .pfn(18'h00001)
         );
         for (int i = 1; i < 128; i++) begin
             fill_one(
@@ -462,8 +449,7 @@ module tb_sdtlb;
                 .up(5'(i % 32)),
                 .eid(11'(i)),
                 .tok(10'(i)),
-                .pfn(18'(i)),
-                .grn(1'b0)
+                .pfn(18'(i))
             );
         end
         repeat (10) @(sdtlb_if.drv);
@@ -479,7 +465,6 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_eid      <= 11'h7ff;
         sdtlb_if.drv.fill_token_id <= 10'h3ff;
         sdtlb_if.drv.fill_s_pfn    <= 18'h3ffff;
-        sdtlb_if.drv.fill_grn      <= 1'b0;
         sdtlb_if.drv.fill_valid      <= 1'b1;
         sdtlb_if.drv.inv_en        <= 1'b1;
         sdtlb_if.drv.inv_pa        <= {12'h100, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
@@ -498,8 +483,7 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h7fe),
             .tok(10'h3fe),
-            .pfn(18'h3fffe),
-            .grn(1'b0)
+            .pfn(18'h3fffe)
         );
         repeat (10) @(sdtlb_if.drv);
 

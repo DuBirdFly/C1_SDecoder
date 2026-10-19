@@ -25,7 +25,6 @@ import sdecoder_pkg::*;
     input  logic [EID_WIDTH-1:0]                fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]           fill_token_id,
     input  logic [S_PFN_WIDTH-1:0]              fill_s_pfn,
-    input  logic                                fill_grn,
 
     // 置无效 (刷新): 只作用于 Tag 侧的有效位; 地址也是整条 PA[47:0]
     input  logic                                inv_all,
@@ -93,7 +92,6 @@ import sdecoder_pkg::*;
         .fill_eid           (fill_eid           ),
         .fill_token_id      (fill_token_id      ),
         .fill_s_pfn         (fill_s_pfn         ),
-        .fill_grn           (fill_grn           ),
 
         .data_item          (data_item          )
     );
