@@ -1,9 +1,7 @@
-`ifndef _TEST_PKG_SVH_
-`define _TEST_PKG_SVH_
+`ifndef _DUMP_WAVE_PKG_SVH_
+`define _DUMP_WAVE_PKG_SVH_
 
-package test_pkg;
-
-    import uvm_pkg::*;
+package dump_wave_pkg;
 
     parameter VCS_FILENAME = "output/wave/out.vcd";
     parameter FSDB_FILENAME = "output/wave/novas.fsdb";
@@ -12,4 +10,4 @@ package test_pkg;
 
 endpackage
 
-`endif // _TEST_PKG_SVH_
+`endif // _DUMP_WAVE_PKG_SVH_

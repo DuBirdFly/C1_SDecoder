@@ -79,7 +79,7 @@ module tb_sdior;
     initial begin
         $display("===============================================");
         $display("Dumping FSDB waveforms");
-        $fsdbAutoSwitchDumpfile(test_pkg::FSDB_LIMIT_SIZE, test_pkg::FSDB_FILENAME, test_pkg::FSDB_FILE_AMOUNT);
+        $fsdbAutoSwitchDumpfile(dump_wave_pkg::FSDB_LIMIT_SIZE, dump_wave_pkg::FSDB_FILENAME, dump_wave_pkg::FSDB_FILE_AMOUNT);
         $fsdbDumpvars(0, tb_sdior, "+all");
         $display("===============================================");
     end

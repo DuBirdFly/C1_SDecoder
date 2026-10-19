@@ -1,15 +1,27 @@
 // utility files
 ./testbench/utils/utils_pkg.svh
+./testbench/utils/dump_wave_pkg.svh
 
 // UVM files
 ./testbench/inc/uvm_header.sv
 
-./testbench/test/test_pkg.svh
-./testbench/test/smoke/TestBase.sv
-./testbench/test/regress/TestRegress.sv
-
 // interface files
 ./testbench/top/interface/sdtlb_if.sv
+./testbench/top/interface/sdecoder_if.sv
+
+// sequence library
+./testbench/test/seqlib/sdecoder_seq_lib.sv
+
+// environment
+./testbench/env/sdecoder_sqr.sv
+./testbench/env/sdecoder_drv.sv
+./testbench/env/sdecoder_mon.sv
+./testbench/env/sdecoder_agt.sv
+./testbench/env/sdecoder_env.sv
+
+// tests
+./testbench/test/smoke/TestBase.sv
+./testbench/test/regress/TestRegress.sv
 
 // Testbench top files
 ./testbench/top/crg.sv
