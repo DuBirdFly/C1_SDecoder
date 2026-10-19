@@ -31,6 +31,8 @@ package sdecoder_pkg;
     localparam SDTLB_DATA_ITEM_WIDTH = $bits(SDTLB_DATA_ITEM_t);
 
     localparam PA_WIDTH = 48;
+    localparam REQ_ID_WIDTH = 8;
+    localparam SLA_WIDTH = 48;
 
     // 整条 PA[47:0] 上的字段坐标 (端口收整条 PA, 切片时用这两个常量, 不用手写 30/35)
     localparam PA_BASE_LSB = PA_WIDTH - PA_BASE_WIDTH;      // 30: PA[47:30] 的 LSB (也是 PA[34:30] 的 LSB)

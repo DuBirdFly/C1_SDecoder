@@ -13,6 +13,7 @@
 
 // Testbench top files
 ./testbench/top/crg.sv
+./testbench/top/tb_sdecoder.sv
 ./testbench/top/tb_sdtlb.sv
 ./testbench/top/tb_sdptw.sv
 ./testbench/top/tb_sdior.sv
