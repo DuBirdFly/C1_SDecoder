@@ -1,8 +1,6 @@
 `ifndef _SDECODER_AGT_SV_
 `define _SDECODER_AGT_SV_
 
-import uvm_pkg::*;
-
 class SdecoderAgt extends uvm_agent;
 
     `uvm_component_utils(SdecoderAgt)

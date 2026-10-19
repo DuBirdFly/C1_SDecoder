@@ -1,9 +1,6 @@
 `ifndef _SDECODER_DRV_SV_
 `define _SDECODER_DRV_SV_
 
-import uvm_pkg::*;
-import sdecoder_pkg::*;
-
 class SdecoderDrv extends uvm_driver#(sdecoder_item);
 
     `uvm_component_utils(SdecoderDrv)

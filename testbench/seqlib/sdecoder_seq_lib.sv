@@ -1,16 +1,6 @@
 `ifndef _SDECODER_SEQ_LIB_SV_
 `define _SDECODER_SEQ_LIB_SV_
 
-import uvm_pkg::*;
-import sdecoder_pkg::*;
-
-typedef enum {
-    SDEC_CFG_WR,
-    SDEC_REQ,
-    SDEC_RSP_READY,
-    SDEC_WAIT
-} sdecoder_item_kind_e;
-
 class sdecoder_item extends uvm_sequence_item;
 
     `uvm_object_utils(sdecoder_item)

@@ -1,9 +1,6 @@
 `ifndef _SDECODER_MON_SV_
 `define _SDECODER_MON_SV_
 
-import uvm_pkg::*;
-import sdecoder_pkg::*;
-
 class SdecoderMon extends uvm_monitor;
 
     `uvm_component_utils(SdecoderMon)

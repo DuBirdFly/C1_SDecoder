@@ -1,8 +1,6 @@
 `ifndef _SDECODER_ENV_SV_
 `define _SDECODER_ENV_SV_
 
-import uvm_pkg::*;
-
 class SdecoderEnv extends uvm_env;
 
     `uvm_component_utils(SdecoderEnv)

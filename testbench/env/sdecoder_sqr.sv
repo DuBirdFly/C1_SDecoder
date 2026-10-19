@@ -1,8 +1,6 @@
 `ifndef _SDECODER_SQR_SV_
 `define _SDECODER_SQR_SV_
 
-import uvm_pkg::*;
-
 class SdecoderSqr extends uvm_sequencer#(sdecoder_item);
 
     `uvm_component_utils(SdecoderSqr)
