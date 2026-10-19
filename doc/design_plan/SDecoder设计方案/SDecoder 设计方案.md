@@ -26,6 +26,7 @@ flowchart LR
 本方案描述 SDecoder IP 内部的以下核心模块:
 
 - **SDTLB**: 代换快表, 缓存已经算出来的 PA 到 SLMD 映射, 覆盖绝大多数访存
+- **MFIFO**: 未命中队列, 暂存 SDTLB 未命中的 `PA[47:0]` 和 `req_id`, 深度 4, 让命中路径不被未命中阻塞
 - **SDPTW**: Page Walk 模块, SDTLB 未命中时按两级代换表算出结果, 并把结果回填 SDTLB
 - **SDIOR**: IO 寄存器模块, 提供 SDecoder 的控制/配置寄存器
 - **SLMD_CALC**: SLMD 计算模块, 用于计算 SLMD 值 (主要是 SLA, EID 和 TokenID 原样透传)
@@ -37,6 +38,7 @@ flowchart LR
 | SDecoder | SWLink Decoder |
 | SDTLB | SDecoder TLB |
 | SDPTW | SDecoder Page Table Walker |
+| MFIFO | Miss FIFO |
 | SLMD | SWLink Memory Descriptor |
 | EID | Entity Identifier |
 | TokenID | Token Identifier |
@@ -44,6 +46,8 @@ flowchart LR
 | VA | Virtual Address |
 | PA | Physical Address |
 | TLB | Translation Lookaside Buffer |
+| CAM | Content Addressable Memory |
+| RSVD | Reserved |
 | PW | Page Walk |
 | PTW | Page Table Walker |
 | IOR | IO Register |
@@ -191,20 +195,21 @@ SDecoder 的内部结构图如下所示:
 
 ```mermaid
 flowchart LR
-    REQ{{"PA 代换请求接口<br/>req_*"}} <-->|"req_valid / req_ready"| SDTLB["SDTLB<br/>128 条目全相联"]
+    REQ{{"PA 代换请求接口<br/>req_* + req_id"}} <-->|"req_valid / req_ready"| SDTLB["SDTLB<br/>128 条目全相联"]
     REQ -.->|"PA[34:0]"| CALC["SLMD_CALC<br/>SLA 计算与 SLMD 组装"]
-    SDTLB -->|"命中"| CALC
-    SDTLB -->|"未命中"| SDPTW["SDPTW<br/>两级 Page Walk"]
+    SDTLB -->|"命中 (含 req_id)"| CALC
+    SDTLB -->|"未命中 (PA + req_id)"| MFIFO["未命中队列<br/>深度 4"]
+    MFIFO --> SDPTW["SDPTW<br/>两级 Page Walk"]
     SDPTW -->|"读条目"| TW{{"Page Walk 访存接口<br/>tw_*"}}
     SDPTW -->|"回填"| SDTLB
-    SDPTW -->|"结果"| CALC
-    CALC -->|"SLMD / rsp_fcode"| RSP{{"PA 代换响应接口<br/>rsp_*"}}
+    SDPTW -->|"结果 + req_id"| CALC
+    CALC -->|"SLMD / rsp_fcode"| RSP{{"PA 代换响应接口<br/>rsp_* + rsp_id"}}
     CFG{{"配置与刷新接口<br/>cfg_*"}} <--> SDIOR["SDIOR<br/>配置与刷新寄存器"]
 ```
 
 SDIOR 是相对独立的寄存器模块, 图上只画它与配置与刷新接口的连接; 它与其他模块的控制关系在 SDIOR 设计一节说明.
 
-初版不设未命中队列 (MISS FIFO): SDTLB 未命中时直接交给 SDPTW; SDPTW 同一时刻只处理一个 walk, 忙时通过 `req_ready` 反压, 阻塞新的 PA 请求, 直到本次 walk 完成并回填. SDPTW 只输出原始条目和 `rsp_sdt_l2_read`, 不直接产生响应码; 段/页选择, SLA 拼装和 `rsp_fcode` 由 SLMD_CALC 完成. 这样响应顺序与请求顺序天然一致, 不需要额外的保序逻辑. 用 FIFO 做 hit-under-miss 的性能优化留到后续版本, 四种做法与决策点见 [未命中队列与响应保序](未命中队列与响应保序.md).
+初版采用做法 B (hit-under-miss, 允许乱序响应): SDTLB 未命中时, 把 `PA[47:0]` 和 `req_id` 写入未命中队列 (深度 4); SDPTW 按队列顺序走表; 命中路径直通 SLMD_CALC, 不需要等未命中. SDPTW 只输出原始条目, `rsp_sdt_l2_read` 和 `req_id`, 不直接产生响应码; 段/页选择, SLA 拼装和 `rsp_fcode` 由 SLMD_CALC 完成. 响应可以乱序, 用 `rsp_id` 回显 `req_id` 匹配. 未命中队列满或响应 FIFO 将满时, 顶层拉低 `req_ready`; 四种做法与取舍见 [未命中队列与响应保序](未命中队列与响应保序.md).
 
 ### 接口
 
@@ -230,7 +235,10 @@ SDecoder 对外使用 native 接口 (自定义 valid/ready 握手), 不引入 AM
 | `SLA_WIDTH` | 48 | `SLA[47:0]` |
 | `EID_WIDTH` | 11 | `EID[10:0]` |
 | `TOKEN_ID_WIDTH` | 10 | `TokenID[9:0]` |
+| `REQ_ID_WIDTH` | 8 | `req_id` / `rsp_id` |
 | `SDTLB_ENTRIES` | 128 | SDTLB 条目数 |
+| `MISS_FIFO_DEPTH` | 4 | 未命中队列深度 |
+| `RSP_FIFO_DEPTH` | 2 | 响应 FIFO 深度 |
 | `SDIOR_DATA_WIDTH` | 64 | `cfg_*` 寄存器字宽 |
 
 一级/二级条目宽度由表项格式固定 (16B / 8B), 不作为可配参数; 见代换表结构和计算表项地址.
@@ -240,15 +248,16 @@ SDecoder 对外使用 native 接口 (自定义 valid/ready 握手), 不引入 AM
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
 | `req_valid` | I | 1 | 请求有效 |
-| `req_ready` | O | 1 | 本 IP 可接收请求; SDPTW 忙时拉低 |
+| `req_ready` | O | 1 | 本 IP 可接收请求; 未命中队列满或响应 FIFO 将满时拉低 |
 | `req_pa` | I | `PA_WIDTH` | `PA[47:0]`; 只处理 Mem 空间, `req_pa[47]` 必须为 0 |
+| `req_id` | I | `REQ_ID_WIDTH` | 事务标识, 由上游分配, 响应时回显到 `rsp_id` |
 
 约定:
 
 1. `req_valid` 与 `req_ready` 同时为高的上升沿完成一次接收.
-2. `req_valid` 拉高后必须保持, 直到握手完成; 保持期间 `req_pa` 不得变化.
+2. `req_valid` 拉高后必须保持, 直到握手完成; 保持期间 `req_pa` / `req_id` 不得变化.
 3. `req_ready` 不得组合依赖 `req_valid`; 复位期间为 0.
-4. 首版完全阻塞: 一次未命中在途时, `req_ready` 拉低, 不再接收新请求; 详见 "握手与顺序".
+4. 初版 hit-under-miss: 未命中入队, 命中继续; `req_ready` 只在未命中队列满或响应 FIFO 将满时拉低; 详见 "握手与顺序".
 5. 本版不做权限检查, 请求接口不含 `rw`; 如果后续异常登记需要, 再扩展.
 
 #### 代换响应接口
@@ -257,6 +266,7 @@ SDecoder 对外使用 native 接口 (自定义 valid/ready 握手), 不引入 AM
 | --- | --- | --- | --- |
 | `rsp_valid` | O | 1 | 响应有效, 保持到 `rsp_ready` |
 | `rsp_ready` | I | 1 | 下游可接收响应 |
+| `rsp_id` | O | `REQ_ID_WIDTH` | 对应请求的 `req_id` |
 | `rsp_fcode` | O | 3 | 响应码: 3'b000 正常; 非 0 为异常 |
 | `rsp_eid` | O | `EID_WIDTH` | 仅 `rsp_fcode = 3'b000` 时有效 |
 | `rsp_token_id` | O | `TOKEN_ID_WIDTH` | 仅 `rsp_fcode = 3'b000` 时有效 |
@@ -265,8 +275,8 @@ SDecoder 对外使用 native 接口 (自定义 valid/ready 握手), 不引入 AM
 约定:
 
 1. 每个被接收的请求恰好产生一个响应, 不丢不多.
-2. 首版按请求顺序返回; 单 outstanding, 不需要事务标识.
-3. `rsp_fcode != 3'b000` 时 `rsp_eid` / `rsp_token_id` / `rsp_sla` 无意义, 下游不得使用.
+2. 响应可以乱序; 每个响应带 `rsp_id`, 下游按 ID 匹配; 同一请求恰好一个响应.
+3. `rsp_id` 始终有效; `rsp_fcode != 3'b000` 时 `rsp_eid` / `rsp_token_id` / `rsp_sla` 无意义, 下游不得使用.
 4. `rsp_fcode` 由 SLMD_CALC 统一产生, 具体检查见 "非法条目检查与异常处理".
 
 `rsp_fcode` 编码:
@@ -328,10 +338,11 @@ SDPTW 通过本接口读本地存储中的 SDT_L1 / SDT_L2, 是只读主端口.
 #### 握手与顺序
 
 1. 所有 valid/ready 接口遵循同一套规则: 握手完成于 `valid` 和 `ready` 同时为高的上升沿; `valid` 不得组合依赖 `ready`; `valid` 拉高后到握手完成前载荷保持不变.
-2. 首版完全阻塞: SDTLB 未命中时, SDPTW 同一时刻只处理一个 walk; `req_ready` 在 walk 期间以及结果未被 `rsp_ready` 接收时拉低, 新请求不被接收. 因此不存在 hit-under-miss, 也不存在响应乱序.
-3. 响应顺序与请求顺序一致; 每个请求恰好一个响应. 首版单 outstanding, 不需要 `req_id` / `rsp_id`; 后续如果要支持 hit-under-miss 或乱序, 再引入事务标识并讨论重排, 见 [未命中队列与响应保序](未命中队列与响应保序.md).
+2. 初版 hit-under-miss: SDTLB 未命中时把请求写入未命中队列; SDPTW 单 walker 按队列顺序处理未命中; 命中路径不因 SDPTW 忙而阻塞. 未命中队列满或响应 FIFO 将满时, `req_ready` 拉低.
+3. 响应可以乱序; 每个请求恰好一个响应, `rsp_id` 回显 `req_id`. 同一时刻在途的 `req_id` 必须唯一; 上游按 ID 匹配, 必要时自己重排. 见 [未命中队列与响应保序](未命中队列与响应保序.md).
 4. `req_pa[47]` 必须为 0: SDecoder 只处理 Mem 空间. 首版按断言处理; 如果上游误发 1, 属于集成错误.
 5. 复位: `rst_n` 低有效; 复位期间 `req_ready` / `rsp_valid` / `tw_arvalid` / `tw_rready` 为 0; `cfg_rdata` 读回 0.
+6. 响应 FIFO: 命中与未命中的结果共用一个 2 深响应 FIFO; `rsp_ready` 低时 FIFO 头保持; FIFO 将满时, 命中和未命中的结果等待, 顶层拉低 `req_ready`.
 
 #### 时序示意
 
@@ -341,37 +352,41 @@ SDPTW 通过本接口读本地存储中的 SDT_L1 / SDT_L2, 是只读主端口.
 sequenceDiagram
     participant UP as 上游
     participant SD as SDecoder
-    UP->>SD: req_valid + req_pa
+    UP->>SD: req_valid + req_pa + req_id
     SD-->>UP: req_ready
     Note over UP,SD: valid 与 ready 同时为高的上升沿完成接收
     Note over SD: SDTLB 命中, 1-2 拍出结果
-    SD-->>UP: rsp_valid + rsp_fcode (3'b000) + rsp_eid / rsp_token_id / rsp_sla
+    SD-->>UP: rsp_valid + rsp_id + rsp_fcode (3'b000) + rsp_eid / rsp_token_id / rsp_sla
     UP-->>SD: rsp_ready
 ```
 
-图: SDTLB 命中时序. 命中时 1-2 拍出响应; 单 outstanding, 响应对应唯一在途请求.
+图: SDTLB 命中时序. 命中时 1-2 拍出响应, 响应带 `rsp_id`; 命中不等待未命中.
 
-未命中:
+未命中 + 命中越过:
 
 ```mermaid
 sequenceDiagram
     participant UP as 上游
     participant SD as SDecoder
     participant MEM as 本地存储
-    UP->>SD: req_valid + req_pa
+    UP->>SD: A: req_valid + req_pa + req_id
     SD-->>UP: req_ready
-    Note over SD: 未命中: req_ready 拉低, 阻塞新请求
-    SD->>MEM: tw_ar (L1, 16B)
-    MEM-->>SD: tw_r (16B)
-    Note over SD: 段未命中时再读 L2
-    SD->>MEM: tw_ar (L2, 8B)
-    MEM-->>SD: tw_r (16B, 用 tw_araddr[3] 选的 lane)
-    Note over SD: SLMD_CALC 组装 SLMD 与 rsp_fcode
-    SD-->>UP: rsp_valid + rsp_fcode + rsp_eid / rsp_token_id / rsp_sla
+    Note over SD: A 未命中, 入 FIFO, 命中路径不阻塞
+    SD->>MEM: tw_ar (A, L1, 16B)
+    UP->>SD: B: req_valid + req_pa + req_id
+    SD-->>UP: rsp_valid + rsp_id(B) + rsp_fcode (3'b000) + ...
+    UP-->>SD: rsp_ready
+    Note over SD: B 命中, 先于 A 返回
+    MEM-->>SD: A 的 L1
+    Note over SD: A 段未命中时再读 L2
+    SD->>MEM: tw_ar (A, L2, 8B)
+    MEM-->>SD: A 的 L2 (用 tw_araddr[3] 选的 lane)
+    Note over SD: SLMD_CALC 组装 A
+    SD-->>UP: rsp_valid + rsp_id(A) + rsp_fcode + ...
     UP-->>SD: rsp_ready
 ```
 
-图: SDTLB 未命中时序. 未命中期间 `req_ready` 拉低, 新请求被阻塞; 最坏两次本地读.
+图: 未命中 + 命中越过的时序. A 未命中入队后, B 命中先返回; 响应用 `rsp_id` 匹配; 只有未命中队列满或响应 FIFO 将满时才反压.
 
 ## SDTLB 设计
 
@@ -380,44 +395,316 @@ sequenceDiagram
 | 功能 | 说明 |
 | --- | --- |
 | 功能 | 缓存 PA 到 SLMD 的映射, 命中给出命中的 TLB 条目值 |
-| 组织结构 | 全相联 (CAM + FF + Latch) |
+| 组织结构 | 全相联 (CAM + FF) |
 | 条目数 | 128 |
 | 条目粒度 | 1GB 到 32GB |
-| 查表 | 单读端口, 每个请求一拍完成比较 |
-| 写入 | 仅由 SDPTW 的 Page Walk 结果回填, 软件不可写 |
+| 查表 | 单读端口, tag 比较组合, hit 向量打 1 拍 |
+| 写入 | 仅由 Page Walk 结果在检查通过后回填, 软件不可写 |
 | 清除 | 由刷新接口置无效 |
 
-段式和页式统一按 "段" 处理, 把 1GB 页看作长度为 1 的段. 命中判断和 SLA 计算只有一套逻辑, 不需要为两种映射各做一张快表
+段式和页式统一按 "段" 处理, 把 1GB 页看作长度为 1 的段. 命中判断和 SLA 计算只有一套逻辑, 不需要为两种映射各做一张快表. 页和段都用 `PA_Base` / `PA_Up` 表示, 不设额外的粒度位.
 
-<!-- SDTLB, SDTLB_CTRL, SDTLB_TAG, SDTLB_TAG_ITEM, SDTLB_DATA, SDTLB_DATA_ITEM -->
+软件约束:
 
-软件约束
+- **不做软件装填**: 软件不直接写 SDTLB 条目, 只能通过刷新寄存器置无效, 条目内容一律由硬件在 Page Walk 完成后填充.
 
-- **不做软件装填**: 软件不直接写 SDTLB 条目, 只能通过刷新寄存器置无效, 条目内容一律由硬件在 Page Walk 完成后填充
+内部结构:
+
+```mermaid
+flowchart LR
+    REQ["查表请求<br/>PA[47:0]"] --> TAG["SDTLB_TAG<br/>128 x 24 bit"]
+    TAG --> HIT["hit_vector<br/>onehot0, 打 1 拍"]
+    HIT --> DATA["SDTLB_DATA<br/>128 x 39 bit"]
+    HIT --> CTRL["替换指针<br/>装填 / 置无效"]
+    CTRL --> TAG
+    CTRL --> DATA
+    DATA --> OUT["命中条目<br/>tag + data"]
+```
+
+图: SDTLB 内部结构. Tag 做全并行比较, hit 向量打 1 拍后选 Data; 装填和置无效都通过控制逻辑改 Tag/Data.
 
 ### 表项格式
 
+| 部分 | 字段 | 位宽 | 存储 | 说明 |
+| --- | --- | --- | --- | --- |
+| Tag | `PA_Base[47:30]` | 18 | FF | 段/页基址, 1GB 对界 |
+| Tag | `PA_Up[34:30]` | 5 | FF | 段/页上界 (含), 1GB 对界 |
+| Tag | `Valid` | 1 | FF | 条目有效位 |
+| Data | `EID[10:0]` | 11 | FF | Entity 标识 |
+| Data | `TokenID[9:0]` | 10 | FF | 逻辑池标识 |
+| Data | `S_PFN[47:30]` | 18 | FF | SLA 基址, 1GB 对界 |
+
+- Tag 24 bit, Data 39 bit, 共 63 bit; 不强行凑 64 bit.
+- `PA_Base[47:35]` 是 32GB 区间号, `PA_Base[34:30]` 是段/页在区间内的基址.
+- 页: `PA_Base[34:30] = PA_Up`; 段: `PA_Up = SEG_BASE + SEG_LEN`.
+- `PA_Base[47]` 恒为 0 (请求 `PA[47] = 0`); `S_PFN[47]` 必须为 0, 由 SLMD_CALC 检查.
+- 表项所有字段用 FF; 复位清 0; 装填在时钟沿写 Tag/Data 并置 `Valid = 1`; 置无效只清 `Valid`, Tag/Data 保留.
+
 ### 命中判断
+
+命中条件:
+
+1. `Valid = 1`.
+2. `PA[47:35] == PA_Base[47:35]`.
+3. `PA_Base[34:30] <= PA[34:30] <= PA_Up`.
+
+判断与读出:
+
+- 128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常配置下最多命中一个; 多命中属于配置错误, 行为未定义 (仿真用 onehot0 断言检查).
+- Tag 比较是组合逻辑; `hit_vector` 打 1 拍后再用; 请求拍 T 的命中结果在 T+1 有效.
+- Data 用 `hit_vector` 做 onehot 选路, 输出命中条目的 tag/data.
+- 装填在时钟沿更新 Tag/Data 与 `Valid`; 查表只读, 同拍请求看到的是装填前的条目.
+- 请求的 `PA[29:0]` 不参与查表, 直接送到 SLMD_CALC 拼 SLA 的低位.
+- 未命中时 SDTLB 不产生响应, 由顶层启动 SDPTW.
+- SDTLB 支持连续查表; 未命中不阻塞后续命中, 未命中请求带 `req_id` 进入 MFIFO.
+
+命中后的 SLA:
+
+```text
+SLA[47:30] = S_PFN[47:30] + (PA[34:30] - PA_Base[34:30])
+SLA[29:0]  = PA[29:0]
+```
+
+页的 `PA_Base[34:30] = PA_Up`, 偏移为 0, 公式退化为 `SLA = {S_PFN, PA[29:0]}`. EID / TokenID 直接取 Data. `SLA[47]` 必须为 0, 由 SLMD_CALC 检查.
 
 ### 条目填充
 
+装填来源是 SDPTW 的 Page Walk 结果, 只有 SLMD_CALC 检查通过 (无异常) 才允许回填.
+
+| 结果 | `PA_Base[47:30]` | `PA_Up[34:30]` | EID / TokenID / S_PFN |
+| --- | --- | --- | --- |
+| 段 | `{PA[47:35], SEG_BASE[34:30]}` | `SEG_BASE + SEG_LEN` | 一级条目 |
+| 页 | `PA[47:30]` | `PA[34:30]` | 二级条目 |
+
+- 装填条目由替换指针选出, 一次未命中只填一个条目.
+- `SEG_BASE + SEG_LEN <= 31`; 越界时按异常处理, 不装填.
+- 装填在时钟沿写 Tag 和 Data, 并置 `Valid = 1`; 同一拍同一 entry 上置无效优先, 装填丢弃.
+- 异常结果不装填; 命中路径不装填.
+
 ### 替换策略
 
+- 128 条目全相联, 任意条目都可被替换.
+- 替换指针是严格 onehot 的左移循环寄存器: 复位指向 0 号, 每次装填请求左移一格, 到尾回绕.
+- 指针指向的条目无论有效与否都直接覆盖; 不做 invalid-first 搜索, 不做 LRU / 随机.
+- 指针只在装填请求时步进; 置无效不改变指针.
+
 ### 置无效
+
+- `inv_all`: 128 个条目的 `Valid` 全部清 0.
+- `inv_en` + `inv_pa`: 清掉所有覆盖 `inv_pa[47:30]` 的条目, 条件是 `Valid = 1`, `PA_Base[47:35] == inv_pa[47:35]`, `PA_Base[34:30] <= inv_pa[34:30] <= PA_Up`; 可能一次清掉多个条目 (例如一个段和它内部的页).
+- `inv_pa[29:0]` 不使用; 置无效是 1GB 粒度, 软件必须把低 30 位写 0.
+- 置无效只清 `Valid`; Tag/Data 的其他字段可以保留.
+- 同一 entry 上置无效优先于装填; 同一拍冲突时装填丢弃.
+- **初版限制**: 不实现 epoch / flush / busy. 如果未命中队列里的请求或一次 walk 在 `inv_all` 之前已经读到旧条目, 它在 `inv_all` 之后仍可能把旧映射回填进 SDTLB; 软件在改表 / 置无效前应保证没有未完成的请求 (含 MFIFO 里的), 或者接受这个风险.
 
 ## SDPTW 设计
 
 ### 概述
 
+SDPTW 从 SDTLB 的未命中队列 MFIFO 取请求, 按两级代换表读出原始条目, 并给出 "是否读了二级表" 的过程标志; 它不判断异常, 异常由 SLMD_CALC 统一产生.
+
+| 项目 | 规格 |
+| --- | --- |
+| 功能 | 从 MFIFO 取请求, 读 SDT_L1 / SDT_L2, 输出原始条目 |
+| 并行度 | 1, 同一时刻只处理一个 walk |
+| 队列 | MFIFO, 深度 4, 表项 `PA[47:0]` + `req_id` |
+| 最坏访存 | 2 次: 一级 16B, 二级 8B |
+| 读数据宽度 | 16B (`tw_rdata`) |
+| 结果 | 一级条目, 二级条目, `rsp_sdt_l2_read`, `req_id`, 请求 `PA[34:0]` |
+| 异常 | 不产生; 由 SLMD_CALC 检查 |
+| 完成 | 结果保持到 SLMD_CALC 取走 |
+
+- 初版 hit-under-miss: SDPTW 单 walker 按 MFIFO 顺序处理未命中; 命中不受 SDPTW 忙影响; MFIFO 满时顶层反压上游.
+- 一次 walk 只发一个 AR, 收到 R 后再决定是否发第二个 AR; 不支持 burst / 写 / 乱序.
+- 首版不实现读错误响应 (`tw_rresp` 不在接口里); 本地存储读失败属于集成或系统问题, 不在 SDPTW 里恢复.
+
+### 未命中队列 MFIFO
+
+- 深度 4, 表项 56 bit: `PA[47:0]` (48) + `req_id` (8).
+- SDTLB 未命中时写入; SDPTW 在 `IDLE` 取出一条并锁存; 取出后该表项空出.
+- 先进先出; 未命中按入队顺序走表, 命中不经过队列.
+- 队列满时顶层拉低 `req_ready`; 队列空时 SDPTW 保持 `IDLE`.
+- 不做同地址合并: 同一个 PA 的多次未命中各占一个表项, 各做一次 walk.
+- 读写可以同拍发生; 单时钟域, 标准同步 FIFO.
+
 ### 状态机
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> AR_L1: req_valid && req_ready
+    AR_L1 --> R_L1: arvalid && arready
+    R_L1 --> DONE: l1_stop
+    R_L1 --> AR_L2: !l1_stop
+    AR_L2 --> R_L2: arvalid && arready
+    R_L2 --> DONE: rvalid && rready
+    DONE --> IDLE: result_taken
+```
+
+图: SDPTW 状态机. `l1_stop = !l1.valid || seg_hit`; `seg_hit = l1.type && SEG_BASE <= PA[34:30] <= SEG_BASE + SEG_LEN`.
+
+状态说明:
+
+- `IDLE`: 等 MFIFO 非空; 接收时锁存 `PA[47:0]` 和 `req_id`.
+- `AR_L1`: 发一级读地址, 等 `arready`.
+- `R_L1`: 收 16B 一级条目; 若 `l1_stop`, 直接 `DONE` (段命中或一级无效); 否则发二级读.
+- `AR_L2`: 发二级读地址, 等 `arready`.
+- `R_L2`: 收 16B 数据, 按 `araddr[3]` 选 8B; 转 `DONE`.
+- `DONE`: 结果有效, 保持; 响应带 `req_id`; `result_taken` 后回 `IDLE`.
 
 ### Page Walk 流程
 
+1. 顶层在 SDTLB 未命中时, 把 `PA[47:0]` 和 `req_id` 写入 MFIFO; SDPTW 在 `IDLE` 从 MFIFO 取请求, 锁存 `PA[47:0]` 和 `req_id`, 用 `PA[47:30]` 走表.
+2. 一级表地址: `{SDT_L1_BASE[47:4], 4'h0} + PA[47:35] * 16`; 读 16B.
+3. 收到一级条目后判段:
+   - `l1.valid = 0`: 不再读二级 (`L2_BASE` 不可信), 直接 `DONE`.
+   - `l1.type = 1` 且 `SEG_BASE <= PA[34:30] <= SEG_BASE + SEG_LEN`: 段命中, 不再读二级, 直接 `DONE`.
+   - 否则读二级.
+4. 二级表地址: `{l1.L2_BASE[47:3], 3'h0} + PA[34:30] * 8`; 读 8B.
+5. 二级读回的是 16B 总线数据, 按 `araddr[3]` 选 8B: `araddr[3] = 0` 用 `rdata[63:0]`, `= 1` 用 `rdata[127:64]`.
+6. `DONE` 保持一级/二级条目, `rsp_sdt_l2_read`, `req_id` 和请求 `PA[34:0]`, 直到 SLMD_CALC 取走 (`result_taken`).
+
+补充约束:
+
+- `PA[47]`, `SDT_L1_BASE[47]`, `L2_BASE[47]` 都必须为 0; 前两个由接口 / 软件保证, `L2_BASE[47]` 由软件保证 (硬件只断言). 如果 `L2_BASE[47] = 1`, 二级地址会落到 IO 空间, 行为未定义.
+- 一级条目无效时不再读二级; 二级条目的 `Valid` 不在 SDPTW 判断, 交给 SLMD_CALC.
+- `SEG_BASE + SEG_LEN` 用 6 bit 计算; 超过 31 的条目由 SLMD_CALC 判为异常.
+- 地址公式的推导见 "计算表项地址".
+
 ### 结果输出
+
+- 一级条目: 16B 原始条目.
+- 二级条目: 8B 原始条目; 没读二级时清 0.
+- `rsp_sdt_l2_read`: 本次是否读了二级; 0 表示只读了一级.
+- `req_id`: 从 MFIFO 表项带出, 用于 SLMD_CALC 生成 `rsp_id`.
+- 请求 `PA[34:0]`: 段偏移用 `PA[34:30]`, 页内偏移用 `PA[29:0]`; 从 MFIFO 表项带出.
+- 结果有效在 `DONE` 拉高; 结果保持到 SLMD_CALC 取走 (`result_taken`).
+- `rsp_sdt_l2_read` 是 SLMD_CALC 区分 "段命中" 和 "一级无效 / 段外且二级无效" 的关键; 这两种情况的一级/二级 Valid 看起来一样.
+- 异常由 SLMD_CALC 产生; SDPTW 不输出 `rsp_fcode`.
 
 ## SLMD_CALC 设计
 
+### 概述
+
+SLMD_CALC 把命中或 Page Walk 的结果组装成最终响应: 选段 / 页, 算 SLA, 选 EID / TokenID, 产生 `rsp_fcode` 和 `rsp_id`; 检查通过时同时回填 SDTLB.
+
+- 输入: SDTLB 的命中 tag/data + 请求 PA + `req_id`, 或 SDPTW 的一级/二级条目 + `rsp_sdt_l2_read` + 请求 PA + `req_id`.
+- 输出: `rsp_id`, `rsp_eid`, `rsp_token_id`, `rsp_sla`, `rsp_fcode`.
+- 命中与未命中可以同时在途; 两个结果谁先到谁先出, 不保序; 响应带 `rsp_id`, 只做匹配.
+- 命中与未命中共用一个 2 深响应 FIFO; `rsp_ready` 低时 FIFO 头保持; 同时就绪时按到达顺序入 FIFO.
+- 本版不做权限检查, 不处理读错误 / 机器检查错; 异常只有 "地址非法".
+- `rsp_eid` / `rsp_token_id` / `rsp_sla` 仅在 `rsp_fcode = 3'b000` 时有效; `rsp_id` 始终有效.
+
+### 命中与未命中的选择
+
+| 来源 | 条件 | 选择 |
+| --- | --- | --- |
+| SDTLB 命中 | `req_hit = 1` | 用 SDTLB 的 tag/data |
+| 段 | `l1.valid = 1`, `l1.type = 1`, `SEG_BASE <= PA[34:30] <= SEG_BASE + SEG_LEN` | 用一级条目 |
+| 页 | `l1.valid = 1`, 非段命中, `l2_read = 1`, `l2.valid = 1` | 用二级条目 |
+| 异常 | 其他 | `rsp_fcode = 3'b001` |
+
+- 命中路径不需要区分段/页: SDTLB 用 `PA_Base` / `PA_Up` 统一表示, 偏移为 `PA[34:30] - PA_Base[34:30]`.
+- 未命中路径先判段, 段不命中再判二级.
+- 二级没读 (`l2_read = 0`) 且不是段命中, 属于异常.
+- 命中和未命中可以同时就绪; 响应仲裁不要求顺序, 先到先出.
+
+### SLA 计算
+
+命中:
+
+```text
+SLA[47:30] = data.S_PFN[47:30] + (PA[34:30] - tag.PA_Base[34:30])
+SLA[29:0]  = PA[29:0]
+```
+
+未命中段:
+
+```text
+SLA[47:30] = l1.S_PFN[47:30] + (PA[34:30] - l1.SEG_BASE[34:30])
+SLA[29:0]  = PA[29:0]
+```
+
+未命中页:
+
+```text
+SLA[47:30] = l2.S_PFN[47:30]
+SLA[29:0]  = PA[29:0]
+```
+
+- 段/页的 EID / TokenID: 段取一级条目, 页取二级条目, 命中取 SDTLB Data.
+- `SLA[47]` 必须为 0; 为 1 表示地址落到 IO 空间或加法溢出, 报 `3'b001`.
+- 加法按 18 bit 做; 进位到 bit 47 也算 `SLA[47] = 1`.
+
 ### 非法条目检查与异常处理
 
+首版只产生 `3'b000` (正常) 和 `3'b001` (地址非法); `3'b010` / `3'b011` 保留.
+
+`3'b001` 的触发条件:
+
+1. 一级条目 `Valid = 0`.
+2. 段式: `SEG_BASE + SEG_LEN > 31`.
+3. 段式: `SLA[47] = 1` (含 `S_PFN[47] = 1` 和加法进位).
+4. 页式: 二级条目 `Valid = 0`.
+5. 页式: `SLA[47] = 1` (即 `l2.S_PFN[47] = 1`).
+6. 未命中路径既不是段命中, 也没有有效的二级条目.
+
+处理:
+
+- `rsp_fcode = 3'b001` 时, `rsp_eid` / `rsp_token_id` / `rsp_sla` 无意义, 不装填 SDTLB; `rsp_id` 仍然回显.
+- `rsp_fcode = 3'b000` 时, 输出 SLMD 字段; 如果是未命中, 按 SDTLB 的 "条目填充" 回填.
+- 命中路径只检查 `SLA[47]`; 命中条目已经由装填时检查过, 但输出前仍要再查一次.
+- 本版不检查权限 / 读错误 / 机器检查错; `3'b010` / `3'b011` 保留.
+- 异常结果不回填; 命中与未命中结果都进同一个 2 深响应 FIFO.
+
 ## SDIOR 设计
+
+### 概述
+
+SDIOR 是相对独立的 IO 寄存器模块, 提供三个 64 bit 寄存器: 全部置无效, 按地址置无效, 一级表基地址. 首版不做 APB 从口, 寄存器由接口章节的 `cfg_*` 直接访问; 以后交付标准形态时在外面包一层 APB wrapper, 寄存器语义不变.
+
+- 只做 SDecoder 需要的 3 个寄存器; 没有 enable / status / errinfo.
+- W1P 寄存器不留存值; 读回 0.
+- `SDT_L1_BASE` 是唯一的 RW 寄存器.
+
+### 寄存器
+
+寄存器索引和属性见接口章节的 `cfg_addr` 编码表; 本节只列位域.
+
+| 寄存器 | 位域 | 说明 |
+| --- | --- | --- |
+| `SDecoder_IA` | [0] | W1P; 写 1 触发 `inv_all`, 清全部 SDTLB 条目 |
+| `SDecoder_IS` | [63] | W1P; 写 1 触发 `inv_en` |
+| | [47:0] | `PA[47:0]`; SDTLB 只用 `PA[47:30]`, `PA[29:0]` 必须为 0 |
+| `SDT_L1_BASE` | [47:0] | 一级表基地址; 16B 对界; 复位 0 |
+| | [63:48] | RSVD |
+
+- `SDecoder_IA` / `SDecoder_IS` 的其余位保留; 写 0 不产生脉冲.
+- `SDecoder_IS` 的 `PA[47]` 必须为 0; `PA[29:0]` 必须为 0 (1GB 粒度).
+- `SDT_L1_BASE` 的 `PA[47]` 必须为 0; `PA[3:0]` 必须为 0 (16B 对界).
+- `cfg_addr` 为 2 bit; 索引 3 保留, 访问未定义.
+
+### 行为
+
+- 写同步: `cfg_wr` 在 `clk` 上升沿生效.
+- 读组合: `cfg_rd` 当拍给出 `cfg_rdata`.
+- W1P: `IA` 的 bit0 / `IS` 的 bit63 写 1 时, 当拍产生 1 拍 `inv_all` / `inv_en`; 写 0 不产生脉冲; 读回 0.
+- `inv_pa` 直接取 `cfg_wdata[47:0]`; `inv_en` 有效时 SDTLB 用 `PA[47:30]` 比较.
+- `SDT_L1_BASE` 写入后下一拍由 SDPTW 使用; 复位值 0.
+- `cfg_rdata`: `SDT_L1_BASE` 读回低 48 位基地址, 高位 0; `IA` / `IS` 读回 0; 其他索引读回 0.
+
+### 软件流程
+
+1. 写 `SDT_L1_BASE`, 在本地 HBM / DDR 建立 SDT_L1 / SDT_L2.
+2. 映射变化时, 先改表项, 再置无效:
+   - 大范围变化: 写 `SDecoder_IA`, 清全部条目.
+   - 局部变化: 写 `SDecoder_IS`, 清覆盖该 `PA[47:30]` 的条目.
+3. 修改 `SDT_L1_BASE` 后必须写一次 `SDecoder_IA`, 否则会残留按旧基地址算出的条目.
+4. 首版没有 enable / busy: 软件在改表 / 置无效前应保证没有未完成的请求 (含 MFIFO 里的); 详细限制见 SDTLB 的 "置无效".
+
+### 与其他模块的连接
+
+- `inv_all` / `inv_en` / `inv_pa` 送 SDTLB, 清 Tag 的 Valid.
+- `sdt_l1_base` 送 SDPTW, 作为一级表基地址.
+- 没有其他连接; SDIOR 在顶层图上只画到 `cfg_*`.
 
