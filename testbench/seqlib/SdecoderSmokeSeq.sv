@@ -1,25 +1,7 @@
-`ifndef _SDECODER_SEQ_LIB_SV_
-`define _SDECODER_SEQ_LIB_SV_
+`ifndef _SDECODER_SMOKE_SEQ_SV_
+`define _SDECODER_SMOKE_SEQ_SV_
 
-class sdecoder_item extends uvm_sequence_item;
-
-    `uvm_object_utils(sdecoder_item)
-
-    rand sdecoder_item_kind_e        kind;
-    rand logic [SDIOR_ADDR_WIDTH-1:0] cfg_addr;
-    rand logic [SDIOR_DATA_WIDTH-1:0] cfg_wdata;
-    rand logic [PA_WIDTH-1:0]        pa;
-    rand logic [REQ_ID_WIDTH-1:0]    id;
-    rand bit                         rsp_ready;
-    rand int unsigned                wait_cycles;
-
-    function new(string name = "sdecoder_item");
-        super.new(name);
-    endfunction
-
-endclass
-
-class SdecoderSmokeSeq extends uvm_sequence#(sdecoder_item);
+class SdecoderSmokeSeq extends uvm_sequence#(SdecoderItem);
 
     `uvm_object_utils(SdecoderSmokeSeq)
 
@@ -31,12 +13,12 @@ class SdecoderSmokeSeq extends uvm_sequence#(sdecoder_item);
         super.new(name);
     endfunction
 
-    task automatic send_cfg(
+    task send_cfg(
         input logic [SDIOR_ADDR_WIDTH-1:0] addr,
         input logic [SDIOR_DATA_WIDTH-1:0] data
     );
-        sdecoder_item tr;
-        tr = sdecoder_item::type_id::create("tr");
+        SdecoderItem tr;
+        tr = SdecoderItem::type_id::create("tr");
         start_item(tr);
         tr.kind      = SDEC_CFG_WR;
         tr.cfg_addr  = addr;
@@ -44,12 +26,12 @@ class SdecoderSmokeSeq extends uvm_sequence#(sdecoder_item);
         finish_item(tr);
     endtask
 
-    task automatic send_req(
+    task send_req(
         input logic [PA_WIDTH-1:0]      pa,
         input logic [REQ_ID_WIDTH-1:0]  id
     );
-        sdecoder_item tr;
-        tr = sdecoder_item::type_id::create("tr");
+        SdecoderItem tr;
+        tr = SdecoderItem::type_id::create("tr");
         start_item(tr);
         tr.kind = SDEC_REQ;
         tr.pa   = pa;
@@ -57,18 +39,18 @@ class SdecoderSmokeSeq extends uvm_sequence#(sdecoder_item);
         finish_item(tr);
     endtask
 
-    task automatic send_rsp_ready(input bit value);
-        sdecoder_item tr;
-        tr = sdecoder_item::type_id::create("tr");
+    task send_rsp_ready(input bit value);
+        SdecoderItem tr;
+        tr = SdecoderItem::type_id::create("tr");
         start_item(tr);
         tr.kind      = SDEC_RSP_READY;
         tr.rsp_ready = value;
         finish_item(tr);
     endtask
 
-    task automatic send_wait(input int unsigned cycles);
-        sdecoder_item tr;
-        tr = sdecoder_item::type_id::create("tr");
+    task send_wait(input int unsigned cycles);
+        SdecoderItem tr;
+        tr = SdecoderItem::type_id::create("tr");
         start_item(tr);
         tr.kind        = SDEC_WAIT;
         tr.wait_cycles = cycles;
@@ -81,17 +63,17 @@ class SdecoderSmokeSeq extends uvm_sequence#(sdecoder_item);
 
         // A miss / hit
         send_req(PA_A, 8'h11);
-        send_wait(200);
+        send_wait(500);
         send_req(PA_A, 8'h12);
 
         // B miss / hit
         send_req(PA_B, 8'h21);
-        send_wait(200);
+        send_wait(500);
         send_req(PA_B, 8'h22);
 
         // 段 miss / hit (PA_S 落在段 [4,8] 内)
         send_req(PA_S, 8'h61);
-        send_wait(200);
+        send_wait(500);
         send_req(PA_S, 8'h62);
 
         // 置无效 A (1GB 对界, PA_A 的页基址为 0), 然后 A miss + B hit
@@ -111,10 +93,10 @@ class SdecoderSmokeSeq extends uvm_sequence#(sdecoder_item);
         // 全部置无效, A 重新 miss / hit
         send_cfg(ADDR_SDECODER_IA, 64'h1);
         send_req(PA_A, 8'h51);
-        send_wait(200);
+        send_wait(500);
         send_req(PA_A, 8'h52);
     endtask
 
 endclass
 
-`endif // _SDECODER_SEQ_LIB_SV_
+`endif // _SDECODER_SMOKE_SEQ_SV_

@@ -5,11 +5,12 @@ package sdecoder_env_pkg;
     import sdecoder_pkg::*;
     import sdecoder_seq_pkg::*;
 
-    `include "sdecoder_sqr.sv"
-    `include "sdecoder_drv.sv"
-    `include "sdecoder_mon.sv"
-    `include "sdecoder_agt.sv"
-    `include "sdecoder_env.sv"
+    `include "SdecoderPageTableModel.sv"
+    `include "SdecoderSqr.sv"
+    `include "SdecoderDrv.sv"
+    `include "SdecoderMon.sv"
+    `include "SdecoderAgt.sv"
+    `include "SdecoderEnv.sv"
 
 endpackage
 

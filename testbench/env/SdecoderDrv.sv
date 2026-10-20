@@ -1,7 +1,7 @@
 `ifndef _SDECODER_DRV_SV_
 `define _SDECODER_DRV_SV_
 
-class SdecoderDrv extends uvm_driver#(sdecoder_item);
+class SdecoderDrv extends uvm_driver#(SdecoderItem);
 
     `uvm_component_utils(SdecoderDrv)
 
@@ -40,7 +40,7 @@ class SdecoderDrv extends uvm_driver#(sdecoder_item);
                     SDEC_REQ:       drive_req(req);
                     SDEC_RSP_READY: drive_rsp_ready(req);
                     SDEC_WAIT:      drive_wait(req);
-                    default:        `uvm_error("KIND", "unknown sdecoder_item kind")
+                    default:        `uvm_error("KIND", "unknown SdecoderItem kind")
                 endcase
                 seq_item_port.item_done();
             end
@@ -50,7 +50,7 @@ class SdecoderDrv extends uvm_driver#(sdecoder_item);
         end
     endtask
 
-    task drive_cfg(sdecoder_item tr);
+    task drive_cfg(SdecoderItem tr);
         @(vif.drv);
         vif.drv.cfg_wr    <= 1'b1;
         vif.drv.cfg_addr  <= tr.cfg_addr;
@@ -60,7 +60,7 @@ class SdecoderDrv extends uvm_driver#(sdecoder_item);
         @(vif.drv);
     endtask
 
-    task drive_req(sdecoder_item tr);
+    task drive_req(SdecoderItem tr);
         @(vif.drv);
         vif.drv.req_valid <= 1'b1;
         vif.drv.req_pa    <= tr.pa;
@@ -70,13 +70,13 @@ class SdecoderDrv extends uvm_driver#(sdecoder_item);
         @(vif.drv);
     endtask
 
-    task drive_rsp_ready(sdecoder_item tr);
+    task drive_rsp_ready(SdecoderItem tr);
         @(vif.drv);
         vif.drv.rsp_ready <= tr.rsp_ready;
         @(vif.drv);
     endtask
 
-    task drive_wait(sdecoder_item tr);
+    task drive_wait(SdecoderItem tr);
         repeat (tr.wait_cycles) @(vif.drv);
     endtask
 

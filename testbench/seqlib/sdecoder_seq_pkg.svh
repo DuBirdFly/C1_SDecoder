@@ -11,9 +11,10 @@ package sdecoder_seq_pkg;
         SDEC_REQ,
         SDEC_RSP_READY,
         SDEC_WAIT
-    } sdecoder_item_kind_e;
+    } Sdecoder_Item_Kind_e;
 
-    `include "sdecoder_seq_lib.sv"
+    `include "SdecoderItem.sv"
+    `include "SdecoderSmokeSeq.sv"
 
 endpackage
 
