@@ -14,19 +14,19 @@ import sdecoder_pkg::*;
     input  logic                            rst_n,
 
     // 代换请求
+    input  logic [REQ_ID_WIDTH-1:0]         req_id,
+    input  logic [PA_WIDTH-1:0]             req_pa,
     input  logic                            req_valid,
     output logic                            req_ready,
-    input  logic [PA_WIDTH-1:0]             req_pa,
-    input  logic [REQ_ID_WIDTH-1:0]         req_id,
 
     // 代换响应
-    output logic                            rsp_valid,
-    input  logic                            rsp_ready,
     output logic [REQ_ID_WIDTH-1:0]         rsp_id,
     output logic [2:0]                      rsp_fcode,
     output logic [EID_WIDTH-1:0]            rsp_eid,
     output logic [TOKEN_ID_WIDTH-1:0]       rsp_token_id,
     output logic [SLA_WIDTH-1:0]            rsp_sla,
+    output logic                            rsp_valid,
+    input  logic                            rsp_ready,
 
     // Page Walk 访存
     output logic [PA_WIDTH-1:0]             tw_araddr,
@@ -47,16 +47,7 @@ import sdecoder_pkg::*;
     localparam int unsigned MISS_FIFO_DEPTH = 4;
     localparam int unsigned RSP_FIFO_DEPTH  = 2;
 
-    // 响应包: id + fcode + eid + token_id + sla
-    typedef struct packed {
-        logic [REQ_ID_WIDTH-1:0]    id;
-        logic [2:0]                 fcode;
-        logic [EID_WIDTH-1:0]       eid;
-        logic [TOKEN_ID_WIDTH-1:0]  token_id;
-        logic [SLA_WIDTH-1:0]       sla;
-    } rsp_t;
-
-    localparam int unsigned RSP_WIDTH  = REQ_ID_WIDTH + 3 + EID_WIDTH + TOKEN_ID_WIDTH + SLA_WIDTH;
+    localparam int unsigned RSP_WIDTH  = $bits(SDT_RSP_t);
     localparam int unsigned MISS_WIDTH = PA_WIDTH + REQ_ID_WIDTH;
 
     // 请求流水: 请求拍 T 采到 req_valid / req_pa / req_id, 下一拍和 SDTLB 的 req_hit 对齐
@@ -110,40 +101,16 @@ import sdecoder_pkg::*;
     logic                       rsp_fifo_full;
     logic                       rsp_fifo_almost_full;
     logic                       rsp_fifo_empty;
-    rsp_t                       rsp_wr_pkt;
-    rsp_t                       rsp_rd_pkt;
-    rsp_t                       hit_rsp;
-    rsp_t                       miss_rsp;
+    SDT_RSP_t                   rsp_wr_pkt;
+    SDT_RSP_t                   rsp_rd_pkt;
+    SDT_RSP_t                   hit_rsp;
+    SDT_RSP_t                   miss_rsp;
 
     // 命中 / 未命中结果
     logic                       hit_result_valid;
     logic                       push_hit;
     logic                       push_miss;
     logic                       miss_ok;
-    logic                       miss_seg;
-    logic                       hit_sla_err;
-    logic                       seg_sla_err;
-    logic                       page_sla_err;
-    logic                       seg_len_bad;
-    logic                       seg_hit;
-    logic [5:0]                 seg_up;
-    logic [4:0]                 pa_up;
-    logic [4:0]                 seg_offset;
-    logic [18:0]                seg_sla_sum;
-    logic [18:0]                hit_sla_sum;
-    logic [4:0]                 hit_offset;
-    logic [SLA_WIDTH-1:0]       hit_sla;
-    logic [SLA_WIDTH-1:0]       seg_sla;
-    logic [SLA_WIDTH-1:0]       page_sla;
-    logic [SLA_WIDTH-1:0]       miss_sla;
-    logic [2:0]                 hit_fcode;
-    logic [2:0]                 miss_fcode;
-    logic [EID_WIDTH-1:0]       miss_eid;
-    logic [TOKEN_ID_WIDTH-1:0]  miss_token_id;
-    logic [S_PFN_WIDTH-1:0]     miss_s_pfn;
-    logic [PA_BASE_WIDTH-1:0]   miss_fill_pa_base;
-    logic [PA_UP_WIDTH-1:0]     miss_fill_pa_up;
-    logic                       miss_fill_valid;
 
     // 请求握手: MISS_FIFO 满或响应 FIFO 将满时不再接收新请求
     assign req_ready = rst_n && !miss_fifo_full && !rsp_fifo_almost_full;
@@ -179,80 +146,41 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 命中路径: SDTLB 的 tag/data + 请求 PA[34:0] -> SLA
-    assign hit_offset  = req_pa_r[PA_BASE_LSB +: PA_UP_WIDTH] - sdtlb_hit_tag.pa_base[PA_UP_WIDTH-1:0];
-    assign hit_sla_sum = {1'b0, sdtlb_hit_data.s_pfn} + {14'b0, hit_offset};
-    assign hit_sla_err = hit_sla_sum[18] || hit_sla_sum[17];
-    assign hit_sla     = {hit_sla_sum[17:0], req_pa_r[PA_BASE_LSB-1:0]};
-    assign hit_fcode   = hit_sla_err ? 3'b001 : 3'b000;
-
     assign hit_result_valid = req_valid_r && sdtlb_req_hit;
 
-    always_comb begin
-        hit_rsp = '0;
-        hit_rsp.id    = req_id_r;
-        hit_rsp.fcode = hit_fcode;
-        if (!hit_sla_err) begin
-            hit_rsp.eid      = sdtlb_hit_data.eid;
-            hit_rsp.token_id = sdtlb_hit_data.token_id;
-            hit_rsp.sla      = hit_sla;
-        end
-    end
+    // 命中 / 未命中结果统一由 slmd_calc 组装; 回填字段也由它给出
+    slmd_calc u_slmd_calc (
+        .hit_valid          (hit_result_valid),
+        .hit_pa             (req_pa_r),
+        .hit_id             (req_id_r),
+        .hit_tag            (sdtlb_hit_tag),
+        .hit_data           (sdtlb_hit_data),
+        .hit_rsp            (hit_rsp),
 
-    // 未命中路径: 先判段, 再判页
-    assign seg_up     = {1'b0, sdptw_l1_item.seg_base} + {1'b0, sdptw_l1_item.seg_len};
-    assign pa_up      = walk_pa[PA_BASE_LSB +: PA_UP_WIDTH];
-    assign seg_hit    = sdptw_l1_item.valid && sdptw_l1_item.type_bit &&
-                        (pa_up >= sdptw_l1_item.seg_base) &&
-                        ({1'b0, pa_up} <= seg_up);
-    assign seg_len_bad = sdptw_l1_item.valid && sdptw_l1_item.type_bit && (seg_up > 6'd31);
+        .miss_valid         (sdptw_rsp_valid),
+        .miss_pa            (walk_pa),
+        .miss_id            (walk_id),
+        .l1_item            (sdptw_l1_item),
+        .l2_item            (sdptw_l2_item),
+        .l2_read            (sdptw_l2_read),
+        .miss_rsp           (miss_rsp),
 
-    assign seg_offset  = pa_up - sdptw_l1_item.seg_base;
-    assign seg_sla_sum = {1'b0, sdptw_l1_item.s_pfn} + {14'b0, seg_offset};
-    assign seg_sla_err = seg_sla_sum[18] || seg_sla_sum[17];
-    assign seg_sla     = {seg_sla_sum[17:0], walk_pa[PA_BASE_LSB-1:0]};
-
-    assign page_sla     = {sdptw_l2_item.s_pfn, walk_pa[PA_BASE_LSB-1:0]};
-    assign page_sla_err = sdptw_l2_item.s_pfn[17];
-
-    assign miss_ok = sdptw_l1_item.valid && !seg_len_bad &&
-                     ((sdptw_l1_item.type_bit && seg_hit && !seg_sla_err) ||
-                      (!seg_hit && sdptw_l2_read && sdptw_l2_item.valid && !page_sla_err));
-
-    assign miss_seg   = miss_ok && sdptw_l1_item.type_bit && seg_hit;
-    assign miss_fcode = miss_ok ? 3'b000 : 3'b001;
-    assign miss_eid      = miss_seg ? sdptw_l1_item.eid      : sdptw_l2_item.eid;
-    assign miss_token_id = miss_seg ? sdptw_l1_item.token_id : sdptw_l2_item.token_id;
-    assign miss_s_pfn    = miss_seg ? sdptw_l1_item.s_pfn    : sdptw_l2_item.s_pfn;
-    assign miss_sla      = miss_seg ? seg_sla                : page_sla;
-
-    assign miss_fill_pa_base = miss_seg ?
-        {walk_pa[PA_WIDTH-1:PA_HIGH_LSB], sdptw_l1_item.seg_base} :
-        walk_pa[PA_WIDTH-1:PA_BASE_LSB];
-    assign miss_fill_pa_up = miss_seg ?
-        seg_up[PA_UP_WIDTH-1:0] :
-        walk_pa[PA_BASE_LSB +: PA_UP_WIDTH];
-
-    always_comb begin
-        miss_rsp = '0;
-        miss_rsp.id    = walk_id;
-        miss_rsp.fcode = miss_fcode;
-        if (miss_ok) begin
-            miss_rsp.eid      = miss_eid;
-            miss_rsp.token_id = miss_token_id;
-            miss_rsp.sla      = miss_sla;
-        end
-    end
+        .miss_ok            (miss_ok),
+        .miss_fill_pa_base  (sdtlb_fill_pa_base),
+        .miss_fill_pa_up    (sdtlb_fill_pa_up),
+        .miss_fill_eid      (sdtlb_fill_eid),
+        .miss_fill_token_id (sdtlb_fill_token_id),
+        .miss_fill_s_pfn    (sdtlb_fill_s_pfn)
+    );
 
     // 响应仲裁: 命中优先; 未命中结果留在 SDPTW DONE, 等响应 FIFO 有空位
     assign push_hit  = hit_result_valid;
     assign push_miss = sdptw_rsp_valid && !push_hit && !rsp_fifo_full;
     assign sdptw_rsp_ready = push_miss;
 
-    assign miss_fill_valid = miss_ok && push_miss;
+    assign sdtlb_fill_valid = miss_ok && push_miss;
 
     assign rsp_fifo_wr = push_hit || push_miss;
-
     always_comb begin
         rsp_wr_pkt = '0;
         if (push_hit) begin
@@ -267,7 +195,7 @@ import sdecoder_pkg::*;
                                rsp_wr_pkt.token_id, rsp_wr_pkt.sla};
 
     assign rsp_fifo_rd   = rsp_ready && !rsp_fifo_empty;
-    assign rsp_rd_pkt    = rsp_t'(rsp_fifo_rd_data);
+    assign rsp_rd_pkt    = SDT_RSP_t'(rsp_fifo_rd_data);
     assign rsp_valid     = !rsp_fifo_empty;
     assign rsp_id        = rsp_valid ? rsp_rd_pkt.id       : '0;
     assign rsp_fcode     = rsp_valid ? rsp_rd_pkt.fcode    : '0;
@@ -309,14 +237,6 @@ import sdecoder_pkg::*;
         .empty       (miss_fifo_empty),
         .almost_empty()
     );
-
-    // 顶层填给 SDTLB 的数据来自未命中结果; 成功且被响应 FIFO 接收时才回填
-    assign sdtlb_fill_valid    = miss_fill_valid;
-    assign sdtlb_fill_pa_base  = miss_fill_pa_base;
-    assign sdtlb_fill_pa_up    = miss_fill_pa_up;
-    assign sdtlb_fill_eid      = miss_eid;
-    assign sdtlb_fill_token_id = miss_token_id;
-    assign sdtlb_fill_s_pfn    = miss_s_pfn;
 
     sdtlb u_sdtlb (
         .clk                (clk),

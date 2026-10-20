@@ -34,6 +34,15 @@ package sdecoder_pkg;
     localparam REQ_ID_WIDTH = 8;
     localparam SLA_WIDTH = 48;
 
+    // 响应包: id + fcode + eid + token_id + sla
+    typedef struct packed {
+        logic [REQ_ID_WIDTH-1:0]    id;
+        logic [2:0]                 fcode;
+        logic [EID_WIDTH-1:0]       eid;
+        logic [TOKEN_ID_WIDTH-1:0]  token_id;
+        logic [SLA_WIDTH-1:0]       sla;
+    } SDT_RSP_t;
+
     // 整条 PA[47:0] 上的字段坐标 (端口收整条 PA, 切片时用这两个常量, 不用手写 30/35)
     localparam PA_BASE_LSB = PA_WIDTH - PA_BASE_WIDTH;      // 30: PA[47:30] 的 LSB (也是 PA[34:30] 的 LSB)
     localparam PA_HIGH_LSB = PA_BASE_LSB + PA_UP_WIDTH;     // 35: PA[47:35] 的 LSB
