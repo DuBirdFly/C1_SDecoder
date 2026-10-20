@@ -15,6 +15,8 @@ class SdecoderPageTableModel extends uvm_component;
 
     virtual sdecoder_if vif;
 
+    int unsigned ar_count;
+
     localparam logic [PA_WIDTH-1:0] L1_BASE = 48'h0000_0000_1000;
     localparam logic [PA_WIDTH-1:0] L2_BASE = 48'h0000_0000_2000;
     localparam int unsigned         LATENCY_MIN = 15;
@@ -30,6 +32,7 @@ class SdecoderPageTableModel extends uvm_component;
 
     function void build_phase(uvm_phase phase);
         super.build_phase(phase);
+        ar_count = 0;
         if (!uvm_config_db#(virtual sdecoder_if)::get(this, "", "vif", vif)) begin
             `uvm_fatal("NOVIF", "SdecoderPageTableModel: no virtual sdecoder_if")
         end
@@ -109,6 +112,9 @@ class SdecoderPageTableModel extends uvm_component;
                 repeat (ar_latency) @(vif.mon);
                 vif.tw_arready <= 1'b1;
                 @(vif.mon);
+                if (vif.mon.tw_arvalid && vif.mon.tw_arready) begin
+                    ar_count++;
+                end
                 vif.tw_arready <= 1'b0;
 
                 // R valid: AR 握手后再随机等若干拍

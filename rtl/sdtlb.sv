@@ -41,10 +41,25 @@ import sdecoder_pkg::*;
     logic [SDTLB_ENTRIES-1:0] tag_hit_vector;
     logic [SDTLB_ENTRIES-1:0] tag_hit_vector_r1;
     logic [SDTLB_ENTRIES-1:0] fill_sel;
+    logic [SDTLB_ENTRIES-1:0] fill_hit_vector;
     logic [SDTLB_ENTRIES-1:0] fill_valid_vector;
+    logic [SDTLB_ENTRIES-1:0] victim_sel;
 
     assign req_hit = |tag_hit_vector_r1;
     assign fill_valid_vector = fill_valid ? fill_sel : 0;
+
+    // fill 去重: 同一个 tag 已经存在时, 更新原条目, 不再分配新条目.
+    // 这样同 PA 的多个未命中结果即使在途, 也只会留下一个有效表项.
+    always_comb begin
+        fill_hit_vector = '0;
+        for (int i = 0; i < SDTLB_ENTRIES; i++) begin
+            fill_hit_vector[i] = tag_item[i].valid &&
+                                 (tag_item[i].pa_base == fill_pa_base) &&
+                                 (tag_item[i].pa_up == fill_pa_up);
+        end
+    end
+
+    assign fill_sel = (|fill_hit_vector) ? fill_hit_vector : victim_sel;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -55,14 +70,14 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 被替换条目指针: 严格 one-hot 左移循环, 一次装填步进一格 (轮转替换)
+    // 被替换条目指针: 严格 one-hot 左移循环, 只有真正分配新条目时才步进
     tlb_victim_pointer #(
         .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES)
     ) u_tlb_victim_pointer (
         .clk                (clk),
         .rst_n              (rst_n),
-        .step(fill_valid),
-        .victim_sel         (fill_sel)
+        .step               (fill_valid && !(|fill_hit_vector)),
+        .victim_sel         (victim_sel)
     );
 
     sdtlb_tag u_sdtlb_tag(
@@ -117,6 +132,8 @@ import sdecoder_pkg::*;
 
 `ifdef ASSERT_ON
     `assert_clk(a_tag_hit_vector_onehot0, $onehot0(tag_hit_vector_r1))
+    // fill_hit_vector 是"已有相同 tag"的选择结果, 正常情况下最多一个
+    `assert_clk(a_fill_hit_onehot0, $onehot0(fill_hit_vector))
     // fill_sel 是写使能, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
     `assert_clk(a_fill_sel_onehot, $onehot(fill_sel))
 

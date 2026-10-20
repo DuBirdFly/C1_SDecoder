@@ -113,6 +113,21 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_valid      <= 1'b0;
     endtask
 
+    // 统计某个 tag 当前的有效条目数, 用于 fill 去重检查
+    function automatic int count_valid_tag(
+        input logic [PA_BASE_WIDTH-1:0] base,
+        input logic [PA_UP_WIDTH-1:0]   up
+    );
+        count_valid_tag = 0;
+        for (int i = 0; i < SDTLB_ENTRIES; i++) begin
+            if (dut.tag_item[i].valid &&
+                (dut.tag_item[i].pa_base == base) &&
+                (dut.tag_item[i].pa_up == up)) begin
+                count_valid_tag++;
+            end
+        end
+    endfunction
+
     // 按地址置无效, 拉高一拍; pa 是 PA[47:30], 低 30 位补 0
     task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] pa);
         sdtlb_if.drv.inv_en <= 1'b1;
@@ -501,6 +516,49 @@ module tb_sdtlb;
         set_req(.high(12'h103), .idx(5'd31));
         chk("轮转: 绕圈里的占位条目仍在 (第 128 个)",
             (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'd127));
+        repeat (10) @(sdtlb_if.drv);
+
+        // ====================================================================
+        // fill 去重: 同一个 tag 连续填 4 次, 只能留下一个有效条目
+        fill_one(
+            .base({12'h200, 5'd5}),
+            .up(5'd5),
+            .eid(11'h111),
+            .tok(10'h111),
+            .pfn(18'h11111)
+        );
+        fill_one(
+            .base({12'h200, 5'd5}),
+            .up(5'd5),
+            .eid(11'h222),
+            .tok(10'h222),
+            .pfn(18'h22222)
+        );
+        fill_one(
+            .base({12'h200, 5'd5}),
+            .up(5'd5),
+            .eid(11'h333),
+            .tok(10'h333),
+            .pfn(18'h33333)
+        );
+        fill_one(
+            .base({12'h200, 5'd5}),
+            .up(5'd5),
+            .eid(11'h444),
+            .tok(10'h344),
+            .pfn(18'h3AAAA)
+        );
+        repeat (10) @(sdtlb_if.drv);
+
+        chk("fill dedup: 同 tag 4 次 fill 只有 1 个有效条目",
+            count_valid_tag({12'h200, 5'd5}, 5'd5) == 1);
+
+        set_req(.high(12'h200), .idx(5'd5));
+        chk("fill dedup: 同 tag 命中唯一, 数据是最后一次",
+            (rsp_hit == 1'b1) &&
+            (rsp_tag.pa_base == {12'h200, 5'd5}) &&
+            (rsp_tag.pa_up == 5'd5) &&
+            (rsp_data.s_pfn == 18'h3AAAA));
         repeat (10) @(sdtlb_if.drv);
 
         $display("\n%d checks, %d errors", checks, errors);

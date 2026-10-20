@@ -57,7 +57,8 @@ class SdecoderMon extends uvm_monitor;
         end
 
         case (vif.mon.rsp_id)
-            8'h11, 8'h12, 8'h31, 8'h41, 8'h51, 8'h52: begin
+            8'h11, 8'h12, 8'h31, 8'h41, 8'h51, 8'h52,
+            8'hA1, 8'hA2, 8'hA3, 8'hA4, 8'hA5: begin
                 if (vif.mon.rsp_eid !== 11'h100) begin
                     err_count++;
                     `uvm_error("RSP_EID", $sformatf("A id=0x%0h eid=0x%0h", vif.mon.rsp_id, vif.mon.rsp_eid))
