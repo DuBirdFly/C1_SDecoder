@@ -48,17 +48,8 @@ import sdecoder_pkg::*;
     assign req_hit = |tag_hit_vector_r1;
     assign fill_valid_vector = fill_valid ? fill_sel : 0;
 
-    // fill 去重: 同一个 tag 已经存在时, 更新原条目, 不再分配新条目.
-    // 这样同 PA 的多个未命中结果即使在途, 也只会留下一个有效表项.
-    always_comb begin
-        fill_hit_vector = '0;
-        for (int i = 0; i < SDTLB_ENTRIES; i++) begin
-            fill_hit_vector[i] = tag_item[i].valid &&
-                                 (tag_item[i].pa_base == fill_pa_base) &&
-                                 (tag_item[i].pa_up == fill_pa_up);
-        end
-    end
-
+    // fill 去重: 每个 tag item 比较本次 fill tag, fill_hit_vector 由 sdtlb_tag 给出.
+    // 同一个 tag 已经存在时, 更新原条目, 不再分配新条目.
     assign fill_sel = (|fill_hit_vector) ? fill_hit_vector : victim_sel;
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -91,6 +82,7 @@ import sdecoder_pkg::*;
         .fill_pa_base       (fill_pa_base       ),
         .fill_pa_up         (fill_pa_up         ),
         .fill_valid_vector  (fill_valid_vector  ),
+        .fill_hit_vector    (fill_hit_vector    ),
 
         .inv_all            (inv_all            ),
         .inv_en             (inv_en             ),

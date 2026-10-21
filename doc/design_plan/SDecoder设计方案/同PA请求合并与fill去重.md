@@ -67,7 +67,9 @@ step = fill_valid && !(|fill_hit_vector);
 
 fill 去重不减少 Page Walk 次数, 但能保证 SDTLB 中不会出现重复 tag.
 
-相关 RTL: [sdtlb.sv](../../../rtl/sdtlb.sv) 的 `fill_hit_vector` 与 `fill_sel`.
+相关 RTL: [sdtlb_tag_item.sv](../../../rtl/sdtlb_tag_item.sv) 的 `fill_match`, [sdtlb_tag.sv](../../../rtl/sdtlb_tag.sv) 的 `fill_hit_vector`, 以及 [sdtlb.sv](../../../rtl/sdtlb.sv) 的 `fill_sel` / victim pointer.
+
+`fill_hit_vector` 由每个 tag item 的 `fill_match` 组合给出. 它和请求 CAM 共用同一个 tag item, 但匹配语义不同: 请求用范围命中 (`PA[34:30]` 在 `[pa_base[4:0], pa_up]` 内), fill 去重用最终 tag 的精确匹配 (`pa_base` 与 `pa_up` 都相等).
 
 ## 为什么 merge queue 值得单独讨论
 

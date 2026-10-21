@@ -17,6 +17,7 @@ import sdecoder_pkg::*;
     input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
     input  logic [SDTLB_ENTRIES-1:0]            fill_valid_vector,
+    output logic [SDTLB_ENTRIES-1:0]            fill_hit_vector,
 
     // 置无效 (刷新) 请求, 优先于装填
     input  logic                                inv_all,
@@ -40,6 +41,7 @@ import sdecoder_pkg::*;
                 .fill_pa_base (fill_pa_base),
                 .fill_pa_up   (fill_pa_up),
                 .fill_valid   (fill_valid_vector[genvar_i]),
+                .fill_hit     (fill_hit_vector[genvar_i]),
 
                 .inv_all      (inv_all),
                 .inv_en       (inv_en),

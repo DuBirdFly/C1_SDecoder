@@ -17,6 +17,7 @@ import sdecoder_pkg::*;
     input  logic [PA_BASE_WIDTH-1:0]    fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]      fill_pa_up,
     input  logic                        fill_valid,
+    output logic                        fill_hit,
 
     // 置无效 (刷新) 请求, 置无效全部 TLB ENTRIES
     input  logic                        inv_all,
@@ -46,6 +47,11 @@ import sdecoder_pkg::*;
     // req_match: 请求地址命中本条目 (不含有效位)
     wire req_match = req_high_hit && req_range_hit;
 
+    // fill_match: 本条目是否已经有和本次装填完全相同的 tag.
+    // fill 去重只认最终 tag (pa_base / pa_up 都相等), 不复用请求的范围命中.
+    wire fill_match = (fill_pa_base == tag_item.pa_base) &&
+                      (fill_pa_up == tag_item.pa_up);
+
     // inv_match: 本条目被无效化地址覆盖 (不含有效位)
     // note: 这里刻意不带 tag_item.valid. else if 的优先级只在分支条件成立时才起作用:
     //       若把有效位并进匹配条件, 条目当前无效时 inv_match 就是 0, 清位分支根本不会
@@ -66,6 +72,7 @@ import sdecoder_pkg::*;
     end
 
     assign req_hit = req_valid && tag_item.valid && req_match;
+    assign fill_hit = tag_item.valid && fill_match;
 
 `ifdef ASSERT_ON
     // fill_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]
