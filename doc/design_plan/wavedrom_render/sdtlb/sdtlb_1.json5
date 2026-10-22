@@ -1,0 +1,54 @@
+// sdtlb 查表时序: 命中向量打 1 拍后再用
+//
+// 图中例子:
+//   拍 1 单拍请求 A (命中)
+//   拍 4 / 拍 5 / 拍 6 背靠背请求
+//     B (命中) 与 C (未命中) 与 D (命中)
+
+{
+    "head": {
+        "text": "sdtlb req_* 请求 (无关 fill_*)",
+        "tock": 0,
+        "every": 1
+    },
+    "signal": [
+        {
+            "name": "clk",
+            "wave": "p........."
+        },
+        {
+            "name": "req_en",
+            "wave": "010.1..0..",
+            "node": ".a..b.c..."
+        },
+        {
+            "name": "req_pa[47:0]",
+            "wave": "x3x.456x..",
+            "data": [
+                "A",
+                "B",
+                "C",
+                "D"
+            ]
+        },
+        {
+            "name": "req_hit",
+            "wave": "0.10.1010.",
+            "node": "..d..e.f.."
+        },
+        {
+            "name": "req_hit_tag_item / req_hit_data_item",
+            "wave": "x.3x.4x6x.",
+            "data": [
+                "A",
+                "B",
+                "D"
+            ]
+        }
+    ],
+    "edge": [
+        "a~>d",
+        "b~>e",
+        "c~>f"
+    ]
+}

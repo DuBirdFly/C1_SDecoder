@@ -1,7 +1,7 @@
 ---
 name: wavedrom-check
 description: "校验 WaveDrom 波形描述 (*.json5): 用已装的 wavedrom 命令行渲染一遍, 再检查各行拍数 / data / node / edge 结构与同拍标签重叠, 给出退出码与定位."
-whenToUse: "写完或改完 doc/design_plan/wavedrom_render/*.json5 之后; 或用户要求确认某张波形图能不能渲染, 有没有压字, 想导出 SVG 时."
+whenToUse: "写完或改完 doc/design_plan/wavedrom_render/**/*.json5 之后; 或用户要求确认某张波形图能不能渲染, 有没有压字, 想导出 SVG 时."
 ---
 
 # wavedrom-check
@@ -9,11 +9,11 @@ whenToUse: "写完或改完 doc/design_plan/wavedrom_render/*.json5 之后; 或�
 在**仓库根目录**执行:
 
 ```bash
-node .agents/skills/wavedrom-check/check-wavedrom.mjs doc/design_plan/wavedrom_render/sdtlb.json5   # 单个
+node .agents/skills/wavedrom-check/check-wavedrom.mjs doc/design_plan/wavedrom_render/sdtlb/sdtlb_1.json5   # 单个
 git ls-files -z "*.json5" | xargs -0 node .agents/skills/wavedrom-check/check-wavedrom.mjs          # 已跟踪的全部
 
 # 顺带把渲染结果导成 SVG (贴进文档时用; 只能配一个文件)
-node .agents/skills/wavedrom-check/check-wavedrom.mjs -o /tmp/sdtlb.svg doc/design_plan/wavedrom_render/sdtlb.json5
+node .agents/skills/wavedrom-check/check-wavedrom.mjs -o /tmp/sdtlb.svg doc/design_plan/wavedrom_render/sdtlb/sdtlb_1.json5
 ```
 
 - 通过时每个文件一行 `ok <文件> (<拍数> 拍, <行数> 行)`, 退出码 `0`
