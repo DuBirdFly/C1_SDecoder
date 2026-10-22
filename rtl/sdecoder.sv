@@ -80,7 +80,7 @@ import sdecoder_pkg::*;
     logic                       sdtlb_req_hit;
     SDTLB_TAG_ITEM_t            sdtlb_hit_tag;
     SDTLB_DATA_ITEM_t           sdtlb_hit_data;
-    logic                       sdtlb_fill_valid;
+    logic                       sdtlb_fill_en;
     logic [PA_BASE_WIDTH-1:0]   sdtlb_fill_pa_base;
     logic [PA_UP_WIDTH-1:0]     sdtlb_fill_pa_up;
     logic [EID_WIDTH-1:0]       sdtlb_fill_eid;
@@ -178,7 +178,7 @@ import sdecoder_pkg::*;
     assign push_miss = sdptw_rsp_valid && !push_hit && !rsp_fifo_full;
     assign sdptw_rsp_ready = push_miss;
 
-    assign sdtlb_fill_valid = miss_ok && push_miss;
+    assign sdtlb_fill_en = miss_ok && push_miss;
 
     assign rsp_fifo_wr = push_hit || push_miss;
     always_comb begin
@@ -242,13 +242,13 @@ import sdecoder_pkg::*;
         .clk                (clk),
         .rst_n              (rst_n),
 
-        .req_valid          (req_accept),
+        .req_en             (req_accept),
         .req_pa             (req_pa),
         .req_hit            (sdtlb_req_hit),
         .req_hit_tag_item   (sdtlb_hit_tag),
         .req_hit_data_item  (sdtlb_hit_data),
 
-        .fill_valid         (sdtlb_fill_valid),
+        .fill_en           (sdtlb_fill_en),
         .fill_pa_base       (sdtlb_fill_pa_base),
         .fill_pa_up         (sdtlb_fill_pa_up),
         .fill_eid           (sdtlb_fill_eid),

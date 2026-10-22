@@ -9,7 +9,7 @@ import sdecoder_pkg::*;
     input  logic                        rst_n,
 
     // 装填请求
-    input  logic                        fill_valid,
+    input  logic                        fill_en,
     input  logic [EID_WIDTH-1:0]        fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]   fill_token_id,
     input  logic [S_PFN_WIDTH-1:0]      fill_s_pfn,
@@ -22,7 +22,7 @@ import sdecoder_pkg::*;
         if (!rst_n) begin
             data_item <= '0;
         end
-        else if (fill_valid) begin
+        else if (fill_en) begin
             data_item <= '{
                 eid:      fill_eid,
                 token_id: fill_token_id,

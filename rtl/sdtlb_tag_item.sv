@@ -9,14 +9,14 @@ import sdecoder_pkg::*;
     input  logic                        rst_n,
 
     // 代换请求
-    input  logic                        req_valid,
+    input  logic                        req_en,
     input  logic [PA_WIDTH-1:0]         req_pa,
     output logic                        req_hit,
 
     // 装填请求
     input  logic [PA_BASE_WIDTH-1:0]    fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]      fill_pa_up,
-    input  logic                        fill_valid,
+    input  logic                        fill_en,
     output logic                        fill_hit,
 
     // 置无效 (刷新) 请求, 置无效全部 TLB ENTRIES
@@ -66,18 +66,18 @@ import sdecoder_pkg::*;
         else if (inv_all || inv_match) begin
             tag_item.valid <= 1'b0;
         end
-        else if (fill_valid) begin
-            tag_item <= '{pa_base: fill_pa_base, pa_up: fill_pa_up, valid: fill_valid};
+        else if (fill_en) begin
+            tag_item <= '{pa_base: fill_pa_base, pa_up: fill_pa_up, valid: fill_en};
         end
     end
 
-    assign req_hit = req_valid && tag_item.valid && req_match;
+    assign req_hit = req_en && tag_item.valid && req_match;
     assign fill_hit = tag_item.valid && fill_match;
 
 `ifdef ASSERT_ON
     // fill_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]
     `assert_clk(a_fill_pa_range_valid,
-                ((fill_valid == 1'b0) || (fill_pa_up >= fill_pa_base[PA_UP_WIDTH-1:0])))
+                ((fill_en == 1'b0) || (fill_pa_up >= fill_pa_base[PA_UP_WIDTH-1:0])))
 `endif
 
 endmodule

@@ -9,14 +9,14 @@ import sdecoder_pkg::*;
     input  logic                                rst_n,
 
     // 代换请求: 广播给全部条目做比较
-    input  logic                                req_valid,
+    input  logic                                req_en,
     input  logic [PA_WIDTH-1:0]                 req_pa,
     output logic [SDTLB_ENTRIES-1:0]            req_hit_vector,
 
     // 装填请求
     input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
-    input  logic [SDTLB_ENTRIES-1:0]            fill_valid_vector,
+    input  logic [SDTLB_ENTRIES-1:0]            fill_en_vector,
     output logic [SDTLB_ENTRIES-1:0]            fill_hit_vector,
 
     // 置无效 (刷新) 请求, 优先于装填
@@ -34,13 +34,13 @@ import sdecoder_pkg::*;
                 .clk          (clk),
                 .rst_n        (rst_n),
 
-                .req_valid    (req_valid),
+                .req_en       (req_en),
                 .req_pa       (req_pa),
                 .req_hit      (req_hit_vector[genvar_i]),
 
                 .fill_pa_base (fill_pa_base),
                 .fill_pa_up   (fill_pa_up),
-                .fill_valid   (fill_valid_vector[genvar_i]),
+                .fill_en      (fill_en_vector[genvar_i]),
                 .fill_hit     (fill_hit_vector[genvar_i]),
 
                 .inv_all      (inv_all),

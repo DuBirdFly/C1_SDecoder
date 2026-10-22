@@ -55,7 +55,7 @@ fill_sel = |fill_hit_vector ? fill_hit_vector : victim_sel;
 只有分配新条目时才步进 victim pointer:
 
 ```text
-step = fill_valid && !(|fill_hit_vector);
+step = fill_en && !(|fill_hit_vector);
 ```
 
 这样:
