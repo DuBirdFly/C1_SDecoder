@@ -1,0 +1,18 @@
+// SDecoder invalidate all
+
+{
+    "reg": [
+        {
+            "bits": 1,
+            "name": "en",
+            "attr": [
+                "W1P"
+            ]
+        },
+        {
+            "bits": 63,
+            "name": "rsv",
+            "type": 0
+        }
+    ]
+}

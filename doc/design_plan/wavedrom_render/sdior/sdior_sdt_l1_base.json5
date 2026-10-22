@@ -1,0 +1,19 @@
+// SDecoder Table-L1 Base Addr
+
+{
+    "reg": [
+        {
+            "bits": 48,
+            "name": "sdt_l1_base",
+            "attr": [
+                "RW",
+                "[47] is ignored, [3:0] is ignored"
+            ]
+        },
+        {
+            "bits": 16,
+            "name": "rsv",
+            "type": 0
+        }
+    ]
+}

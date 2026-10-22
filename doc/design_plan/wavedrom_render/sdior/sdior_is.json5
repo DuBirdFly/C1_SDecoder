@@ -1,0 +1,26 @@
+// SDecoder invalidate selected-pa
+
+{
+    "reg": [
+        {
+            "bits": 48,
+            "name": "pa",
+            "attr": [
+                "RW",
+                "[47] is ignored, [29:0] is ignored"
+            ]
+        },
+        {
+            "bits": 15,
+            "name": "rsv",
+            "type": 0
+        },
+        {
+            "bits": 1,
+            "name": "en",
+            "attr": [
+                "W1P"
+            ]
+        }
+    ]
+}
