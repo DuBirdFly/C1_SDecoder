@@ -55,6 +55,7 @@ wavedrom --input doc/design_plan/wavedrom_render/sdtlb.json5 --indent 2 > /tmp/s
 - [ ] 文件名与模块同名, 放在 `doc/design_plan/wavedrom_render/`
 - [ ] 跑过 `wavedrom --input <文件> > /tmp/x.svg`, 退出码为 `0`, stdout 是 `<svg ...` 开头
 - [ ] 各行的拍数一致, `|` 位置一致, `data` 个数与数据格数一致
+- [ ] 电平用 `.` 续接, 不写 `00` / `11` (wavedrom 会在拍的中间画毛刺)
 - [ ] `node` 长度与 `wave` 等长, `edge` 引用的节点都在 `node` 里出现过
 - [ ] 长的名字放在行名里, `data` 标签短到不会压到隔壁
 - [ ] 要贴进 Markdown 时导出 SVG 并写图注, 正文里不放 json5 源码

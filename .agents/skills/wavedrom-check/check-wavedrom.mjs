@@ -4,6 +4,7 @@
 // 渲染交给已装的命令行 `wavedrom` (npm 包, 3.7.0): 本脚本只补它不查的部分 ——
 //   - 各行的 wave 是否等长, "|" (空档) 的位置是否各行一致
 //   - data 个数与数据格数是否一致, node 长度是否与 wave 等长, edge 引用的节点是否存在
+//   - 相邻两拍是否写了同一个电平 "0" / "1" (会画成 0m0 / 1m1 的毛刺, 应改用 ".")
 //   - 同一行相邻标签是否重叠 (宽度按字数估: CJK 15px, 其它 8px)
 //
 // 用法: node .agents/skills/wavedrom-check/check-wavedrom.mjs [-o <out.svg>] <file.json5> [...]
@@ -31,6 +32,22 @@ function pickError(stderr) {
     return lines.find((line) => /^(?:[A-Za-z]*Error|Uncaught)\b/.test(line)) ?? lines[lines.length - 1] ?? "";
 }
 
+// ---- 电平毛刺: 相邻两拍写同一个 "0"/"1" 时, wavedrom 会画 0m0 / 1m1 这种中间凸起的毛刺,
+//      要延续电平得用 "." (0. / 1.); 跨 "|" 空档的不算 (空档本身就会断开) ----
+const LEVEL_CHARS = "01";
+function checkLevelGlitch(name, wave) {
+    const problems = [];
+    const chars = [...wave];
+    for (let i = 1; i < chars.length; i++) {
+        if (!LEVEL_CHARS.includes(chars[i]) || chars[i] !== chars[i - 1]) continue;
+        problems.push(
+            `${name}: wave 第 ${i} / ${i + 1} 拍连着两个 "${chars[i]}" —— 渲染会在中间画毛刺 (0m0 / 1m1),` +
+            ` 要延续电平请把第 ${i + 1} 拍写成 "."`,
+        );
+    }
+    return problems;
+}
+
 // ---- 结构自检: 各行走同样多的拍; data 个数与数据格数一致; edge 引用的节点存在 ----
 const DATA_CHARS = "=23456789";
 function checkStructure(obj) {
@@ -51,6 +68,7 @@ function checkStructure(obj) {
         if (lane.node && lane.node.length !== wave.length) {
             problems.push(`${lane.name ?? "(无名)"}: node 长度 ${lane.node.length} != wave 长度 ${wave.length}`);
         }
+        problems.push(...checkLevelGlitch(lane.name ?? "(无名)", wave));
     }
     const gaps = new Set(lanes.map((lane) => [...lane.wave].map((c, i) => (c === "|" ? i : -1)).filter((i) => i >= 0).join(",")));
     if (gaps.size > 1) {
