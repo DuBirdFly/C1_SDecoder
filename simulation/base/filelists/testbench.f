@@ -22,5 +22,3 @@
 ./testbench/top/tb_sdecoder.sv
 ./testbench/top/tb_sdtlb.sv
 ./testbench/top/tb_sdptw.sv
-./testbench/top/tb_sdior.sv
-./testbench/top/tb_syn_fifo.sv

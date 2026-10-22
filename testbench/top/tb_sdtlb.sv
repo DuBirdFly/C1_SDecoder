@@ -561,6 +561,47 @@ module tb_sdtlb;
             (rsp_data.s_pfn == 18'h3AAAA));
         repeat (10) @(sdtlb_if.drv);
 
+        // ====================================================================
+        // 同拍 req + fill: 请求拍用旧 tag 判定, 命中 tag/data 必须和 hit vector 一起打拍.
+        // 这里 fill 命中同一个 tag (去重), 但 data 更新; 请求应返回旧 data, 后续请求才看到新 data.
+        fill_one(
+            .base({12'h210, 5'd7}),
+            .up(5'd7),
+            .eid(11'h0a1),
+            .tok(10'h0a1),
+            .pfn(18'h1aaaa)
+        );
+        repeat (10) @(sdtlb_if.drv);
+
+        sdtlb_if.drv.req_en        <= 1'b1;
+        sdtlb_if.drv.req_pa        <= {12'h210, 5'd7, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        sdtlb_if.drv.fill_en       <= 1'b1;
+        sdtlb_if.drv.fill_pa_base  <= {12'h210, 5'd7};
+        sdtlb_if.drv.fill_pa_up    <= 5'd7;
+        sdtlb_if.drv.fill_eid      <= 11'h0b2;
+        sdtlb_if.drv.fill_token_id <= 10'h0b2;
+        sdtlb_if.drv.fill_s_pfn    <= 18'h1bbbb;
+        @(sdtlb_if.drv);             // 请求拍 + fill 拍
+        sdtlb_if.drv.req_en        <= 1'b0;
+        sdtlb_if.drv.fill_en       <= 1'b0;
+        @(sdtlb_if.drv);             // 响应拍
+        sample_rsp();
+        chk("同拍 req+fill: 响应用请求拍旧 data",
+            (rsp_hit == 1'b1) &&
+            (rsp_tag.pa_base == {12'h210, 5'd7}) &&
+            (rsp_data.eid == 11'h0a1) &&
+            (rsp_data.token_id == 10'h0a1) &&
+            (rsp_data.s_pfn == 18'h1aaaa));
+        repeat (10) @(sdtlb_if.drv);
+
+        set_req(.high(12'h210), .idx(5'd7));
+        chk("同拍 req+fill: 后续请求看到新 data",
+            (rsp_hit == 1'b1) &&
+            (rsp_data.eid == 11'h0b2) &&
+            (rsp_data.token_id == 10'h0b2) &&
+            (rsp_data.s_pfn == 18'h1bbbb));
+        repeat (10) @(sdtlb_if.drv);
+
         $display("\n%d checks, %d errors", checks, errors);
         if (errors == 0) begin
             $display("RESULT: PASS");

@@ -2,6 +2,13 @@
 `include "sdecoder_pkg.svh"
 `default_nettype none
 
+// 命中读出的 tag/data 与命中向量一起在请求拍打拍:
+//   请求拍 T 用 fill 之前的旧 tag 做命中判定; 同一拍用 tag_hit_vector 从旧的
+//   tag_item / data_item 选出命中内容, 并在时钟沿寄存.
+//   下一拍 req_hit / req_hit_tag_item / req_hit_data_item 都来自 T 拍快照.
+//   因此 req_en 和 fill_en (或 inv_en) 同拍有效时, 表项更新只影响后续请求,
+//   不会出现 "旧命中 + 新 tag/data" 的不一致.
+
 module sdtlb
 import sdecoder_pkg::*;
 (
@@ -45,6 +52,12 @@ import sdecoder_pkg::*;
     logic [SDTLB_ENTRIES-1:0] fill_en_vector;
     logic [SDTLB_ENTRIES-1:0] victim_sel;
 
+    // 请求拍 T 选出的命中 tag/data 快照, 和 tag_hit_vector_r1 同一沿寄存
+    SDTLB_TAG_ITEM_t  hit_tag_sel;
+    SDTLB_DATA_ITEM_t hit_data_sel;
+    SDTLB_TAG_ITEM_t  req_hit_tag_item_r;
+    SDTLB_DATA_ITEM_t req_hit_data_item_r;
+
     assign req_hit = |tag_hit_vector_r1;
     assign fill_en_vector = fill_en ? fill_sel : 0;
 
@@ -54,10 +67,14 @@ import sdecoder_pkg::*;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            tag_hit_vector_r1 <= '0;
+            tag_hit_vector_r1   <= '0;
+            req_hit_tag_item_r  <= '0;
+            req_hit_data_item_r <= '0;
         end
         else begin
-            tag_hit_vector_r1 <= tag_hit_vector;
+            tag_hit_vector_r1   <= tag_hit_vector;
+            req_hit_tag_item_r  <= hit_tag_sel;
+            req_hit_data_item_r <= hit_data_sel;
         end
     end
 
@@ -103,24 +120,28 @@ import sdecoder_pkg::*;
         .data_item          (data_item          )
     );
 
-    // 命中读出: 用打 1 拍后的命中向量选路; 数据本身是寄存器输出, 一直稳定
+    // 命中读出: 请求拍 T 用组合 hit vector 从旧 tag/data 选出快照,
+    // 和 tag_hit_vector_r1 在同一沿寄存; 同拍 fill/inv 不会改到本次响应.
     onehot0_mux #(
         .N      (SDTLB_ENTRIES),
         .WIDTH  (SDTLB_TAG_ITEM_WIDTH)
     ) u_onehot0_mux_tag (
-        .sel    (tag_hit_vector_r1),
+        .sel    (tag_hit_vector),
         .din    (tag_item),
-        .dout   (req_hit_tag_item)
+        .dout   (hit_tag_sel)
     );
 
     onehot0_mux #(
         .N      (SDTLB_ENTRIES),
         .WIDTH  (SDTLB_DATA_ITEM_WIDTH)
     ) u_onehot0_mux_data (
-        .sel    (tag_hit_vector_r1),
+        .sel    (tag_hit_vector),
         .din    (data_item),
-        .dout   (req_hit_data_item)
+        .dout   (hit_data_sel)
     );
+
+    assign req_hit_tag_item  = req_hit_tag_item_r;
+    assign req_hit_data_item = req_hit_data_item_r;
 
 `ifdef ASSERT_ON
     `assert_clk(a_tag_hit_vector_onehot0, $onehot0(tag_hit_vector_r1))
