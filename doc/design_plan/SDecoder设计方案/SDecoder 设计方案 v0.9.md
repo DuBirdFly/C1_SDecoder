@@ -49,6 +49,24 @@ flowchart LR
 
 <!-- [TODO] 其他缩写表内容后续待补充 -->
 
+### 参数表
+
+| 参数 | 默认值 |
+| --- | --- |
+| `PA_WIDTH` | 48 |
+| `PA_MEM_WIDTH` | 47 |
+| `SLA_WIDTH` | 53 |
+| `EID_WIDTH` | 11 |
+| `TOKEN_ID_WIDTH` | 10 |
+| `TOKEN_VALUE_WIDTH` | 10 |
+| `REQ_ID_WIDTH` | 8 |
+| `SDTLB_ENTRIES` | 128 |
+| `MISS_FIFO_DEPTH` | 8 |
+| `SDIOR_DATA_WIDTH` | 64 |
+| `RSP_ERR_WIDTH` | 4 |
+
+注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
+
 ## 架构
 
 ### SDecoder
@@ -204,10 +222,71 @@ stateDiagram-v2
 
 ## 接口信号
 
-### 请求接口
+### 请求接口 (CAM)
 
-### 响应接口
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `camN_req_valid` | I | 1 | / |
+| `camN_req_ready` | O | 1 | / |
+| `camN_req_pa` | I | `PA_WIDTH` | / |
+| `camN_req_id` | I | `REQ_ID_WIDTH` | / |
 
-### 访存接口
+注 1: 共有 2 组请求接口 (CAM), N 可取 [0, 1], 分别对应两个 CAM
+
+### 响应接口 (CAM)
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `camN_rsp_valid` | O | 1 | \ |
+| `camN_rsp_ready` | I | 1 | \ |
+| `camN_rsp_id` | O | `REQ_ID_WIDTH` | \ |
+| `camN_rsp_eid` | O | `EID_WIDTH` | \ |
+| `camN_rsp_token_id` | O | `TOKEN_ID_WIDTH` | \ |
+| `camN_rsp_token_value` | O | `TOKEN_VALUE_WIDTH` | \ |
+| `camN_rsp_sla` | O | `SLA_WIDTH` | \ |
+
+注 1: 共有 2 组响应接口 (CAM), N 可取 [0, 1], 分别对应两个 CAM
+
+<!-- [TODO] `camN_rsp_err` 编码:-->
+
+### 响应接口 (Page Walk)
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `pw_rsp_valid` | O | 1 | \ |
+| `pw_rsp_ready` | I | 1 | \ |
+| `pw_rsp_id` | O | `REQ_ID_WIDTH` | \ |
+| `pw_rsp_err` | O | `RSP_ERR_WIDTH` | 应该就 page walk 有 err 吧 |
+| `pw_rsp_eid` | O | `EID_WIDTH` | \ |
+| `pw_rsp_token_id` | O | `TOKEN_ID_WIDTH` | \ |
+| `pw_rsp_token_value` | O | `TOKEN_VALUE_WIDTH` | \ |
+| `pw_rsp_sla` | O | `SLA_WIDTH` | \ |
+
+### 访存接口 (Page Walk)
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `pw_araddr` | O | `PA_WIDTH` | \ |
+| `pw_arvalid` | O | 1 | \ |
+| `pw_arready` | I | 1 | \ |
+| `pw_rdata` | I | 128 | \ |
+| `pw_rvalid` | I | 1 | \ |
+| `pw_rready` | O | 1 | \ |
+
+### 寄存器配置接口
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `cfg_wr` | I | 1 | 写使能, 1 拍脉冲 |
+| `cfg_rd` | I | 1 | 读使能, 1 拍脉冲 |
+| `cfg_addr` | I | 2 | 寄存器索引 |
+| `cfg_wdata` | I | `SDIOR_DATA_WIDTH` | 写数据 |
+| `cfg_rdata` | O | `SDIOR_DATA_WIDTH` | 读数据 |
 
 ## 可配置的寄存器
+
+| `cfg_addr` | 寄存器 | 属性 | 说明 |
+| --- | --- | --- | --- |
+| 0 | `SDecoder_IA` | W1P | 写 bit0 = 1, 置无效全部 SDTLB 条目 |
+| 1 | `SDecoder_IS` | W1P | 写 bit63 = 1, 置无效覆盖 `PA[47:30]` 的条目; 低 48 位为 PA |
+| 2 | `SDT_L1_BASE` | RW | 一级表基地址 `PA[47:0]`, 16B 对界 |
