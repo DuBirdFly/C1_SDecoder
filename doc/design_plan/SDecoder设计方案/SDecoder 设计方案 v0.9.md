@@ -86,6 +86,10 @@ flowchart LR
 
 各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 单时钟域.
 
+除配置接口外, 其余接口都采用 valid-ready 握手, 信号名为 `*valid` / `*ready` 风格: 握手完成于 `valid` 与 `ready` 同时为高的上升沿; `valid` 不得组合依赖 `ready`, 拉高后到握手完成前载荷保持不变.
+
+注: valid-ready 握手的优点是: 收发双方不需要约定固定延迟, 各自按自己的节奏工作; 接收方随时可以拉低 `ready` 反压, 发送方只要保持 `valid` 和载荷即可; 中间插入缓冲或流水级也不改变协议, 数据通路的组合路径可以打拍切断, 减轻时序压力; 代价是 `ready` 方向形成组合反压链, 长链上仍需寄存化处理.
+
 #### 内部结构
 
 ```mermaid
@@ -285,12 +289,14 @@ stateDiagram-v2
 状态说明:
 
 - `IDLE`: 空闲, 等待 Page Walk 请求, 收到 Page Walk 请求后, 锁存 PA 和 req_id
-- `RECHECK`: Page Walk 开始前重查 SDTLB (借用 CAM0/CAM1 的查表口, 见 "重查 SDTLB" 一节); 命中则直接进入 `DONE`, 用命中的表项组装 SLMD, 不访存也不回填; 未命中才去读一级表
-- `SDT_L1_AR`: 写一级表表项地址, 等 `arready`
-- `SDT_L1_R`: 读一级表表项数据, 如果段命中或一级无效则直接进入 `DONE` 状态, 否则跳转到二级表访问
-- `SDT_L2_AR`: 写二级表表项地址, 等 `arready`
-- `SDT_L2_R`: 读二级表表项数据, 转 `DONE` 状态
-- `DONE`: 把 Page Walk 结果交给 SLMD_CALC_PTW, 由它校验表项数据合法性并拼装 SLMD, 从 `pw_rsp_*` 返回
+- `RECHECK`: Page Walk 开始前重查 SDTLB (借用 CAM0/CAM1 的查表口, 见 "重查 SDTLB" 一节); 命中则直接进入 `DONE`, 用命中的表项组装 SLMD, 不访存也不回填 SDTLB; 未命中才实际执行 Page Walk
+- `SDT_L1_AR`: Page Walk, 写一级表表项地址, 等 `arready`
+- `SDT_L1_R`: Page Walk, 读一级表表项数据, 如果段命中或一级无效则直接进入 `DONE` 状态, 否则跳转到二级表访问
+- `SDT_L2_AR`: Page Walk, 写二级表表项地址, 等 `arready`
+- `SDT_L2_R`: Page Walk, 读二级表表项数据, 转 `DONE` 状态
+- `DONE`:
+  - 把 Page Walk 结果交给 SLMD_CALC_PTW, 由它校验表项数据合法性并拼装 SLMD
+  - 如果 Page Walk 结果合法, 回填 SDTLB, 否则不回填
 
 #### 重查 SDTLB
 
@@ -402,6 +408,6 @@ stateDiagram-v2
 
 
 
-
+可能会有由于 valid-ready 握手导致的死锁/活锁问题
 
 有些异常是没法处理的, 尤其是当软件修改了 Page Table 的内容, 但忘记了去刷新 SDecoder 的 SDTLB 的情况
