@@ -3,7 +3,7 @@
     "MD009": false,
     // 多行空行
     "MD012": {
-        "maximum": 4
+        "maximum": 8
     },
     // line 的长度
     "MD013": false,
