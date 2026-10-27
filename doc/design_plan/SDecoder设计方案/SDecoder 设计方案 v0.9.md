@@ -2,7 +2,7 @@
 
 ## 概述
 
-### 总体描述
+### 基本功能
 
 SDecoder 的核心功能做的是 **PA 到 SLMD 的代换**.
 
@@ -71,26 +71,7 @@ flowchart LR
 
 ### SDecoder (AI)
 
-#### 接口分组
-
-| 接口信号 | 定位 | 方向 | 说明 |
-| --- | --- | --- | --- |
-| `cam0_req_*` | Slave | 输入 | 上游 master 发起请求 |
-| `cam0_rsp_*` | Slave | 输出 | cam0 命中时返回 SLMD |
-| `cam1_req_*` | Slave | 输入 | 上游 master 发起请求 |
-| `cam1_rsp_*` | Slave | 输出 | cam1 命中时返回 SLMD |
-| `pw_rsp_*` | Slave | 输出 | 未命中 Page Walk 完成后返回 SLMD 或错误 |
-| `pw_ar*` | Master | 输出 | 发起读表项地址, 读本地 SDT_L1 / SDT_L2 |
-| `pw_r*` | Master | 输入 | 接收读回的表项数据 |
-| `cfg_*` | Slave | 输入 / 输出 | 配置基地址, 置无效 SDTLB |
-
-各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 单时钟域.
-
-除配置接口外, 其余接口都采用 valid-ready 握手, 信号名为 `*valid` / `*ready` 风格: 握手完成于 `valid` 与 `ready` 同时为高的上升沿; `valid` 不得组合依赖 `ready`, 拉高后到握手完成前载荷保持不变.
-
-注: valid-ready 握手的优点是: 收发双方不需要约定固定延迟, 各自按自己的节奏工作; 接收方随时可以拉低 `ready` 反压, 发送方只要保持 `valid` 和载荷即可; 中间插入缓冲或流水级也不改变协议, 数据通路的组合路径可以打拍切断, 减轻时序压力; 代价是 `ready` 方向形成组合反压链, 长链上仍需寄存化处理.
-
-#### 内部结构
+#### 微结构
 
 ```mermaid
 flowchart LR
@@ -120,13 +101,34 @@ SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物�
 
 图上只画了 SDIOR 与配置接口的连接; 它输出的置无效命令作用于 SDTLB, 寄存器编码见 "可配置的寄存器" 一节.
 
+#### 接口分组
+
+| 接口信号 | 定位 | 方向 | 说明 |
+| --- | --- | --- | --- |
+| `cam0_req_*` | Slave | 输入 | 上游 master 发起请求 |
+| `cam0_rsp_*` | Slave | 输出 | cam0 命中时返回 SLMD |
+| `cam1_req_*` | Slave | 输入 | 上游 master 发起请求 |
+| `cam1_rsp_*` | Slave | 输出 | cam1 命中时返回 SLMD |
+| `pw_rsp_*` | Slave | 输出 | 未命中 Page Walk 完成后返回 SLMD 或错误 |
+| `pw_ar*` | Master | 输出 | 发起读表项地址, 读本地 SDT_L1 / SDT_L2 |
+| `pw_r*` | Master | 输入 | 接收读回的表项数据 |
+| `cfg_*` | Slave | 输入 / 输出 | 配置基地址, 置无效 SDTLB |
+
+各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 单时钟域.
+
+除配置接口外, 其余接口都采用 valid-ready 握手, 信号名为 `*valid` / `*ready` 风格: 握手完成于 `valid` 与 `ready` 同时为高的上升沿; `valid` 不得组合依赖 `ready`, 拉高后到握手完成前载荷保持不变.
+
+注: valid-ready 握手的优点是: 收发双方不需要约定固定延迟, 各自按自己的节奏工作; 接收方随时可以拉低 `ready` 反压, 发送方只要保持 `valid` 和载荷即可; 中间插入缓冲或流水级也不改变协议, 数据通路的组合路径可以打拍切断, 减轻时序压力; 代价是 `ready` 方向形成组合反压链, 长链上仍需寄存化处理.
+
+请求和响应都需要带 id 号 (`camN_req_id` / `camN_rsp_id`, `pw_rsp_id`); 响应不保序, 同一个 id 的多笔请求之间也不保证顺序: 例如先到的同 id 请求未命中 SDTLB, 走 Page Walk 后才返回, 而后到的同 id 请求命中 SDTLB, 会先返回响应. 上游只能按 id 匹配, 不能依赖响应顺序.
+
 #### 模块划分
 
 1. `SDTLB`: 全相联 CAM, 共 `SDTLB_ENTRIES` (128) 条表项, 只有 1 份表项存储; 对外是 2 组输入接口 cam0 / cam1. 两组接口共享同一份表项, 两路可以并行查表; 命中结果按来源从对应的 `camN_rsp_*` 返回. 回填和置无效都只作用于这一份 TLB 表项.
-2. `MISS_QUEUE`: 深度 `MISS_QUEUE_DEPTH` (8), 存放未命中的 PA 和 `req_id`. TLB 的 2 个 CAM 出口都接到它, 两路未命中进同一个队列, 输出按先入先出送给 SDPTW.
+2. `MISS_QUEUE`: 深度 `MISS_QUEUE_DEPTH` (8), 存放未命中的 PA 和 `req_id`. TLB 的 2 个 CAM 出口都接到它, 两路未命中进同一个队列, 输出按年龄从老到年轻送给 SDPTW.
 3. `SDPTW`: 单 walker, 从 MISS_QUEUE 取请求做两级 Page Walk, 只读 SDT_L1 / SDT_L2. Page Walk 完成后把表项和 `req_id` 交给 `SLMD_CALC_PTW`, 由它拼装 SLMD 并从 `pw_rsp_*` 返回; 检查通过的结果回填 SDTLB.
 4. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` / `SLMD_CALC_PTW`: 3 个实例相互独立. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` 用 TLB 命中表项和请求 PA 算出 SLA 并拼出 SLMD; `SLMD_CALC_PTW` 用 SDPTW 的 Page Walk 结果判定命中 / 未命中 / 非法, 拼出 SLMD 或错误. 每个实例只驱动对应的响应接口, 实例之间不共享流水级, 一条通道反压不影响另外两条.
-5. `SDIOR`: 配置与刷新寄存器, 输出 `SDT_L1_BASE` 和置无效命令, 置无效作用于 SDTLB.
+5. `SDIOR`: 配置与刷新寄存器, 输出 `SDecoder_PTBR` 和置无效命令, 置无效作用于 SDTLB.
 
 #### 命中与未命中流程
 
@@ -134,13 +136,15 @@ SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物�
 2. 命中: 两路查的是同一份 TLB 表项. 命中表项按来源接口送给对应的 `SLMD_CALC` (cam0 命中去 `SLMD_CALC_CAM[0]`, cam1 命中去 `SLMD_CALC_CAM[1]`), 由它算 SLA 并拼 SLMD, 从该接口的 `camN_rsp_*` 返回, 带 `req_id`.
 3. 未命中: cam0 和 cam1 的未命中都写入同一个 MISS_QUEUE; 命中路径不等待未命中 (hit-under-miss).
 4. Page Walk: SDPTW 从 MISS_QUEUE 取请求; SDPTW 读 SDT_L1, 段命中则直接给出段式结果, 否则再读 SDT_L2; Page Walk 结果交给 `SLMD_CALC_PTW`, 由它判定命中 / 未命中 / 非法, 拼装后从 `pw_rsp_*` 返回, 合法结果同时回填 SDTLB.
-5. 反压: MISS_QUEUE 满或本路响应通道反压时拉低对应路的 `camN_req_ready`; 两路共用 MISS_QUEUE, 所以一路未命中积压会同时反压两路, 3 个 `SLMD_CALC` 仍相互独立.
+5. 反压: MISS_QUEUE 将满或本路响应通道反压时拉低对应路的 `camN_req_ready`; 两路共用 MISS_QUEUE, 所以一路未命中积压会同时反压两路, 3 个 `SLMD_CALC` 仍相互独立.
 
 注: CAM 命中的响应不设 FIFO, 命中表项由 `SLMD_CALC_CAM[n]` 直接驱动 `camN_rsp_*`. 上级模块应尽快从 `camN_rsp_*` 取走数据, 取走不及时会反压该路的请求接口 (`camN_req_ready` 拉低); 理想情况下, 例化 SDecoder 时可以把 `camN_rsp_ready` 常置为 1.
 
-注: SDPTW 是单 walker, MISS_QUEUE 按先入先出取请求, 两路未命中在队列里按到达顺序排列; 命中可以越过未命中, 响应仍按 `req_id` 乱序匹配.
+注: SDPTW 是单 walker, MISS_QUEUE 按年龄从老到年轻取请求; 命中同段 / 同页的条目可以被提前弹出, 响应仍按 `req_id` 乱序匹配.
 
-三条路径输出的 SLMD 字段语义一致, 都由各自的 `SLMD_CALC` 组装. 响应可以乱序, 命中与未命中走不同的响应通道, 同一时刻在途的 `req_id` 必须唯一, 上游按 ID 匹配.
+三条路径输出的 SLMD 字段语义一致, 都由各自的 `SLMD_CALC` 组装.
+
+响应可以乱序, 命中与未命中走不同的响应通道, 同一时刻在途的 `req_id` 必须唯一, 上游按 ID 匹配.
 
 ### SDPTW
 
@@ -157,7 +161,7 @@ SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物�
 
 虽然 PA[47] 恒为 0, 但现在 Page Table 中仍然保留该位:
 
-1. 一级表的基地址 SDT_L1_BASE[47]
+1. 一级表的基地址 SDecoder_PTBR[47]
 2. 二级表的基地址 SDT_L2_BASE[47]
 
 所以对于一个 PA 请求, 其位域划分如下:
@@ -189,9 +193,9 @@ SDecoder 采用 "段页混合" 的两级代换表: 一级表表项描述一个�
 
 1. 两级代换表必须存放在本芯片的本地 HBM / DDR 上, 不允许存放在远端池化内存中. 否则读表本身就会变成一次远端访问, 会经过一次 SWLink 环回
 2. 两级代换表在内存中的基地址对界: 硬件只使用基地址的高位, 不对对界做检查
-   1. SDT_L1_BASE 按 16B 对界 (一级表项大小为 16B)
+   1. SDecoder_PTBR 按 16B 对界 (一级表项大小为 16B)
    2. SDT_L2_BASE 按 8B 对界 (二级表项大小为 8B)
-3. PA 查表的索引是"基地址 + 索引 × 表项宽度", 一级表本身基地址 SDT_L1_BASE 由软件填写 IO 寄存器, 二级表基地址 SDT_L2_BASE 由一级表表项提供
+3. PA 查表的索引是"基地址 + 索引 × 表项宽度", 一级表本身基地址 SDecoder_PTBR 由软件填写 IO 寄存器, 二级表基地址 SDT_L2_BASE 由一级表表项提供
 
 ##### 一级表表项
 
@@ -215,8 +219,8 @@ SDecoder 采用 "段页混合" 的两级代换表: 一级表表项描述一个�
 
 一级表表项地址:
 
-1. 按表项大小对界 (16B), 因此断言 SDT_L1_BASE[3:0] 为 4'h0, 硬件取 {SDT_L1_BASE[47:4], 4'h0}, 低 4 位忽略
-2. L1 表项地址 = {SDT_L1_BASE[47:4], 4'h0} + PA[47:35] * 16
+1. 按表项大小对界 (16B), 因此断言 SDecoder_PTBR[3:0] 为 4'h0, 硬件取 {SDecoder_PTBR[47:4], 4'h0}, 低 4 位忽略
+2. L1 表项地址 = {SDecoder_PTBR[47:4], 4'h0} + PA[47:35] * 16
 
 一级表命中条件:
 
@@ -262,7 +266,7 @@ SDecoder 采用 "段页混合" 的两级代换表: 一级表表项描述一个�
 1. SLA[47:30] = S_PFN[47:30]
 2. SLA[29:0] = PA[29:0]
 
-#### 状态机
+#### Page Walk 状态机
 
 ```mermaid
 stateDiagram-v2
@@ -294,11 +298,14 @@ stateDiagram-v2
   - 把 Page Walk 结果交给 SLMD_CALC_PTW, 由它校验表项数据合法性并拼装 SLMD
   - 如果 Page Walk 结果合法, 回填 SDTLB, 否则不回填
 
-#### 重查 SDTLB
+#### 清空 MISS_QUEUE 中命中的条目
+
+
+#### 重查 SDTLB (废弃)
 
 **注: 该章节已废弃, 因为未命中缓冲从 MISS_FIFO 改为了 MISS_QUEUE, 而 MISS_QUEUE 使用年龄矩阵管理, 且对 QUEUE 内部的 item 可以进行更细致的管理**
 
-##### 开始前重查 SDTLB
+**开始前重查 SDTLB**
 
 在 Page Walk **开始前**需要额外先重新查一下 SDTLB (减少不必要的访存)
 
@@ -316,7 +323,7 @@ stateDiagram-v2
 2. 当 CAM0/CAM1 都忙或都空闲, 轮转抢占其中一个 CAM 口, 让该 CAM 口的 camN_req_ready 拉低一拍
    1. 都空闲时复用轮转指针, 简化设计
 
-##### 结束后重查 SDTLB
+**结束后重查 SDTLB**
 
 在 Page Walk **结束后**需要额外先重新查一下 SDTLB (减少不必要的回填)
 
@@ -324,7 +331,81 @@ stateDiagram-v2
 
 如果 2 个独立的 PTW 模块同时收到了 "同一个段, 但 PA[34:30] 不同" 的 2 个请求, 由于事先 TLB 都没有命中, 于是 2 个 PTW 同时在做 Page Walk, 所以很可能 2 个 PTW 都想回填同一个段的表项, 这就会导致 TLB 很可能就有 2 条内容完全一致的表项 (从而导致命中向量不再是独热码, 影响后续读 TLB 的数据或影响置无效的逻辑)
 
+### MISS_QUEUE
+
+#### 微结构
+
+<!-- [TODO] 需要补图 -->
+
+
+#### 条目内容
+
+MISS_QUEUE 是一个深度为 `MISS_QUEUE_DEPTH` 的队列, 每个条目主要存储 SDTLB 未命中的 PA 以及附属的一些相关信息
+
+MISS_QUEUE 条目的字段:
+
+| 字段 | 位宽 | 说明 |
+| --- | --- | --- |
+| Valid | 1 | 条目有效位 |
+| Invalidated | 1 | 条目被软件置无效位 |
+| Illegal | 1 | 条目非法位, 由 SDPTW 完成后返回的结果判定 |
+| PA[46:30] | 17 | 未命中请求的 PA[46:30] |
+| req_id | `REQ_ID_WIDTH` | 未命中请求的 req_id |
+
+注: MISS_QUEUE 只写位宽, 不写位域, 因为后续条目数和位宽值可能改变, 位域修改起来比较麻烦
+注: 当 Valid 和 Invalidated 都为 1 时, 该条目被软件置无效, 等待被 MISS_QUEUE 弹出并通过 SDPTW 对外发起特殊标识的 `rsp_*` 响应
+
+#### 申请条目
+
+当 SDTLB 未命中时, 向 MISS_QUEUE 申请条目, 将该请求的 PA[46:30] 和 req_id 写入 MISS_QUEUE. 如果 MISS_QUEUE 将满, 则拉低 camN_req_ready 反压上游请求.
+
+由于 SDTLB 有 2 个 CAM 接口, 所以 MISS_QUEUE 可以同拍接收 2 条请求的条目申请, 所以 "MISS_QUEUE 将满" 指的是 MISS_QUEUE 里还剩 0 或 1 个空闲条目
+
+MISS_QUEUE 可以悬挂多个请求, 但这些 Miss 请求**不做**相关性判断, 由于本次设计中, "同一时刻在途的 `req_id` 必须唯一, `rsp_id` 完全乱序, 上游按 ID 匹配", 所以即使 PA[46:30] 完全相同, 它们的 `req_id` 也必然不同, 也就是请求必定不相关, 不可以在 MISS_QUEUE 中合并
+
+注: 当 MISS_QUEUE 还剩 2 个空闲条目, 此时 camN_req_ready 还是处于高电平, 若此时 2 个请求同时申请 MISS_QUEUE, 则 MISS_QUEUE 会被写满, 即还剩 0 个空闲条目的情况, 同时 camN_req_ready 拉低反压上游请求, 直到 MISS_QUEUE 弹出 2 个条目后才恢复 camN_req_ready 高电平
+
+注: 当 MISS_QUEUE 还剩 2 个空闲条目, 此时 camN_req_ready 还是处于高电平, 若此时仅有 1 个请求申请 MISS_QUEUE, 则 MISS_QUEUE 还能剩下 1 个空闲条目, 但为避免之后 2 个请求同时申请 MISS_QUEUE 而导致 MISS_QUEUE 溢出, 所以 camN_req_ready 提前拉低反压上游请求, 直到 MISS_QUEUE 弹出 1 个条目后才恢复 camN_req_ready 高电平
+
+注: 与 Core 内 DTB 不同, 如果 Core 内 DTBMQ (DTB_MISS_QUEUE) 只有 1 个空闲条目, 则将空闲条目分配给流水线 A 上的请求, 流水线 B 上的请求做 "DTBMQ 满" 的冲突处理; SDecoder 的 2 个 CAM 请求接口是机会均等的, 应该不会出现优先把空闲条目分配给某一路请求的情况, 所以 MISS_QUEUE 将满但未满时提前拉低 camN_req_ready
+
+注: 与 Core 内 DTB 不同, Core 内访存指令不命中 DTB 时, 是申请 DTBMQ 条目或与已分配的 DTBMQ 条目合并; 但 MISS_QUEUE 不合并完全一致的 PA[46:30] 未命中请求, 因为每个 req_id 都需要独立返回响应, 不能合并
+
+#### 删除条目
+
+Page Walk 完成时, 会与所有 MISS_QUEUE 条目做 CAM 比较, 如果 MISS_QUEUE 中存在与当前 Page Walk 命中 Page Table 同一个段/页的条目, 则 SDPTW 不再继续做 Page Walk, 而是按照这些命中条目的年龄关系, 把这些条目按年龄从老到年轻的顺序依次弹出 MISS_QUEUE, 拼装成 SLMD 并从 `pw_rsp_*` 依年龄顺序返回
+
+正常响应: TODO
+
+异常响应: TODO
+
+#### 年龄矩阵
+
+年龄矩阵的大小为 `MISS_QUEUE_DEPTH × MISS_QUEUE_DEPTH`, 记录 MISS_QUEUE 中每个条目的年龄关系, `AgeMatrix[i][j] = 1` 表示 MISS_QUEUE 中第 i 个条目比第 j 个条目更老
+
+申请 MISS_QUEUE 条目时, 按照请求写入条目的顺序, 设置各个条目的年龄关系, 先写入的条目比后写入的条目更老
+
+注: 因为 MISS_QUEUE 是乱序删除其中的条目的 (后写入的条目可能先被删除), 所以不能使用传统队列的读写指针控制 MISS 请求的输出, 所以这里用年龄矩阵来记录 MISS_QUEUE 中每个条目的年龄关系, 年老的条目优先输出, 即使后写入的条目先被删除后又被申请, 该条目也是最年轻的
+
+注: 如果 2 个 Miss 请求同拍申请 MISS_QUEUE 条目, 那么申请到条目号比较大的那个请求更年轻
+
+注: 年龄矩阵主要解决的是当 MISS_QUEUE 中存在多个条目命中同一个段/页的情况, MISS_QUEUE 删除这些条目后, 能知道下一个准备做 Page Walk 的请求是哪个
+
 ### SDTLB
+
+#### 微结构
+
+#### 条目内容
+
+#### 访问 SDTLB
+
+#### 装填 SDTLB
+
+SDTLB 只允许硬件装填, 即通过 SDPTW 的 Page Walk 结果回填 SDTLB, 软件不允许直接写入 SDTLB
+
+当 SDTLB 有空闲表项时, 将装填数据填入到空闲的 SDTLB 表项中, 若有多条空闲表项, 则优先装填低位的空闲条目
+
+当 SDTLB 没有空闲表项时, 将装填数据填入到伪随机选择的 SDTLB 表项中, SDTLB 只有一级, 所以被淘汰的条目被完全丢弃, 只能通过 Page Walk 重新装填
 
 ### SDIOR
 
@@ -395,13 +476,23 @@ stateDiagram-v2
 | `cfg_wdata` | I | `SDIOR_DATA_WIDTH` | 写数据 |
 | `cfg_rdata` | O | `SDIOR_DATA_WIDTH` | 读数据 |
 
-## 可配置的寄存器
+## 软件接口
 
-| `cfg_addr` | 寄存器 | 属性 | 说明 |
-| --- | --- | --- | --- |
-| 0 | `SDecoder_IA` | W1P | 写 bit0 = 1, 置无效全部 SDTLB 表项 |
-| 1 | `SDecoder_IS` | W1P | 写 bit63 = 1, 置无效覆盖 `PA[47:30]` 的表项; 低 48 位为 PA |
-| 2 | `SDT_L1_BASE` | RW | 一级表基地址 `PA[47:0]`, 16B 对界 |
+### 页表条目
+
+见 "Page Table 结构" 一节
+
+### 代换基址
+
+一级表基地址寄存器定名为 `SDecoder_PTBR`
+
+### 软件刷新
+
+SDecoder_IA
+
+SDecoder_IS
+
+SDecoder_IS.INVL_UPA[46:30], 位宽 17 bits, 放在 SDecoder_IS[16:0] 里
 
 ## 异常处理
 
@@ -413,3 +504,13 @@ stateDiagram-v2
 可能会有由于 valid-ready 握手导致的死锁/活锁问题
 
 有些异常是没法处理的, 尤其是当软件修改了 Page Table 的内容, 但忘记了去刷新 SDecoder 的 SDTLB 的情况
+
+
+
+## 可配置的寄存器
+
+| `cfg_addr` | 寄存器 | 属性 | 说明 |
+| --- | --- | --- | --- |
+| 0 | `SDecoder_IA` | W1P | 写 bit0 = 1, 置无效全部 SDTLB 表项 |
+| 1 | `SDecoder_IS` | W1P | 置无效覆盖 `INVL_UPA[46:30]` 的表项; 该字段放在 `SDecoder_IS[16:0]`, 见 "软件接口" 一节 |
+| 2 | `SDecoder_PTBR` | RW | 一级表基地址 `PA[47:0]`, 16B 对界 |
