@@ -32,7 +32,7 @@ flowchart LR
 | SDecoder | SWLink Decoder |
 | SDTLB | SDecoder TLB |
 | SDPTW | SDecoder Page Table Walker |
-| MISS_FIFO | Miss FIFO |
+| MISS_QUEUE | Miss Queue |
 | SLMD | SWLink Memory Descriptor |
 | EID | Entity Identifier |
 | TokenID | Token Identifier |
@@ -61,7 +61,7 @@ flowchart LR
 | `TOKEN_VALUE_WIDTH` | 10 |
 | `REQ_ID_WIDTH` | 8 |
 | `SDTLB_ENTRIES` | 128 |
-| `MISS_FIFO_DEPTH` | 8 |
+| `MISS_QUEUE_DEPTH` | 8 |
 | `SDIOR_DATA_WIDTH` | 64 |
 | `RSP_ERR_WIDTH` | 4 |
 
@@ -99,12 +99,9 @@ flowchart LR
     REQ1(["cam1 请求接口"]) <--> TLB
     TLB -->|"cam0 命中"| CALC0["SLMD_CALC_CAM[0]"]
     TLB -->|"cam1 命中"| CALC1["SLMD_CALC_CAM[1]"]
-    TLB -->|"cam0 未命中"| MISS0["MISS_FIFO_CAM[0]"]
-    TLB -->|"cam1 未命中"| MISS1["MISS_FIFO_CAM[1]"]
-    MISS0 --> ARB
-    MISS1 --> ARB
-    ARB@{ shape: sm-circ }
-    ARB -->|"arb"| PTW
+    TLB -->|"cam0 未命中"| MISSQ["MISS_QUEUE"]
+    TLB -->|"cam1 未命中"| MISSQ
+    MISSQ --> PTW
     PTW@{ shape: dbl-circ, label: "SDPTW" }
     PTW -->|"读表项"| TW(["Page Walk 访存接口"])
     PTW -->|"回填"| TLB
@@ -117,32 +114,31 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,PWRSP,CFG iface
 ```
 
-图: SDecoder 内部结构. 1 个 SDTLB 有 2 组输入接口, 未命中按来源接口进入各自的 MISS_FIFO, 经仲裁后共用单套 SDPTW; 3 个 SLMD_CALC 分别服务 cam0 命中 / cam1 命中 / Page Walk 结果 (命中 / 未命中 / 非法), 各自驱动对应的响应接口.
+图: SDecoder 内部结构. 1 个 SDTLB 有 2 组输入接口, 两路未命中都进入同一个 MISS_QUEUE, 再送给单套 SDPTW; 3 个 SLMD_CALC 分别服务 cam0 命中 / cam1 命中 / Page Walk 结果 (命中 / 未命中 / 非法), 各自驱动对应的响应接口.
 
-SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口, 分别接上游的 2 个请求端口, 因此两路可以并行查表; 未命中按来源接口分别进入 MISS_FIFO_CAM[0] / MISS_FIFO_CAM[1], 经仲裁后由一套串行的 SDPTW 做 Page Walk, 完成后由 Page Walk 的 SLMD_CALC 拼装并从 `pw_rsp_*` 返回, 同时回填 SDTLB. 响应侧有 3 个相互独立的 `SLMD_CALC` 实例, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个实例只驱动自己那条响应通道, 三条通道互不阻塞.
+SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口, 分别接上游的 2 个请求端口, 因此两路可以并行查表; 两路未命中都进入同一个 MISS_QUEUE, 由一套串行的 SDPTW 做 Page Walk, 完成后由 Page Walk 的 SLMD_CALC 拼装并从 `pw_rsp_*` 返回, 同时回填 SDTLB. 响应侧有 3 个相互独立的 `SLMD_CALC` 实例, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个实例只驱动自己那条响应通道, 三条通道互不阻塞.
 
 图上只画了 SDIOR 与配置接口的连接; 它输出的置无效命令作用于 SDTLB, 寄存器编码见 "可配置的寄存器" 一节.
 
 #### 模块划分
 
 1. `SDTLB`: 全相联 CAM, 共 `SDTLB_ENTRIES` (128) 条表项, 只有 1 份表项存储; 对外是 2 组输入接口 cam0 / cam1. 两组接口共享同一份表项, 两路可以并行查表; 命中结果按来源从对应的 `camN_rsp_*` 返回. 回填和置无效都只作用于这一份 TLB 表项.
-2. `MISS_FIFO_CAM[0]` / `MISS_FIFO_CAM[1]`: 分别属于 CAM0 和 CAM1, 各深 `MISS_FIFO_DEPTH` (8), 存放本路未命中的 PA 和 `req_id`. 两个队列独立, 不互相借深度.
-3. `ARB`: 仲裁, 把 MISS_FIFO_CAM[0] / MISS_FIFO_CAM[1] 的请求合流后送给 SDPTW; 两个队列之间按轮询取, 同一时刻只送出一个请求.
-4. `SDPTW`: 单 walker, 从 ARB 取请求做两级 Page Walk, 只读 SDT_L1 / SDT_L2. Page Walk 完成后把表项和 `req_id` 交给 `SLMD_CALC_PTW`, 由它拼装 SLMD 并从 `pw_rsp_*` 返回; 检查通过的结果回填 SDTLB.
-5. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` / `SLMD_CALC_PTW`: 3 个实例相互独立. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` 用 TLB 命中表项和请求 PA 算出 SLA 并拼出 SLMD; `SLMD_CALC_PTW` 用 SDPTW 的 Page Walk 结果判定命中 / 未命中 / 非法, 拼出 SLMD 或错误. 每个实例只驱动对应的响应接口, 实例之间不共享流水级, 一条通道反压不影响另外两条.
-6. `SDIOR`: 配置与刷新寄存器, 输出 `SDT_L1_BASE` 和置无效命令, 置无效作用于 SDTLB.
+2. `MISS_QUEUE`: 深度 `MISS_QUEUE_DEPTH` (8), 存放未命中的 PA 和 `req_id`. TLB 的 2 个 CAM 出口都接到它, 两路未命中进同一个队列, 输出按先入先出送给 SDPTW.
+3. `SDPTW`: 单 walker, 从 MISS_QUEUE 取请求做两级 Page Walk, 只读 SDT_L1 / SDT_L2. Page Walk 完成后把表项和 `req_id` 交给 `SLMD_CALC_PTW`, 由它拼装 SLMD 并从 `pw_rsp_*` 返回; 检查通过的结果回填 SDTLB.
+4. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` / `SLMD_CALC_PTW`: 3 个实例相互独立. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` 用 TLB 命中表项和请求 PA 算出 SLA 并拼出 SLMD; `SLMD_CALC_PTW` 用 SDPTW 的 Page Walk 结果判定命中 / 未命中 / 非法, 拼出 SLMD 或错误. 每个实例只驱动对应的响应接口, 实例之间不共享流水级, 一条通道反压不影响另外两条.
+5. `SDIOR`: 配置与刷新寄存器, 输出 `SDT_L1_BASE` 和置无效命令, 置无效作用于 SDTLB.
 
 #### 命中与未命中流程
 
 1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍接收请求.
 2. 命中: 两路查的是同一份 TLB 表项. 命中表项按来源接口送给对应的 `SLMD_CALC` (cam0 命中去 `SLMD_CALC_CAM[0]`, cam1 命中去 `SLMD_CALC_CAM[1]`), 由它算 SLA 并拼 SLMD, 从该接口的 `camN_rsp_*` 返回, 带 `req_id`.
-3. 未命中: cam0 的未命中写入 MISS_FIFO_CAM[0], cam1 的写入 MISS_FIFO_CAM[1]; 命中路径不等待未命中 (hit-under-miss).
-4. Page Walk: `ARB` 从两个 MISS_FIFO 取请求交给 SDPTW; SDPTW 读 SDT_L1, 段命中则直接给出段式结果, 否则再读 SDT_L2; Page Walk 结果交给 `SLMD_CALC_PTW`, 由它判定命中 / 未命中 / 非法, 拼装后从 `pw_rsp_*` 返回, 合法结果同时回填 SDTLB.
-5. 反压: 本路 MISS_FIFOn 满或本路响应通道反压时拉低 `camN_req_ready`; 两个队列和 3 个 `SLMD_CALC` 都独立, 一路积压不影响另一路.
+3. 未命中: cam0 和 cam1 的未命中都写入同一个 MISS_QUEUE; 命中路径不等待未命中 (hit-under-miss).
+4. Page Walk: SDPTW 从 MISS_QUEUE 取请求; SDPTW 读 SDT_L1, 段命中则直接给出段式结果, 否则再读 SDT_L2; Page Walk 结果交给 `SLMD_CALC_PTW`, 由它判定命中 / 未命中 / 非法, 拼装后从 `pw_rsp_*` 返回, 合法结果同时回填 SDTLB.
+5. 反压: MISS_QUEUE 满或本路响应通道反压时拉低对应路的 `camN_req_ready`; 两路共用 MISS_QUEUE, 所以一路未命中积压会同时反压两路, 3 个 `SLMD_CALC` 仍相互独立.
 
 注: CAM 命中的响应不设 FIFO, 命中表项由 `SLMD_CALC_CAM[n]` 直接驱动 `camN_rsp_*`. 上级模块应尽快从 `camN_rsp_*` 取走数据, 取走不及时会反压该路的请求接口 (`camN_req_ready` 拉低); 理想情况下, 例化 SDecoder 时可以把 `camN_rsp_ready` 常置为 1.
 
-注: SDPTW 是单 walker, `ARB` 在两个 MISS_FIFO 之间按轮询取; 两条未命中通路之间不保证与接收顺序一致, 但响应本来就按 `req_id` 乱序匹配, 不影响正确性.
+注: SDPTW 是单 walker, MISS_QUEUE 按先入先出取请求, 两路未命中在队列里按到达顺序排列; 命中可以越过未命中, 响应仍按 `req_id` 乱序匹配.
 
 三条路径输出的 SLMD 字段语义一致, 都由各自的 `SLMD_CALC` 组装. 响应可以乱序, 命中与未命中走不同的响应通道, 同一时刻在途的 `req_id` 必须唯一, 上游按 ID 匹配.
 
@@ -299,6 +295,8 @@ stateDiagram-v2
   - 如果 Page Walk 结果合法, 回填 SDTLB, 否则不回填
 
 #### 重查 SDTLB
+
+**注: 该章节已废弃, 因为未命中缓冲从 MISS_FIFO 改为了 MISS_QUEUE, 而 MISS_QUEUE 使用年龄矩阵管理, 且对 QUEUE 内部的 item 可以进行更细致的管理**
 
 ##### 开始前重查 SDTLB
 
