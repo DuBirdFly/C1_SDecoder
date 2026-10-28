@@ -260,7 +260,7 @@ SDecoder 采用 "段页混合" 的两级代换表: 一级表表项描述一个�
 
 二级表命中计算 SLA:
 
-1. SLA[47:30] = S_PFN[47:30]
+1. SLA[52:30] = S_PFN[52:30]
 2. SLA[29:0] = PA[29:0]
 
 #### Page Walk 状态机
@@ -303,7 +303,7 @@ stateDiagram-v2
 
 #### 微结构
 
-<!-- [TODO] 需要补图 -->
+[TODO] 需要补图, 大概是 SDMQ (8 * SDMQ_Item) + AgeMatrix
 
 
 #### 条目内容
@@ -343,9 +343,9 @@ SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**相关性判断, �
 
 Page Walk 完成时, 会与所有 SDMQ 条目做 CAM 比较, 如果 SDMQ 中存在与当前 Page Walk 命中 Page Table 同一个段/页的条目, 则 SDPWU 不再继续做 Page Walk, 而是按照这些命中条目的年龄关系, 把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 拼装成 SLMD 并从 `pw_rsp_*` 依年龄顺序返回
 
-正常响应: TODO
+[TODO] 正常响应: 
 
-异常响应: TODO
+[TODO] 异常响应
 
 #### 年龄矩阵
 
@@ -363,17 +363,86 @@ Page Walk 完成时, 会与所有 SDMQ 条目做 CAM 比较, 如果 SDMQ 中存�
 
 #### 微结构
 
+```mermaid
+flowchart LR
+    REQ["查表请求<br/>PA[47:0]"] --> TAG["SDTLB_TAG<br/>128 x 24 bit"]
+    TAG --> HIT["hit_vector<br/>onehot0, 打 1 拍"]
+    HIT --> DATA["SDTLB_DATA<br/>128 x 54 bit"]
+    HIT --> CTRL["伪随机指针<br/>装填 / 置无效"]
+    CTRL --> TAG
+    CTRL --> DATA
+    DATA --> OUT["命中条目<br/>tag + data"]
+```
+
+| 功能 | 说明 |
+| --- | --- |
+| 概述 | 缓存 PA 到 SLMD 的映射, 命中给出命中的 TLB 条目值 |
+| 组织结构 | 全相联 (CAM + FF + Latch) |
+| 条目数 | 128 |
+| 条目粒度 | 1GB 到 32GB |
+| 查表 | 单读端口, tag 比较组合, hit 向量打 1 拍 |
+| 写入 | 仅由 Page Walk 结果在检查通过后回填, 软件不可写 |
+| 清除 | 由刷新接口置无效 |
+
+段式和页式统一按 "段" 处理, 把 1GB 页看作长度为 1 的段. 命中判断和 SLA 计算只有一套逻辑, 不需要为两种映射各做一张快表. 页和段都用 `PA_Base` / `PA_Up` 表示, 不设额外的粒度位.
+
 #### 条目内容
 
+| 模块 | 字段 | 位宽 | 存储 | 说明 |
+| --- | --- | --- | --- | --- |
+| Tag | `PA_Base[47:30]` | 18 | Latch | 段/页基址, 1GB 对界 |
+| Tag | `PA_Up[34:30]` | 5 | Latch | 段/页上界 (含), 1GB 对界 |
+| Tag | `Valid` | 1 | FF | 条目有效位 |
+| Data | `EID[10:0]` | 11 | Latch | Entity 标识 |
+| Data | `TokenID[9:0]` | 10 | Latch | 查找上下文使用 |
+| Data | `TokenValue[9:0]` | 10 | Latch | 凭据校验使用 |
+| Data | `S_PFN[52:30]` | 23 | Latch | SLA 基址, 1GB 对界 |
+
+注: 页: `PA_Base[34:30] = PA_Up`;
+注: 段: `PA_Up = SEG_BASE + SEG_LEN`.
+
 #### 访问 SDTLB
+
+命中条件:
+
+1. `Valid = 1`.
+2. `PA[47:35] == PA_Base[47:35]`.
+3. `PA_Base[34:30] <= PA[34:30] <= PA_Up`.
+
+- 128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常配置下最多命中一个; 多命中属于配置错误, 行为未定义 (仿真用 onehot0 断言检查, 不考虑写成异常).
+- Tag CAM 比较是组合逻辑; `hit_vector` 打 1 拍后再用; 请求拍 T 的命中结果固定在 T+1 有效.
+- Data 用 `hit_vector` 做 onehot 选路, 输出命中条目的 tag/data.
+- 装填在时钟沿更新 Tag/Data 与 `Valid`; 查表只读, 同拍请求看到的是装填前的条目.
+
+命中后的 SLA:
+
+```text
+SLA[52:30] = S_PFN[52:30] + (PA[34:30] - PA_Base[34:30])
+SLA[29:0]  = PA[29:0]
+```
 
 #### 装填 SDTLB
 
 SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, 软件不允许直接写入 SDTLB
 
+- 如果 Page Walk 命中的是有效的一级表 (段表), 则回填的 SDTLB 的 Tag 条目为
+  - `PA_Base = {PA[47:35], SEG_BASE[34:30]}`
+  - `PA_Up = SEG_BASE + SEG_LEN`
+- 如果 Page Walk 命中的是有效的二级表 (页表), 则回填的 SDTLB 的 Tag 条目为
+  - `PA_Base = PA[47:30]`
+  - `PA_Up = PA[34:30]`
+- 无论 Page Walk 命中的是一级表还是二级表, 回填的 SDTLB 的 Data 条目原样不变
+  - `EID / TokenID / TokenValue / S_PFN`
+
+只有无异常的 Page Walk 结果才会回填 SDTLB
+
 当 SDTLB 有空闲表项时, 将装填数据填入到空闲的 SDTLB 表项中, 若有多条空闲表项, 则优先装填低位的空闲条目
 
-当 SDTLB 没有空闲表项时, 将装填数据填入到伪随机选择的 SDTLB 表项中, SDTLB 只有一级, 所以被淘汰的条目被完全丢弃, 只能通过 Page Walk 重新装填
+当 SDTLB 没有空闲表项时, 将装填数据填入到**伪随机**选择的 SDTLB 表项中, SDTLB 只有一级, 所以被淘汰的条目被完全丢弃, 只能通过 Page Walk 重新装填
+
+装填在时钟沿写 Tag 和 Data, 并置 `Valid = 1`; 同一拍同一条目上置无效 (刷新) 优先, 此次装填丢弃.
+
+
 
 ### SDIOR
 
@@ -408,7 +477,7 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 
 注 1: 共有 2 组响应接口 (CAM), N 可取 [0, 1], 分别对应 TLB 两组输入接口 (cam0 / cam1) 的响应
 
-<!-- [TODO] `camN_rsp_err` 编码:-->
+[TODO] `camN_rsp_err` 的含义
 
 ### 响应接口 (Page Walk)
 
