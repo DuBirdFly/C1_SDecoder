@@ -271,15 +271,15 @@ SDecoder 采用 "段页混合" 的两级代换表: 一级表表项描述一个�
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> RECHECK: req_valid && req_ready
-    RECHECK --> DONE: tlb_hit
-    RECHECK --> SDT_L1_AR: !tlb_hit
+    IDLE --> SDT_L1_AR: 取到 SDMQ 条目
     SDT_L1_AR --> SDT_L1_R: arvalid && arready
-    SDT_L1_R --> DONE: l1_stop
+    SDT_L1_R --> SDMQ_SCAN: l1_stop
     SDT_L1_R --> SDT_L2_AR: !l1_stop
     SDT_L2_AR --> SDT_L2_R: arvalid && arready
-    SDT_L2_R --> DONE: rvalid && rready
-    DONE --> IDLE: rsp_valid && rsp_ready
+    SDT_L2_R --> SDMQ_SCAN: rvalid && rready
+    SDMQ_SCAN --> SDMQ_POP: 存在被覆盖的条目
+    SDMQ_SCAN --> IDLE: 没有被覆盖的条目
+    SDMQ_POP --> SDMQ_SCAN: 响应握手完成
 ```
 
 图: SDPTW 状态机
@@ -288,48 +288,18 @@ stateDiagram-v2
 
 状态说明:
 
-- `IDLE`: 空闲, 等待 Page Walk 请求, 收到 Page Walk 请求后, 锁存 PA 和 req_id
-- `RECHECK`: Page Walk 开始前重查 SDTLB (借用 CAM0/CAM1 的查表口, 见 "重查 SDTLB" 一节); 命中则直接进入 `DONE`, 用命中的表项组装 SLMD, 不访存也不回填 SDTLB; 未命中才实际执行 Page Walk
+- `IDLE`: 空闲, 等待从 SDMQ 取请求, 取到后锁存 PA 和 req_id
 - `SDT_L1_AR`: Page Walk, 写一级表表项地址, 等 `arready`
-- `SDT_L1_R`: Page Walk, 读一级表表项数据, 如果段命中或一级无效则直接进入 `DONE` 状态, 否则跳转到二级表访问
+- `SDT_L1_R`: Page Walk, 读一级表表项数据, 如果段命中或一级无效则进入 `SDMQ_SCAN`, 否则跳转到二级表访问
 - `SDT_L2_AR`: Page Walk, 写二级表表项地址, 等 `arready`
-- `SDT_L2_R`: Page Walk, 读二级表表项数据, 转 `DONE` 状态
-- `DONE`:
-  - 把 Page Walk 结果交给 SLMD_CALC_PTW, 由它校验表项数据合法性并拼装 SLMD
-  - 如果 Page Walk 结果合法, 回填 SDTLB, 否则不回填
+- `SDT_L2_R`: Page Walk, 读二级表表项数据, 转 `SDMQ_SCAN` 状态
+- `SDMQ_SCAN`: 用 Page Walk 得到的段/页覆盖范围与 SDMQ 中所有条目比较, 按年龄矩阵挑出年龄最老的被覆盖条目; 一个都没有则回 `IDLE`
+- `SDMQ_POP`: 弹出选中的条目, 交给 SLMD_CALC_PTW 校验表项数据合法性并拼装 SLMD, 从 `pw_rsp_*` 返回; 响应握手完成后回 `SDMQ_SCAN`, 继续处理下一个被覆盖的条目
+
+注: Page Walk 结果合法时, 在第一次进入 `SDMQ_SCAN` 之前回填一次 SDTLB; 被同一段/页覆盖的多个条目共用这份表项, 不重复回填.
 
 #### 清空 SDMQ 中命中的条目
 
-
-#### 重查 SDTLB (废弃)
-
-**注: 该章节已废弃, 因为未命中缓冲从 MISS_FIFO 改为了 SDMQ, 而 SDMQ 使用年龄矩阵管理, 且对 QUEUE 内部的 item 可以进行更细致的管理**
-
-**开始前重查 SDTLB**
-
-在 Page Walk **开始前**需要额外先重新查一下 SDTLB (减少不必要的访存)
-
-重查发生在 SDPTW 从 ARB 取到请求之后, 发起第一次 SDT_L1 访存之前; 命中则跳过 Page Walk, 直接把该表项交给 SLMD_CALC_PTW 组装并从 pw_rsp_* 返回, 且不回填
-
-1. 假设 MISS FIFO 里有 2 个 FIFO 条目恰好属于 32GB 的同一个段 (其 PA[46:35] 相同, 但 PA[34:30] 不同). 可是我们无法在前一条请求的 Page Walk 还没完成时就知道它们属于同一个段, 这就导致了不必要的访存
-2. 访问到 Page Table 的同一个段表项的 2 个请求不一定是连续挨着, 甚至可能其中一个在 CAM0 的 MISS FIFO 的第一项里, 另一个在 CAM1 的 MISS FIFO 的最后一项里
-3. 当然可以在 SDPTW 里做一个小的 DFF 缓存, 用来缓存前面几个访存的结果, 不过看起来有相当的复杂度
-
-所以 TLB 除了标准输入端的 CAM0/CAM1 查表外, 还需要让 Page Walk 也有 CAM 接口来查 TLB 表项, 但是为 Page Walk 这种小概率事件设计一个额外的 CAM 查表接口是不值得的, 所以 Page Walk CAM 复用 CAM0/CAM1 的查表逻辑
-
-复用 CAM0/CAM1 的查表逻辑的方案是:
-
-1. 当 CAM0/CAM1 一个忙, 另一个空闲时, 让空闲的 CAM 口去查 Page Walk 的请求
-2. 当 CAM0/CAM1 都忙或都空闲, 轮转抢占其中一个 CAM 口, 让该 CAM 口的 camN_req_ready 拉低一拍
-   1. 都空闲时复用轮转指针, 简化设计
-
-**结束后重查 SDTLB**
-
-在 Page Walk **结束后**需要额外先重新查一下 SDTLB (减少不必要的回填)
-
-**由于该项只适用于 2 个完全独立的 PTW 模块, 但 TLB 依然只有 1 个的情况, 初版不涉及该功能**
-
-如果 2 个独立的 PTW 模块同时收到了 "同一个段, 但 PA[34:30] 不同" 的 2 个请求, 由于事先 TLB 都没有命中, 于是 2 个 PTW 同时在做 Page Walk, 所以很可能 2 个 PTW 都想回填同一个段的表项, 这就会导致 TLB 很可能就有 2 条内容完全一致的表项 (从而导致命中向量不再是独热码, 影响后续读 TLB 的数据或影响置无效的逻辑)
 
 ### SDMQ
 
