@@ -297,7 +297,23 @@ stateDiagram-v2
 
 #### 微结构
 
-[TODO] 需要补图, 大概是 SDMQ (8 * SDMQ_Item) + AgeMatrix
+```mermaid
+flowchart LR
+    IF0("cam0 未命中装填接口") --> ALLOC["申请条目"]
+    IF1("cam1 未命中装填接口") --> ALLOC
+    ALLOC --> ITEM["SDMQ"]
+    ALLOC --> AGE["AgeMatrix"]
+    INV("软件置无效接口") --> ITEM
+    ITEM --> SEL["年龄选择"]
+    AGE --> SEL
+    SEL -->|"最老条目"| OUT["SDPWU"]
+    OUT -->|"扫描重复命中"| ITEM
+    ITEM -->|"弹出重复命中"| OUT
+    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    class IF0,IF1,INV iface
+```
+
+图: SDMQ 内部结构. 模块用矩形, 接口用圆角矩形. 两路 CAM 未命中经装填接口同拍申请条目, 同时写入 SDMQ 条目存储和 `AgeMatrix`; 年龄选择按年龄挑出最老的条目, 送给 SDPWU 做 Page Walk; Page Walk 完成后, 用结果扫描 SDMQ 中重复命中的条目, 并把它们弹出送给 SDPWU.
 
 
 #### 条目内容
