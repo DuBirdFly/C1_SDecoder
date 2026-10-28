@@ -49,27 +49,9 @@ flowchart LR
 
 <!-- [TODO] 其他缩写表内容后续待补充 -->
 
-### 参数表
-
-| 参数 | 默认值 |
-| --- | --- |
-| `PA_WIDTH` | 48 |
-| `PA_MEM_WIDTH` | 47 |
-| `SLA_WIDTH` | 53 |
-| `EID_WIDTH` | 11 |
-| `TOKEN_ID_WIDTH` | 10 |
-| `TOKEN_VALUE_WIDTH` | 10 |
-| `REQ_ID_WIDTH` | 8 |
-| `SDTLB_ENTRIES` | 128 |
-| `SDMQ_DEPTH` | 8 |
-| `SDIOR_DATA_WIDTH` | 64 |
-| `PW_RSP_ERR_WIDTH` | 6 |
-
-注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
-
 ## 架构
 
-### SDecoder (AI)
+### SDecoder
 
 #### 微结构
 
@@ -95,54 +77,65 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,PWRSP,CFG iface
 ```
 
-图: SDecoder 内部结构. 1 个 SDTLB 有 2 组输入接口, 两路未命中都进入同一个 SDMQ, 再送给单套 SDPWU; 3 个 SLMD_CALC 分别服务 cam0 命中 / cam1 命中 / Page Walk 结果 (命中 / 未命中 / 非法), 各自驱动对应的响应接口.
+图: SDecoder 内部结构.
 
-SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口, 分别接上游的 2 个请求端口, 因此两路可以并行查表; 两路未命中都进入同一个 SDMQ, 由一套串行的 SDPWU 做 Page Walk, 完成后由 Page Walk 的 SLMD_CALC 拼装并从 `pw_rsp_*` 返回, 同时回填 SDTLB. 响应侧有 3 个相互独立的 `SLMD_CALC` 实例, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个实例只驱动自己那条响应通道, 三条通道互不阻塞.
+SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 page table walker" 的结构
 
-图上只画了 SDIOR 与配置接口的连接; 它输出的置无效命令作用于 SDTLB, 寄存器编码见 "可配置的寄存器" 一节.
+SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分别接上游的 2 个请求, 两路 CAM 请求接口可以并行查表
+
+两路 cam 请求未命中 SDTLB 都进入同一个 SDMQ, 由一套串行的 SDPWU 做 Page Walk, Page Walk 完成后回填 SDTLB
+
+响应侧有 3 个相互独立的 `SLMD_CALC` 模块, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个 `SLMD_CALC` 模块互不阻塞, 独自响应, 只驱动自己那条响应通道
+
+图上只画了 SDIOR 与配置接口的连接; 它输出的置无效 (刷新) 命令作用于 SDTLB, 统计的异常信息从 SDecoder 顶层输出, 寄存器编码见 "可配置的寄存器" 一节.
 
 #### 接口分组
 
 | 接口信号 | 定位 | 方向 | 说明 |
 | --- | --- | --- | --- |
-| `cam0_req_*` | Slave | 输入 | 上游 master 发起请求 |
+| `cam0_req_*` | Slave | 输入 | 上游 master 发起的请求 |
 | `cam0_rsp_*` | Slave | 输出 | cam0 命中时返回 SLMD |
-| `cam1_req_*` | Slave | 输入 | 上游 master 发起请求 |
+| `cam1_req_*` | Slave | 输入 | 上游 master 发起的请求 |
 | `cam1_rsp_*` | Slave | 输出 | cam1 命中时返回 SLMD |
-| `pw_rsp_*` | Slave | 输出 | 未命中 Page Walk 完成后返回 SLMD 或错误 |
-| `pw_ar*` | Master | 输出 | 发起读表项地址, 读本地 SDT_L1 / SDT_L2 |
-| `pw_r*` | Master | 输入 | 接收读回的表项数据 |
-| `cfg_*` | Slave | 输入 / 输出 | 配置基地址, 置无效 SDTLB |
+| `pw_rsp_*` | Slave | 输出 | SDTLB 未命中, Page Walk 完成后返回的 SLMD 或错误 |
+| `pw_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道 |
+| `pw_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道 |
+| `cfg_*` | Slave | 输入 / 输出 | 配置内部的寄存器 |
 
 各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 单时钟域.
 
-除配置接口外, 其余接口都采用 valid-ready 握手, 信号名为 `*valid` / `*ready` 风格: 握手完成于 `valid` 与 `ready` 同时为高的上升沿; `valid` 不得组合依赖 `ready`, 拉高后到握手完成前载荷保持不变.
+除配置接口外, 其余接口都采用 valid-ready 握手, 信号名为 `*valid` / `*ready` 风格: 握手完成于 `valid` 与 `ready` 同时为高的上升沿; 要求 `valid` 不得组合依赖 `ready`, 且 `valid` 拉高后到握手完成前荷载保持不变
 
-请求和响应都需要带 id 号 (`camN_req_id` / `camN_rsp_id`, `pw_rsp_id`); 同一时刻在途的 id 必须唯一. 响应不保序: 例如先到的请求未命中 SDTLB, 走 Page Walk 后才返回, 而后到的请求命中 SDTLB, 会先返回响应. 上游只能按 id 匹配, 不能依赖响应顺序.
+由于响应**不**保序: 例如先到的请求未命中 SDTLB, 经过长时间 Page Walk 后才能响应, 但后到的请求如果命中 SDTLB, 则会先返回这个后到的命中 SDTLB 的响应. 为了使请求和响应能够匹配, 请求和响应接口都需要带 id 号, **且同一时刻在途的 id 必须唯一**, 上游只能按 id 进行匹配, 不能依赖响应顺序进行匹配
 
 #### 模块划分
 
-1. `SDTLB`: 全相联 CAM, 共 `SDTLB_ENTRIES` (128) 条表项, 只有 1 份表项存储; 对外是 2 组输入接口 cam0 / cam1. 两组接口共享同一份表项, 两路可以并行查表; 命中结果按来源从对应的 `camN_rsp_*` 返回. 回填和置无效都只作用于这一份 TLB 表项.
-2. `SDMQ`: 深度 `SDMQ_DEPTH` (8), 存放未命中的 PA 和 `req_id`. TLB 的 2 个 CAM 出口都接到它, 两路未命中进同一个队列, 输出按年龄从老到年轻送给 SDPWU.
-3. `SDPWU`: 单 walker, 从 SDMQ 取请求做两级 Page Walk, 只读 SDT_L1 / SDT_L2. Page Walk 完成后把表项和 `req_id` 交给 `SLMD_CALC_PTW`, 由它拼装 SLMD 并从 `pw_rsp_*` 返回; 检查通过的结果回填 SDTLB.
-4. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` / `SLMD_CALC_PTW`: 3 个实例相互独立. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` 用 TLB 命中表项和请求 PA 算出 SLA 并拼出 SLMD; `SLMD_CALC_PTW` 用 SDPWU 的 Page Walk 结果判定命中 / 未命中 / 非法, 拼出 SLMD 或错误. 每个实例只驱动对应的响应接口, 实例之间不共享流水级, 一条通道反压不影响另外两条.
+1. `SDTLB`: 全相联 CAM, 共 `SDTLB_ENTRIES` 条表项, 只有 1 份表项存储; 对外是 2 组输入接口 cam0 / cam1, 两路可以并行查表; 命中结果按来源从对应的 `camN_rsp_*` 返回. 回填和置无效都只作用于这一份 TLB 表项.
+2. `SDMQ`: 深度 `SDMQ_DEPTH`, 存放未命中的 PA 和 `req_id`. TLB 的 2 个 CAM 出口都接到它, 两路未命中进同一个队列, 由年龄矩阵管理, 按年龄从老到年轻输出给 SDPWU.
+3. `SDPWU`: 串行 Page Table Walker, 从 SDMQ 取请求做两级 Page Walk, 对 2 级页表做只读操作. Page Walk 完成后把结果交给 SLMD_CALC_PTW, 由它拼装 SLMD 并从 `pw_rsp_*` 返回; 检查通过的结果回填 SDTLB.
+4. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` / `SLMD_CALC_PTW`: 3 个实例相互独立. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` 用 TLB 命中表项和请求 PA 算出 SLA 并拼出 SLMD; SLMD_CALC_PTW 用 SDPWU 的 Page Walk 结果判定命中 / 未命中 / 非法, 拼出 SLMD 或错误. 每个实例只驱动对应的响应接口, 实例之间不共享流水级, 一条通道反压不影响另外两条.
 5. `SDIOR`: 配置与刷新寄存器, 输出 `SDecoder_PTBR` 和置无效命令, 置无效作用于 SDTLB.
 
-#### 命中与未命中流程
+#### 命中通路
 
-1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍接收请求.
-2. 命中: 两路查的是同一份 TLB 表项. 命中表项按来源接口送给对应的 `SLMD_CALC` (cam0 命中去 `SLMD_CALC_CAM[0]`, cam1 命中去 `SLMD_CALC_CAM[1]`), 由它算 SLA 并拼 SLMD, 从该接口的 `camN_rsp_*` 返回, 带 `req_id`.
-3. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ; 命中路径不等待未命中 (hit-under-miss).
-4. Page Walk: SDPWU 从 SDMQ 取请求; SDPWU 读 SDT_L1, 段命中则直接给出段式结果, 否则再读 SDT_L2; Page Walk 结果交给 `SLMD_CALC_PTW`, 由它判定命中 / 未命中 / 非法, 拼装后从 `pw_rsp_*` 返回, 合法结果同时回填 SDTLB.
-5. 反压: SDMQ 将满或本路响应通道反压时拉低对应路的 `camN_req_ready`; 两路共用 SDMQ, 所以一路未命中积压会同时反压两路, 3 个 `SLMD_CALC` 仍相互独立.
+1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍并行接收请求
+2. 命中: 两路 cam 请求查的是同一份 TLB 表项, 命中后将 tag 和 data 输出
+3. CAM 命中到响应输出的通路不设 FIFO, `SLMD_CALC_CAM[n]` 接收 tag 和 data 后, 拼装成 SLMD 输出到响应接口上
 
-注: CAM 命中的响应不设 FIFO, 命中表项由 `SLMD_CALC_CAM[n]` 直接驱动 `camN_rsp_*`. 上级模块应尽快从 `camN_rsp_*` 取走数据, 取走不及时会反压该路的请求接口 (`camN_req_ready` 拉低); 理想情况下, 例化 SDecoder 时可以把 `camN_rsp_ready` 常置为 1.
+注: 由于不设 FIFO, 所以上级模块应尽快从响应接口取走数据, 取走不及时会反压该路的请求接口 (请求端 ready 拉低); 如果上游有能力做到无条件接收响应, 则例化 SDecoder 时可以把响应端的 ready 信号置为常 1
 
-注: SDPWU 是单 walker, SDMQ 按年龄从老到年轻取请求; 命中同段 / 同页的条目可以被提前弹出, 响应仍按 `req_id` 乱序匹配.
+#### 未命中通路
 
-三条路径输出的 SLMD 字段语义一致, 都由各自的 `SLMD_CALC` 组装.
+1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍并行接收请求
+2. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ, 未命中通路与命中通路互不阻塞, 只要 SDMQ 没满就可以接收请求; SDMQ 将满时拉低对应路请求接口的 ready 接口反压上游请求
+3. Page Walk: SDPWU 从 SDMQ 取请求, 并能通过最多 2 次访存获取到页表表项, Page Walk 完成后将结果交给 SLMD_CALC_PTW, 由 SLMD_CALC_PTW 判定命中 / 未命中 / 非法, 并拼装 SLMD 或错误, 并从响应接口返回数据
+4. 如果 SLMD_CALC_PTW 判定 Page Walk 结果合法, 则回填 SDTLB
+5. 如果 SLMD_CALC_PTW 判定 Page Walk 结果合法, 则 SDMQ 中命中同段/页的条目可以被提前弹出; 即 SDPWU 继续用该 Page Table Entry 去扫描 SDMQ, 弹出所有被该段/页覆盖的条目, 继续交由 SLMD_CALC_PTW 做 SLMD 拼装, 并从响应接口返回数据
+6. 如果 SLMD_CALC_PTW 判定 Page Walk 结果非法, 则此次 Page Walk 结果不回填 SDTLB, 也不扫描 SDMQ, 直接从响应接口返回错误
 
-响应可以乱序, 命中与未命中走不同的响应通道, 同一时刻在途的 `req_id` 必须唯一, 上游按 ID 匹配.
+注: SDPWU 是串行的, 一次只能处理一个请求, SDMQ 按年龄从老到年轻取请求, 响应仍按 `req_id` 乱序匹配.
+
+注: 由于两路共用 SDMQ, 且 2 路 cam 请求机会均等, 所以 SDMQ 将满时同时反压 2 路 cam 请求
 
 ### SDPWU
 
@@ -344,10 +337,6 @@ SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**相关性判断, �
 
 Page Walk 完成时, 会与所有 SDMQ 条目做 CAM 比较, 如果 SDMQ 中存在与当前 Page Walk 命中 Page Table 同一个段/页的条目, 则 SDPWU 不再继续做 Page Walk, 而是按照这些命中条目的年龄关系, 把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 拼装成 SLMD 并从 `pw_rsp_*` 依年龄顺序返回
 
-[TODO] 正常响应: 
-
-[TODO] 异常响应
-
 #### 年龄矩阵
 
 年龄矩阵的大小为 `SDMQ_DEPTH × SDMQ_DEPTH`, 记录 SDMQ 中每个条目的年龄关系, `AgeMatrix[i][j] = 1` 表示 SDMQ 中第 i 个条目比第 j 个条目更老
@@ -402,7 +391,7 @@ flowchart LR
 注: 页: `PA_Base[34:30] = PA_Up`;
 注: 段: `PA_Up = SEG_BASE + SEG_LEN`.
 
-#### 访问 SDTLB
+#### 访问条目
 
 命中条件:
 
@@ -422,7 +411,7 @@ SLA[52:30] = S_PFN[52:30] + (PA[34:30] - PA_Base[34:30])
 SLA[29:0]  = PA[29:0]
 ```
 
-#### 装填 SDTLB
+#### 装填条目
 
 SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, 软件不允许直接写入 SDTLB
 
@@ -441,15 +430,28 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 
 当 SDTLB 没有空闲表项时, 将装填数据填入到**伪随机**选择的 SDTLB 表项中, SDTLB 只有一级, 所以被淘汰的条目被完全丢弃, 只能通过 Page Walk 重新装填
 
-装填在时钟沿写 Tag 和 Data, 并置 `Valid = 1`; 同一拍同一条目上置无效 (刷新) 优先, 此次装填丢弃.
-
-
+装填在时钟沿写 Tag 和 Data, 并置 `Valid = 1`; 同一拍同一条目上置无效 (刷新) 优先, 此次装填丢弃
 
 ### SDIOR
 
-#### 置无效 (刷新)
-
 ## 参数
+
+| 参数 | 默认值 |
+| --- | --- |
+| `PA_WIDTH` | 48 |
+| `PA_MEM_WIDTH` | 47 |
+| `SLA_WIDTH` | 53 |
+| `EID_WIDTH` | 11 |
+| `TOKEN_ID_WIDTH` | 10 |
+| `TOKEN_VALUE_WIDTH` | 10 |
+| `REQ_ID_WIDTH` | 8 |
+| `SDTLB_ENTRIES` | 128 |
+| `SDMQ_DEPTH` | 8 |
+| `SDIOR_DATA_WIDTH` | 64 |
+| `PW_RSP_ERR_WIDTH` | 6 |
+| `CAM_RSP_ERR_WIDTH` | 1 |
+
+注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
 
 ## 接口信号
 
@@ -475,8 +477,17 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 | `camN_rsp_token_id` | O | `TOKEN_ID_WIDTH` | / |
 | `camN_rsp_token_value` | O | `TOKEN_VALUE_WIDTH` | / |
 | `camN_rsp_sla` | O | `SLA_WIDTH` | / |
+| `camN_rsp_err` | O | `CAM_RSP_ERR_WIDTH` | / |
 
 注 1: 共有 2 组响应接口 (CAM), N 可取 [0, 1], 分别对应 TLB 两组输入接口 (cam0 / cam1) 的响应
+
+`camN_rsp_err` 位域含义:
+
+| 名称 | 位域 | 说明 |
+| --- | --- | --- |
+| `camN_rsp_hit_onehot0_fail` | [0] | CAM 命中 SDTLB 的条目不唯一 |
+
+注: 当软件修改了 Page Table 但未对 SDTLB 做刷新, 可能会出现 SDTLB 中存在多个条目命中同一个 PA 的情况, 这属于配置错误, 行为未定义, 但可以通过 `camN_rsp_hit_onehot0_fail` 位来检测到
 
 ### 响应接口 (Page Walk)
 
@@ -537,7 +548,7 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
-| `invalid_sdt_item` | O | 1 | 页表条目无效 |
+| `invalid_item` | O | 1 | 条目无效 |
 | `illegal_page_table_addr` | O | 1 | 页表地址非法 (越界) |
 | `data_ecc_err` | O | 1 | 页表数据 ECC 错 |
 | `ctrl_ecc_err` | O | 1 | 页表控制 ECC 错 |
@@ -550,10 +561,11 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 | --- | --- |
 | `pw_ctrl_err` | `ctrl_ecc_err` |
 | `pw_ecc_err` | `data_ecc_err` |
-| `pw_no_valid_sdt` | `invalid_sdt_item` |
-| `pw_illegal_sdt_item` | `invalid_sdt_item` |
+| `pw_no_valid_sdt` | `invalid_item` |
+| `pw_illegal_sdt_item` | `invalid_item` |
 | `pw_illegal_sdt_l1_base` | `illegal_page_table_addr` |
 | `pw_illegal_sdt_l2_base` | `illegal_page_table_addr` |
+| `camN_rsp_hit_onehot0_fail` | `invalid_item` |
 
 注: 多个 `pw_rsp_err` 位可以落到同一个异常统计信号, 统计信号是这一类异常出现过的汇总位
 
@@ -570,17 +582,9 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 ### 软件刷新
 
 SDecoder_IA
-
-SDecoder_IS
-
 SDecoder_IS.INVL_UPA[46:30], 位宽 17 bits, 放在 SDecoder_IS[16:0] 里
 
 ## 异常处理
-
-
-
-
-
 
 可能会有由于 valid-ready 握手导致的死锁/活锁问题
 
@@ -595,4 +599,4 @@ SDecoder_IS.INVL_UPA[46:30], 位宽 17 bits, 放在 SDecoder_IS[16:0] 里
 | 0 | `SDecoder_IA` | W1P | 写 bit0 = 1, 置无效全部 SDTLB 表项 |
 | 1 | `SDecoder_IS` | W1P | 置无效覆盖 `INVL_UPA[46:30]` 的表项; 该字段放在 `SDecoder_IS[16:0]`, 见 "软件接口" 一节 |
 | 2 | `SDecoder_PTBR` | RW | 一级表基地址 `PA[47:0]`, 16B 对界 |
-| 3 | `SDecoder_ES` | RW / W1C | 异常统计寄存器, 各位对应 `invalid_sdt_item` / `illegal_page_table_addr` / `data_ecc_err` / `ctrl_ecc_err`, 写 1 清除 |
+| 3 | `SDecoder_ES` | RW / W1C | 异常统计寄存器, 各位对应 `invalid_item` / `illegal_page_table_addr` / `data_ecc_err` / `ctrl_ecc_err`, 写 1 清除 |
