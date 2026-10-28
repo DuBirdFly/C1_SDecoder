@@ -45,6 +45,7 @@ flowchart LR
 | PW | Page Walk |
 | IOR | IO Register |
 | W1P | Write 1 to Pulse |
+| W1C | Write 1 to Clear |
 
 <!-- [TODO] 其他缩写表内容后续待补充 -->
 
@@ -62,7 +63,7 @@ flowchart LR
 | `SDTLB_ENTRIES` | 128 |
 | `SDMQ_DEPTH` | 8 |
 | `SDIOR_DATA_WIDTH` | 64 |
-| `RSP_ERR_WIDTH` | 4 |
+| `PW_RSP_ERR_WIDTH` | 6 |
 
 注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
 
@@ -477,8 +478,6 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 
 注 1: 共有 2 组响应接口 (CAM), N 可取 [0, 1], 分别对应 TLB 两组输入接口 (cam0 / cam1) 的响应
 
-[TODO] `camN_rsp_err` 的含义
-
 ### 响应接口 (Page Walk)
 
 | 信号 | 方向 | 位宽 | 说明 |
@@ -486,11 +485,26 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 | `pw_rsp_valid` | O | 1 | / |
 | `pw_rsp_ready` | I | 1 | / |
 | `pw_rsp_id` | O | `REQ_ID_WIDTH` | / |
-| `pw_rsp_err` | O | `RSP_ERR_WIDTH` | 应该就 page walk 有 err 吧 |
 | `pw_rsp_eid` | O | `EID_WIDTH` | / |
 | `pw_rsp_token_id` | O | `TOKEN_ID_WIDTH` | / |
 | `pw_rsp_token_value` | O | `TOKEN_VALUE_WIDTH` | / |
 | `pw_rsp_sla` | O | `SLA_WIDTH` | / |
+| `pw_rsp_err` | O | `PW_RSP_ERR_WIDTH` | / |
+
+`pw_rsp_err` 位域含义:
+
+| 名称 | 位域 | 说明 |
+| --- | --- | --- |
+| `pw_ctrl_err` | [5] | Page Walk 发生控制错 |
+| `pw_ecc_err` | [4] | Page Walk 发生 ECC 错 |
+| `pw_no_valid_sdt` | [3] | Page Walk 无法找到有效的表 |
+| `pw_illegal_sdt_item` | [2] | Page Walk 发现非法表项 |
+| `pw_illegal_sdt_l2_base` | [1] | Page Walk 发现二级表基地址非法 |
+| `pw_illegal_sdt_l1_base` | [0] | Page Walk 发现一级表基地址非法 |
+
+注: Page Walk 发生非法一/二级地址错示例, 本地只有 512GB 的 HBM/DDR, 但一级表或二级表的基地址被软件写成了超出 512GB 范围的地址 (可能实现不了, 待商榷)
+注: Page Walk 发生非法表项错示例, `SEG_BASE + SEG_LEN > 31` 或 `S_PFN[52:30] + (PA[34:30] - SEG_BASE[34:30])` 溢出
+注: Page Walk 无法找到有效的表示例, 一级表或二级表的 Valid = 0
 
 ### 访存接口 (Page Walk)
 
@@ -503,7 +517,11 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 | `pw_rvalid` | I | 1 | / |
 | `pw_rready` | O | 1 | / |
 
-### 寄存器配置接口
+注: pw_rdata 是总线返回响应的宽度, 暂定 128bit
+
+### 寄存器接口
+
+#### 配置接口
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -512,6 +530,32 @@ SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, �
 | `cfg_addr` | I | 2 | 寄存器索引 |
 | `cfg_wdata` | I | `SDIOR_DATA_WIDTH` | 写数据 |
 | `cfg_rdata` | O | `SDIOR_DATA_WIDTH` | 读数据 |
+
+### 异常统计信号
+
+异常统计信号不是 `cfg_*` 接口的一部分, 异常发生的下一拍, SDIOR 的异常统计寄存器的对应位置 1, 由 SDIOR 直通到 SDecoder 顶层输出.
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `invalid_sdt_item` | O | 1 | 页表条目无效 |
+| `illegal_page_table_addr` | O | 1 | 页表地址非法 (越界) |
+| `data_ecc_err` | O | 1 | 页表数据 ECC 错 |
+| `ctrl_ecc_err` | O | 1 | 页表控制 ECC 错 |
+
+异常寄存器可以通过软件读出 (`SDecoder_ES`), 也可以通过 W1C (Write 1 Clear) 的方式清除, 写 1 清除对应的寄存器位, 写 0 不影响寄存器位
+
+`pw_rsp_err` 的位与异常统计信号的对应关系:
+
+| `pw_rsp_err` 位 | 异常统计信号 |
+| --- | --- |
+| `pw_ctrl_err` | `ctrl_ecc_err` |
+| `pw_ecc_err` | `data_ecc_err` |
+| `pw_no_valid_sdt` | `invalid_sdt_item` |
+| `pw_illegal_sdt_item` | `invalid_sdt_item` |
+| `pw_illegal_sdt_l1_base` | `illegal_page_table_addr` |
+| `pw_illegal_sdt_l2_base` | `illegal_page_table_addr` |
+
+注: 多个 `pw_rsp_err` 位可以落到同一个异常统计信号, 统计信号是这一类异常出现过的汇总位
 
 ## 软件接口
 
@@ -551,3 +595,4 @@ SDecoder_IS.INVL_UPA[46:30], 位宽 17 bits, 放在 SDecoder_IS[16:0] 里
 | 0 | `SDecoder_IA` | W1P | 写 bit0 = 1, 置无效全部 SDTLB 表项 |
 | 1 | `SDecoder_IS` | W1P | 置无效覆盖 `INVL_UPA[46:30]` 的表项; 该字段放在 `SDecoder_IS[16:0]`, 见 "软件接口" 一节 |
 | 2 | `SDecoder_PTBR` | RW | 一级表基地址 `PA[47:0]`, 16B 对界 |
+| 3 | `SDecoder_ES` | RW / W1C | 异常统计寄存器, 各位对应 `invalid_sdt_item` / `illegal_page_table_addr` / `data_ecc_err` / `ctrl_ecc_err`, 写 1 清除 |
