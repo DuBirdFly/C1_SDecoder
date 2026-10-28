@@ -31,7 +31,7 @@ flowchart LR
 | --- | --- |
 | SDecoder | SWLink Decoder |
 | SDTLB | SDecoder TLB |
-| SDPTW | SDecoder Page Table Walker |
+| SDPWU | SDecoder Page Walk Unit |
 | SDMQ | SDecoder Miss Queue |
 | SLMD | SWLink Memory Descriptor |
 | EID | Entity Identifier |
@@ -43,7 +43,6 @@ flowchart LR
 | CAM | Content Addressable Memory |
 | RSVD | Reserved |
 | PW | Page Walk |
-| PTW | Page Table Walker |
 | IOR | IO Register |
 | W1P | Write 1 to Pulse |
 
@@ -82,11 +81,11 @@ flowchart LR
     TLB -->|"cam1 命中"| CALC1["SLMD_CALC_CAM[1]"]
     TLB -->|"cam0 未命中"| SDMQ["SDMQ"]
     TLB -->|"cam1 未命中"| SDMQ
-    SDMQ --> PTW
-    PTW@{ shape: dbl-circ, label: "SDPTW" }
-    PTW -->|"读表项"| TW(["Page Walk 访存接口"])
-    PTW -->|"回填"| TLB
-    PTW -->|"表项"| CALC2["SLMD_CALC_PTW<br/>命中/未命中/非法"]
+    SDMQ --> PWU
+    PWU@{ shape: dbl-circ, label: "SDPWU" }
+    PWU -->|"读表项"| TW(["Page Walk 访存接口"])
+    PWU -->|"回填"| TLB
+    PWU -->|"表项"| CALC2["SLMD_CALC_PTW<br/>命中/未命中/非法"]
     CALC0 -->|"SLMD"| RSP0(["cam0 响应接口"])
     CALC1 -->|"SLMD"| RSP1(["cam1 响应接口"])
     CALC2 -->|"SLMD"| PWRSP(["Page Walk 响应接口"])
@@ -95,9 +94,9 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,PWRSP,CFG iface
 ```
 
-图: SDecoder 内部结构. 1 个 SDTLB 有 2 组输入接口, 两路未命中都进入同一个 SDMQ, 再送给单套 SDPTW; 3 个 SLMD_CALC 分别服务 cam0 命中 / cam1 命中 / Page Walk 结果 (命中 / 未命中 / 非法), 各自驱动对应的响应接口.
+图: SDecoder 内部结构. 1 个 SDTLB 有 2 组输入接口, 两路未命中都进入同一个 SDMQ, 再送给单套 SDPWU; 3 个 SLMD_CALC 分别服务 cam0 命中 / cam1 命中 / Page Walk 结果 (命中 / 未命中 / 非法), 各自驱动对应的响应接口.
 
-SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口, 分别接上游的 2 个请求端口, 因此两路可以并行查表; 两路未命中都进入同一个 SDMQ, 由一套串行的 SDPTW 做 Page Walk, 完成后由 Page Walk 的 SLMD_CALC 拼装并从 `pw_rsp_*` 返回, 同时回填 SDTLB. 响应侧有 3 个相互独立的 `SLMD_CALC` 实例, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个实例只驱动自己那条响应通道, 三条通道互不阻塞.
+SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口, 分别接上游的 2 个请求端口, 因此两路可以并行查表; 两路未命中都进入同一个 SDMQ, 由一套串行的 SDPWU 做 Page Walk, 完成后由 Page Walk 的 SLMD_CALC 拼装并从 `pw_rsp_*` 返回, 同时回填 SDTLB. 响应侧有 3 个相互独立的 `SLMD_CALC` 实例, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个实例只驱动自己那条响应通道, 三条通道互不阻塞.
 
 图上只画了 SDIOR 与配置接口的连接; 它输出的置无效命令作用于 SDTLB, 寄存器编码见 "可配置的寄存器" 一节.
 
@@ -125,9 +124,9 @@ SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物�
 #### 模块划分
 
 1. `SDTLB`: 全相联 CAM, 共 `SDTLB_ENTRIES` (128) 条表项, 只有 1 份表项存储; 对外是 2 组输入接口 cam0 / cam1. 两组接口共享同一份表项, 两路可以并行查表; 命中结果按来源从对应的 `camN_rsp_*` 返回. 回填和置无效都只作用于这一份 TLB 表项.
-2. `SDMQ`: 深度 `SDMQ_DEPTH` (8), 存放未命中的 PA 和 `req_id`. TLB 的 2 个 CAM 出口都接到它, 两路未命中进同一个队列, 输出按年龄从老到年轻送给 SDPTW.
-3. `SDPTW`: 单 walker, 从 SDMQ 取请求做两级 Page Walk, 只读 SDT_L1 / SDT_L2. Page Walk 完成后把表项和 `req_id` 交给 `SLMD_CALC_PTW`, 由它拼装 SLMD 并从 `pw_rsp_*` 返回; 检查通过的结果回填 SDTLB.
-4. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` / `SLMD_CALC_PTW`: 3 个实例相互独立. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` 用 TLB 命中表项和请求 PA 算出 SLA 并拼出 SLMD; `SLMD_CALC_PTW` 用 SDPTW 的 Page Walk 结果判定命中 / 未命中 / 非法, 拼出 SLMD 或错误. 每个实例只驱动对应的响应接口, 实例之间不共享流水级, 一条通道反压不影响另外两条.
+2. `SDMQ`: 深度 `SDMQ_DEPTH` (8), 存放未命中的 PA 和 `req_id`. TLB 的 2 个 CAM 出口都接到它, 两路未命中进同一个队列, 输出按年龄从老到年轻送给 SDPWU.
+3. `SDPWU`: 单 walker, 从 SDMQ 取请求做两级 Page Walk, 只读 SDT_L1 / SDT_L2. Page Walk 完成后把表项和 `req_id` 交给 `SLMD_CALC_PTW`, 由它拼装 SLMD 并从 `pw_rsp_*` 返回; 检查通过的结果回填 SDTLB.
+4. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` / `SLMD_CALC_PTW`: 3 个实例相互独立. `SLMD_CALC_CAM[0]` / `SLMD_CALC_CAM[1]` 用 TLB 命中表项和请求 PA 算出 SLA 并拼出 SLMD; `SLMD_CALC_PTW` 用 SDPWU 的 Page Walk 结果判定命中 / 未命中 / 非法, 拼出 SLMD 或错误. 每个实例只驱动对应的响应接口, 实例之间不共享流水级, 一条通道反压不影响另外两条.
 5. `SDIOR`: 配置与刷新寄存器, 输出 `SDecoder_PTBR` 和置无效命令, 置无效作用于 SDTLB.
 
 #### 命中与未命中流程
@@ -135,18 +134,18 @@ SDecoder 采用 "单 TLB + 双 CAM 接口 + 单 walker" 的结构: SDTLB 的物�
 1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍接收请求.
 2. 命中: 两路查的是同一份 TLB 表项. 命中表项按来源接口送给对应的 `SLMD_CALC` (cam0 命中去 `SLMD_CALC_CAM[0]`, cam1 命中去 `SLMD_CALC_CAM[1]`), 由它算 SLA 并拼 SLMD, 从该接口的 `camN_rsp_*` 返回, 带 `req_id`.
 3. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ; 命中路径不等待未命中 (hit-under-miss).
-4. Page Walk: SDPTW 从 SDMQ 取请求; SDPTW 读 SDT_L1, 段命中则直接给出段式结果, 否则再读 SDT_L2; Page Walk 结果交给 `SLMD_CALC_PTW`, 由它判定命中 / 未命中 / 非法, 拼装后从 `pw_rsp_*` 返回, 合法结果同时回填 SDTLB.
+4. Page Walk: SDPWU 从 SDMQ 取请求; SDPWU 读 SDT_L1, 段命中则直接给出段式结果, 否则再读 SDT_L2; Page Walk 结果交给 `SLMD_CALC_PTW`, 由它判定命中 / 未命中 / 非法, 拼装后从 `pw_rsp_*` 返回, 合法结果同时回填 SDTLB.
 5. 反压: SDMQ 将满或本路响应通道反压时拉低对应路的 `camN_req_ready`; 两路共用 SDMQ, 所以一路未命中积压会同时反压两路, 3 个 `SLMD_CALC` 仍相互独立.
 
 注: CAM 命中的响应不设 FIFO, 命中表项由 `SLMD_CALC_CAM[n]` 直接驱动 `camN_rsp_*`. 上级模块应尽快从 `camN_rsp_*` 取走数据, 取走不及时会反压该路的请求接口 (`camN_req_ready` 拉低); 理想情况下, 例化 SDecoder 时可以把 `camN_rsp_ready` 常置为 1.
 
-注: SDPTW 是单 walker, SDMQ 按年龄从老到年轻取请求; 命中同段 / 同页的条目可以被提前弹出, 响应仍按 `req_id` 乱序匹配.
+注: SDPWU 是单 walker, SDMQ 按年龄从老到年轻取请求; 命中同段 / 同页的条目可以被提前弹出, 响应仍按 `req_id` 乱序匹配.
 
 三条路径输出的 SLMD 字段语义一致, 都由各自的 `SLMD_CALC` 组装.
 
 响应可以乱序, 命中与未命中走不同的响应通道, 同一时刻在途的 `req_id` 必须唯一, 上游按 ID 匹配.
 
-### SDPTW
+### SDPWU
 
 #### Page Table 结构
 
@@ -271,32 +270,33 @@ SDecoder 采用 "段页混合" 的两级代换表: 一级表表项描述一个�
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> SDT_L1_AR: 取到 SDMQ 条目
+    IDLE --> SDT_L1_AR: 最老的 valid 条目未置无效
+    IDLE --> SDMQ_POP: 最老的 valid 条目已置无效
     SDT_L1_AR --> SDT_L1_R: arvalid && arready
-    SDT_L1_R --> SDMQ_SCAN: l1_stop
+    SDT_L1_R --> SDMQ_POP: l1_stop
     SDT_L1_R --> SDT_L2_AR: !l1_stop
     SDT_L2_AR --> SDT_L2_R: arvalid && arready
-    SDT_L2_R --> SDMQ_SCAN: rvalid && rready
-    SDMQ_SCAN --> SDMQ_POP: 存在被覆盖的条目
-    SDMQ_SCAN --> IDLE: 没有被覆盖的条目
+    SDT_L2_R --> SDMQ_POP: rvalid && rready
+    SDMQ_SCAN --> SDMQ_POP: 存在可弹出的条目
+    SDMQ_SCAN --> IDLE: 没有可弹出的条目
     SDMQ_POP --> SDMQ_SCAN: 响应握手完成
 ```
 
-图: SDPTW 状态机
+图: SDPWU 状态机
 
 注: `l1_stop = !l1.valid || (SEG_BASE <= PA[34:30] <= SEG_BASE + SEG_LEN)`
 
 状态说明:
 
-- `IDLE`: 空闲, 等待从 SDMQ 取请求, 取到后锁存 PA 和 req_id
+- `IDLE`: 空闲, 从 SDMQ 取年龄最老的 valid 条目; 若该条目已被软件置无效 (Invalidated = 1), 直接去 `SDMQ_POP` 弹出并响应, 不做 Page Walk; 否则锁存 PA 和 req_id 去执行 Page Walk
 - `SDT_L1_AR`: Page Walk, 写一级表表项地址, 等 `arready`
-- `SDT_L1_R`: Page Walk, 读一级表表项数据, 如果段命中或一级无效则进入 `SDMQ_SCAN`, 否则跳转到二级表访问
+- `SDT_L1_R`: Page Walk, 读一级表表项数据, 如果段命中或一级无效则进入 `SDMQ_POP`, 先把当前条目弹出并响应, 否则跳转到二级表访问
 - `SDT_L2_AR`: Page Walk, 写二级表表项地址, 等 `arready`
-- `SDT_L2_R`: Page Walk, 读二级表表项数据, 转 `SDMQ_SCAN` 状态
-- `SDMQ_SCAN`: 用 Page Walk 得到的段/页覆盖范围与 SDMQ 中所有条目比较, 按年龄矩阵挑出年龄最老的被覆盖条目; 一个都没有则回 `IDLE`
-- `SDMQ_POP`: 弹出选中的条目, 交给 SLMD_CALC_PTW 校验表项数据合法性并拼装 SLMD, 从 `pw_rsp_*` 返回; 响应握手完成后回 `SDMQ_SCAN`, 继续处理下一个被覆盖的条目
+- `SDT_L2_R`: Page Walk, 读二级表表项数据, 转 `SDMQ_POP` 状态, 先把当前条目弹出并响应
+- `SDMQ_SCAN`: 用 Page Walk 得到的段/页覆盖范围与 SDMQ 中剩余条目比较, 在「被这段/页覆盖的条目」和「被软件置无效 (Valid = 1 且 Invalidated = 1) 的条目」中, 按年龄矩阵挑出年龄最老的一条; 两类都没有则回 `IDLE`. Page Walk 结果无效 (一级表无效或没有命中段/页) 时覆盖范围为空, 只弹出被置无效的条目
+- `SDMQ_POP`: 弹出待响应的条目 (从 `SDT_L1_R` / `SDT_L2_R` 进来时是当前触发 Page Walk 的条目, 从 `SDMQ_SCAN` 进来时是选中的条目), 交给 SLMD_CALC_PTW 校验表项数据合法性并拼装 SLMD, 从 `pw_rsp_*` 返回; 被软件置无效的条目按特殊标识 (非法/已刷新) 直接响应, 不复用本次 Page Walk 的结果; 响应握手完成后回 `SDMQ_SCAN`, 继续处理下一个可弹出的条目
 
-注: Page Walk 结果合法时, 在第一次进入 `SDMQ_SCAN` 之前回填一次 SDTLB; 被同一段/页覆盖的多个条目共用这份表项, 不重复回填.
+注: Page Walk 结果合法时, 在本次进入 `SDMQ_POP` 之前回填一次 SDTLB; 被同一段/页覆盖的多个条目共用这份表项, 不重复回填.
 
 #### 清空 SDMQ 中命中的条目
 
@@ -318,12 +318,12 @@ SDMQ 条目的字段:
 | --- | --- | --- |
 | Valid | 1 | 条目有效位 |
 | Invalidated | 1 | 条目被软件置无效位 |
-| Illegal | 1 | 条目非法位, 由 SDPTW 完成后返回的结果判定 |
+| Illegal | 1 | 条目非法位, 由 SDPWU 完成后返回的结果判定 |
 | PA[46:30] | 17 | 未命中请求的 PA[46:30] |
 | req_id | `REQ_ID_WIDTH` | 未命中请求的 req_id |
 
 注: SDMQ 只写位宽, 不写位域, 因为后续条目数和位宽值可能改变, 位域修改起来比较麻烦
-注: 当 Valid 和 Invalidated 都为 1 时, 该条目被软件置无效, 等待被 SDMQ 弹出并通过 SDPTW 对外发起特殊标识的 `rsp_*` 响应
+注: 当 Valid 和 Invalidated 都为 1 时, 该条目被软件置无效, 等待被 SDMQ 弹出并通过 SDPWU 对外发起特殊标识的 `rsp_*` 响应
 
 #### 申请条目
 
@@ -343,7 +343,7 @@ SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**相关性判断, �
 
 #### 删除条目
 
-Page Walk 完成时, 会与所有 SDMQ 条目做 CAM 比较, 如果 SDMQ 中存在与当前 Page Walk 命中 Page Table 同一个段/页的条目, 则 SDPTW 不再继续做 Page Walk, 而是按照这些命中条目的年龄关系, 把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 拼装成 SLMD 并从 `pw_rsp_*` 依年龄顺序返回
+Page Walk 完成时, 会与所有 SDMQ 条目做 CAM 比较, 如果 SDMQ 中存在与当前 Page Walk 命中 Page Table 同一个段/页的条目, 则 SDPWU 不再继续做 Page Walk, 而是按照这些命中条目的年龄关系, 把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 拼装成 SLMD 并从 `pw_rsp_*` 依年龄顺序返回
 
 正常响应: TODO
 
@@ -371,7 +371,7 @@ Page Walk 完成时, 会与所有 SDMQ 条目做 CAM 比较, 如果 SDMQ 中存�
 
 #### 装填 SDTLB
 
-SDTLB 只允许硬件装填, 即通过 SDPTW 的 Page Walk 结果回填 SDTLB, 软件不允许直接写入 SDTLB
+SDTLB 只允许硬件装填, 即通过 SDPWU 的 Page Walk 结果回填 SDTLB, 软件不允许直接写入 SDTLB
 
 当 SDTLB 有空闲表项时, 将装填数据填入到空闲的 SDTLB 表项中, 若有多条空闲表项, 则优先装填低位的空闲条目
 
