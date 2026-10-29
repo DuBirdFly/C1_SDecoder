@@ -262,13 +262,16 @@ SDecoder 采用 "段页混合" 的两级代换表: 一级表条目描述一个�
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> SDT_L1_AR: 最老的 valid 条目未置无效
-    IDLE --> SDMQ_POP: 最老的 valid 条目已置无效
-    SDT_L1_AR --> SDT_L1_R: arvalid && arready
-    SDT_L1_R --> SDMQ_POP: l1_stop
+    IDLE --> SDT_L1_AR: 最老的 valid 条目未被 flush
+    IDLE --> SDMQ_POP: 最老的 valid 条目已被 flush
+    SDT_L1_AR --> SDT_L1_R
+    SDT_L1_R --> SDTLB_FILL: l1_stop & 条目合法
+    SDT_L1_R --> SDMQ_POP: l1_stop & 条目非法
     SDT_L1_R --> SDT_L2_AR: !l1_stop
-    SDT_L2_AR --> SDT_L2_R: arvalid && arready
-    SDT_L2_R --> SDMQ_POP: rvalid && rready
+    SDT_L2_AR --> SDT_L2_R
+    SDT_L2_R --> SDTLB_FILL: 条目合法
+    SDT_L2_R --> SDMQ_POP: 条目非法
+    SDTLB_FILL --> SDMQ_POP: 装填完成
     SDMQ_SCAN --> SDMQ_POP: 存在可弹出的条目
     SDMQ_SCAN --> IDLE: 没有可弹出的条目
     SDMQ_POP --> SDMQ_SCAN: 响应握手完成
@@ -277,18 +280,20 @@ stateDiagram-v2
 图: SDPWU 状态机
 
 注: `l1_stop = !l1.valid || (SEG_BASE <= PA[34:30] <= SEG_BASE + SEG_LEN)`
+注: flush 即 SDecoder 被 IO 寄存器的 `SDecoder_IA` / `SDecoder_IS` 置无效
 
 状态说明:
 
-- `IDLE`: 空闲, 从 SDMQ 取年龄最老的 valid 条目; 若该条目已被软件置无效 (Invalidated = 1), 直接去 `SDMQ_POP` 弹出并响应, 不做 Page Walk; 否则锁存 PA 和 req_id 去执行 Page Walk
+- `IDLE`: 空闲, 从 SDMQ 取年龄最老的 valid 条目; 若该条目已被 flush (Invalidated = 1), 直接去 `SDMQ_POP` 弹出并响应, 不做 Page Walk; 否则锁存 PA 和 req_id 去执行 Page Walk
 - `SDT_L1_AR`: Page Walk, 写一级表条目地址, 等 `arready`
-- `SDT_L1_R`: Page Walk, 读一级表条目数据, 如果段命中或一级无效则进入 `SDMQ_POP`, 先把当前条目弹出并响应, 否则跳转到二级表访问
+- `SDT_L1_R`: Page Walk, 读一级表条目数据, 如果段命中或一级无效, 则条目合法时进入 `SDTLB_FILL`、条目非法时进入 `SDMQ_POP`; 否则跳转到二级表访问
 - `SDT_L2_AR`: Page Walk, 写二级表条目地址, 等 `arready`
-- `SDT_L2_R`: Page Walk, 读二级表条目数据, 转 `SDMQ_POP` 状态, 先把当前条目弹出并响应
-- `SDMQ_SCAN`: 用 Page Walk 得到的段/页覆盖范围与 SDMQ 中剩余条目比较, 在「被这段/页覆盖的条目」和「被软件置无效 (Valid = 1 且 Invalidated = 1) 的条目」中, 按年龄矩阵挑出年龄最老的一条; 两类都没有则回 `IDLE`. Page Walk 结果无效 (一级表无效或没有命中段/页) 时覆盖范围为空, 只弹出被置无效的条目
-- `SDMQ_POP`: 弹出待响应的条目 (从 `SDT_L1_R` / `SDT_L2_R` 进来时是当前触发 Page Walk 的条目, 从 `SDMQ_SCAN` 进来时是选中的条目), 交给 SLMD_CALC_PTW 校验条目数据合法性并拼装 SLMD, 从 `pw_rsp_*` 返回; 被软件置无效的条目按特殊标识 (非法/已刷新) 直接响应, 不复用本次 Page Walk 的结果; 响应握手完成后回 `SDMQ_SCAN`, 继续处理下一个可弹出的条目
+- `SDT_L2_R`: Page Walk, 读二级表条目数据, 条目合法则转 `SDTLB_FILL`, 否则转 `SDMQ_POP`
+- `SDMQ_SCAN`: 用 Page Walk 得到的段/页覆盖范围与 SDMQ 中剩余条目比较, 在「被这段/页覆盖的条目」和「已被 flush (Valid = 1 且 Invalidated = 1) 的条目」中, 按年龄矩阵挑出年龄最老的一条; 两类都没有则回 `IDLE`. Page Walk 结果无效 (一级表无效或没有命中段/页) 时覆盖范围为空, 只弹出已被 flush 的条目
+- `SDTLB_FILL`: 装填 SDTLB, 写 Tag / Data 并置 `Valid = 1`; 只在 Page Walk 得到的条目合法时进入, 装填完成后进入 `SDMQ_POP`; 条目非法时跳过本状态, 直接进入 `SDMQ_POP`
+- `SDMQ_POP`: 弹出待响应的条目 (从 `SDTLB_FILL` 进来时是当前触发 Page Walk 的条目, 从 `SDMQ_SCAN` 进来时是选中的条目), 交给 SLMD_CALC_PTW 校验条目数据合法性并拼装 SLMD, 从 `pw_rsp_*` 返回; 已被 flush 的条目按特殊标识 (非法/已刷新) 直接响应, 不复用本次 Page Walk 的结果; 响应握手完成后回 `SDMQ_SCAN`, 继续处理下一个可弹出的条目
 
-注: Page Walk 结果合法时, 在本次进入 `SDMQ_POP` 之前回填一次 SDTLB, 之后扫描 SDMQ 的其他命中条目时, 不重复回填
+注: 只有 Page Walk 得到的条目合法时才经过 `SDTLB_FILL` 回填 SDTLB; 之后扫描 SDMQ 的其他命中条目时, 不重复回填
 
 #### 清空 SDMQ 中命中的条目
 
