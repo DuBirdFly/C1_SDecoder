@@ -637,3 +637,19 @@ SDecoder_IS.INVL_UPA[46:30], 位宽 17 bits, 放在 SDecoder_IS[16:0] 里
 | 1 | `SDecoder_IS` | W1P | 置无效覆盖 `INVL_UPA[46:30]` 的条目; 该字段放在 `SDecoder_IS[16:0]`, 见 "软件接口" 一节 |
 | 2 | `SDecoder_PTBR` | RW | 一级表基地址 `PA[47:0]`, 16B 对界 |
 | 3 | `SDecoder_ES` | RW / W1C | 异常统计寄存器, 各位对应 `invalid_item` / `illegal_page_table_addr` / `data_ecc_err` / `ctrl_ecc_err`, 写 1 清除 |
+| 4 | `SDecoder_ES_CTL` | RW | 异常统计寄存器使能控制寄存器, 每一位控制一个 `SDecoder_ES` 的异常位 |
+| 5 | `SDecoder_Perf_CTL` | RW | 性能计数使能控制寄存器 |
+| 6 | `SDecoder_SDTLB_AccessCnt` | RW | 统计过程中 SDTLB 快表查询次数 |
+| 7 | `SDecoder_SDTLB_HitCnt` | RW | 统计过程中 SDTLB 快表命中次数 |
+| 8 | `SDecoder_SDT_L1_AccessCnt` | RW | 统计过程中访问一级 Page Table 命中次数 |
+| 9 | `SDecoder_SDT_L2_AccessCnt` | RW | 统计过程中访问二级 Page Table 命中次数 |
+
+
+
+
+### SDecoder_ES
+
+
+
+
+
