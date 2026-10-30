@@ -266,14 +266,13 @@ stateDiagram-v2
     IDLE --> SDMQ_POP: SDMQ 存在 valid & flush 的最老条目
     SDT_L1_AR --> SDT_L1_R
     SDT_L1_R --> SDT_L1_ITEM_CHK
-    SDT_L1_ITEM_CHK --> SDT_L2_AR: 条目 !valid
-    SDT_L1_ITEM_CHK --> SDTLB_FILL: 条目 valid & !illegal
-    SDT_L1_ITEM_CHK --> SDMQ_POP: 条目 valid & illegal
+    SDT_L1_ITEM_CHK --> SDMQ_POP: 条目 !valid | (valid & illegal)
+    SDT_L1_ITEM_CHK --> SDT_L2_AR: 条目 valid & !illegal & !hit
+    SDT_L1_ITEM_CHK --> SDTLB_FILL: 条目 valid & !illegal & hit
     SDT_L2_AR --> SDT_L2_R
     SDT_L2_R --> SDT_L2_ITEM_CHK
     SDT_L2_ITEM_CHK --> SDMQ_POP: 条目 !valid
-    SDT_L2_ITEM_CHK --> SDTLB_FILL: 条目 valid & !illegal
-    SDT_L2_ITEM_CHK --> SDMQ_POP: 条目 valid & illegal
+    SDT_L2_ITEM_CHK --> SDTLB_FILL: 条目 valid
     SDTLB_FILL --> SDMQ_POP
     SDMQ_SCAN --> SDMQ_POP: 存在可弹出条目 (hit/flush)
     SDMQ_SCAN --> IDLE: 没有可弹出条目
@@ -284,18 +283,28 @@ stateDiagram-v2
 
 注: flush 即 SDecoder 被 IO 寄存器的 `SDecoder_IA` / `SDecoder_IS` 置无效
 注: 状态机图里的「条目」有两种含义, 注意区分: 一种是 SDMQ 条目 (如 `IDLE` 的选择条件, 以及 `SDMQ_SCAN` / `SDMQ_POP` 处理的条目), 另一种是 PageTable 条目 (如 `SDT_L1_ITEM_CHK` / `SDT_L2_ITEM_CHK` 检查的条目)
-注: 目前 `SDT_L1_ITEM_CHK` 判为无效的情况是段的 1GB 上界超出本条目的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`
-注: 目前 `SDT_L1_ITEM_CHK` 不存在非法条目, 对应的 illegal 恒为 0
+注: 目前 `SDT_L1_ITEM_CHK` 判为非法的情况是段的 1GB 上界超出本条目的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`
+注: 目前 `SDT_L2_ITEM_CHK` 不存在非法条目
+
+`SDT_L1_ITEM_CHK` 状态转移表
+
+| valid | illegal | hit | 行为 |
+| --- | --- | --- | --- |
+| 0 | X | X | 缺页异常, 不装填 SDTLB |
+| 1 | 1 | X | 缺页异常, 不装填 SDTLB |
+| 1 | 0 | 0 | 未命中一级表 (段表), 前往访问二级表 (页表) |
+| 1 | 0 | 1 | 命中一级表 (段表), Page Walk 结束, 装填 SDTLB |
+
 
 状态说明:
 
 - `IDLE`: 空闲, 从 SDMQ 中选 valid 且年龄最老的条目; 该条目未被 flush 时进入 `SDT_L1_AR` 执行 Page Walk, 已被 flush 时直接进入 `SDMQ_POP` 弹出并响应, 不做 Page Walk
 - `SDT_L1_AR`: Page Walk, 写一级表条目地址, 等 `arready`
 - `SDT_L1_R`: Page Walk, 读一级表条目数据
-- `SDT_L1_ITEM_CHK`: 检查一级表条目: 条目无效 (`!valid`) 则转 `SDT_L2_AR` 去查二级表; 条目有效且合法 (`valid & !illegal`) 则转 `SDTLB_FILL`; 条目有效但非法 (`valid & illegal`) 则转 `SDMQ_POP`
+- `SDT_L1_ITEM_CHK`: 检查一级表条目: `!valid` 或 `valid & illegal` 时转 `SDMQ_POP` (返回异常, 不装填 SDTLB); `valid & !illegal & !hit` 时转 `SDT_L2_AR` 去查二级表; `valid & !illegal & hit` 时转 `SDTLB_FILL`
 - `SDT_L2_AR`: Page Walk, 写二级表条目地址, 等 `arready`
 - `SDT_L2_R`: Page Walk, 读二级表条目数据
-- `SDT_L2_ITEM_CHK`: 检查二级表条目: 条目无效或非法转 `SDMQ_POP`, 条目有效且合法转 `SDTLB_FILL`
+- `SDT_L2_ITEM_CHK`: 检查二级表条目: 条目无效 (`!valid`) 则转 `SDMQ_POP`, 条目有效 (`valid`) 则转 `SDTLB_FILL`
 - `SDTLB_FILL`: 把合法的 Page Walk 结果装填进 SDTLB (写 Tag / Data 并置 `Valid = 1`), 装填完成后转 `SDMQ_POP`
 - `SDMQ_POP`: 弹出待响应的 SDMQ 条目 (可能来自 `SDTLB_FILL` 之后的当前请求, 也可能来自 `SDMQ_SCAN` 选出的重复命中 / 已 flush 条目), 交给 SLMD_CALC_PTW 校验条目数据合法性并拼装 SLMD, 从 `pw_rsp_*` 返回; 已被 flush 的条目按特殊标识 (非法/已刷新) 直接响应; 响应握手完成后转 `SDMQ_SCAN`
 - `SDMQ_SCAN`: 用本次 Page Walk 的结果扫描 SDMQ, 找出被同段/页覆盖的条目和已被 flush 的条目: 存在可弹出条目则转 `SDMQ_POP`, 没有则回 `IDLE`
