@@ -11,7 +11,7 @@ SDecoder 位于 User 侧 (内存物理资源的访问方), 挂在 SWLink 内, �
 ```mermaid
 flowchart LR
     subgraph CoreGroup
-        CORE["Core"] -->|"VA"| MMU["MMU"]
+        CORE@{ shape: procs, label: "Core" } -->|"VA"| MMU["MMU"]
         MMU -->|"PA"| LCPM["LCPM"]
     end
     subgraph SWLink
