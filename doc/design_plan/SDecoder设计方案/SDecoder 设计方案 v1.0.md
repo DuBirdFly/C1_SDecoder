@@ -89,7 +89,7 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,PWRSP,CFG iface
 ```
 
-图: SDecoder 内部结构
+图: SDecoder 的内部结构
 
 SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分别接上游的 2 个请求, 两路 CAM 请求接口可以并行查表
 
@@ -286,7 +286,7 @@ stateDiagram-v2
     SDMQ_POP --> SDMQ_SCAN: 响应握手完成
 ```
 
-图: SDPWU 状态机
+图: SDPWU 的状态机
 
 注: flushed 即软件通过 IOR 对 SDecoder 进行置无效 (刷新) 操作
 注: 状态机图里的「条目」有两种含义, 注意区分: 一种是 SDMQ 条目, 另一种是 PTE
@@ -335,7 +335,7 @@ flowchart LR
     class IF0,IF1,INV iface
 ```
 
-图: SDMQ 内部结构
+图: SDMQ 的内部结构
 
 注: 两路 CAM 未命中的请求可以同拍申请 SDMQ 条目, `AgeMatrix` 随之更新年龄关系
 注: 按年龄挑出最老的条目, 送给 SDPWU 做 Page Walk
@@ -400,6 +400,8 @@ flowchart LR
     classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
     class REQ,FILL,INV iface
 ```
+
+图: SDTLB 的内部结构
 
 | 功能 | 说明 |
 | --- | --- |
@@ -466,7 +468,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 当 SDTLB 没有空闲条目时, 将装填数据填入到**伪随机**选择的 SDTLB 条目中, SDTLB 不设多级结构, 被淘汰的条目将被完全丢弃, 只能通过 Page Walk 重新装填
 
-同一拍对同一条目同时进行置无效和装填时，置无效优先，本次装填丢弃
+同一拍对同一条目同时进行置无效和装填时, 置无效优先, 本次装填丢弃
 
 ## 参数
 
@@ -482,7 +484,116 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `SDTLB_ENTRIES` | 128 |
 | `SDMQ_DEPTH` | 8 |
 | `SDIOR_DATA_WIDTH` | 64 |
+| `CFG_ADDR_WIDTH` | 2 |
+| `PW_RDATA_WIDTH` | 128 |
 | `PW_RSP_ERR_WIDTH` | 6 |
 | `CAM_RSP_ERR_WIDTH` | 1 |
 
 注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
+
+## 接口信号
+
+### 请求接口 (CAM)
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `camN_req_valid` | I | 1 | / |
+| `camN_req_ready` | O | 1 | / |
+| `camN_req_pa` | I | `PA_WIDTH` | / |
+| `camN_req_id` | I | `REQ_ID_WIDTH` | / |
+
+注 1: 共有 2 组请求接口 (CAM), N 可取 [0, 1], 分别对应 SDTLB 的两组输入接口 (cam0 / cam1)
+
+### 响应接口 (CAM)
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `camN_rsp_valid` | O | 1 | / |
+| `camN_rsp_ready` | I | 1 | / |
+| `camN_rsp_id` | O | `REQ_ID_WIDTH` | / |
+| `camN_rsp_eid` | O | `EID_WIDTH` | / |
+| `camN_rsp_token_id` | O | `TOKEN_ID_WIDTH` | / |
+| `camN_rsp_token_value` | O | `TOKEN_VALUE_WIDTH` | / |
+| `camN_rsp_sla` | O | `SLA_WIDTH` | / |
+| `camN_rsp_err` | O | `CAM_RSP_ERR_WIDTH` | / |
+
+注 1: 共有 2 组响应接口 (CAM), N 可取 [0, 1], 分别对应 SDTLB 两组输入接口 (cam0 / cam1) 的响应
+
+`camN_rsp_err` 位域含义:
+
+| 名称 | 位域 | 说明 |
+| --- | --- | --- |
+| `camN_rsp_hit_onehot0_fail` | [0] | CAM 命中 SDTLB 的条目不唯一 |
+
+注: 当软件修改了 Page Table 但未对 SDTLB 做刷新, 可能会出现 SDTLB 中存在多个条目命中同一个 PA 的情况, 即 CAM 命中 SDTLB 的条目不唯一
+
+### 响应接口 (Page Walk)
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `pw_rsp_valid` | O | 1 | / |
+| `pw_rsp_ready` | I | 1 | / |
+| `pw_rsp_id` | O | `REQ_ID_WIDTH` | / |
+| `pw_rsp_eid` | O | `EID_WIDTH` | / |
+| `pw_rsp_token_id` | O | `TOKEN_ID_WIDTH` | / |
+| `pw_rsp_token_value` | O | `TOKEN_VALUE_WIDTH` | / |
+| `pw_rsp_sla` | O | `SLA_WIDTH` | / |
+| `pw_rsp_err` | O | `PW_RSP_ERR_WIDTH` | / |
+
+`pw_rsp_err` 位域含义:
+
+| 名称 | 位域 | 说明 |
+| --- | --- | --- |
+| `pw_ctrl_err` | [5] | Page Walk 发生控制错 |
+| `pw_ecc_err` | [4] | Page Walk 发生 ECC 错 |
+| `pw_page_fault` | [3] | 缺页异常 |
+| `pw_illegal_pte` | [2] | PTE 非法 |
+| `pw_illegal_ptbr_l2` | [1] | 二级表基地址非法 |
+| `pw_illegal_ptbr_l1` | [0] | 一级表基地址非法 |
+
+### 访存接口 (Page Walk)
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `pw_mem_araddr` | O | `PA_WIDTH` | / |
+| `pw_mem_arvalid` | O | 1 | / |
+| `pw_mem_arready` | I | 1 | / |
+| `pw_mem_rdata` | I | `PW_RDATA_WIDTH` | / |
+| `pw_mem_rvalid` | I | 1 | / |
+| `pw_mem_rready` | O | 1 | / |
+
+### 寄存器配置接口
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `cfg_wr_en` | I | 1 | 写使能 |
+| `cfg_wr_addr` | I | `CFG_ADDR_WIDTH` | 写地址 |
+| `cfg_wr_data` | I | `SDIOR_DATA_WIDTH` | 写数据 |
+| `cfg_rd_addr` | I | `CFG_ADDR_WIDTH` | 读地址 |
+| `cfg_rd_data` | O | `SDIOR_DATA_WIDTH` | 读数据 |
+
+### 异常统计信号
+
+异常统计信号不是寄存器配置接口的一部分, 但异常统计寄存器位于 SDIOR 内, 异常发生的下一拍, SDIOR 的异常统计寄存器对应位被置 1, 并直通到 SDecoder 顶层输出
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| `invalid_item` | O | 1 | 条目无效 |
+| `illegal_ptbr` | O | 1 | 页表地址非法 (越界) |
+| `data_ecc_err` | O | 1 | Page Walk 数据 ECC 错 |
+| `ctrl_err` | O | 1 | Page Walk 控制错 |
+| `other_err` | O | 1 | 其他错 |
+
+异常寄存器为 `SDecoder_ES`, 可以通过软件读出, 也可以由软件清除 (W1C)
+
+每个异常统计信号都是某一类异常出现过的汇总位
+
+| 异常统计信号 | 统计类型 |
+| --- | --- |
+| `invalid_item` | 缺页异常 |
+| `invalid_item` | PTE 非法 |
+| `illegal_ptbr` | 一级表/二级表基地址非法 |
+| `data_ecc_err` | Page Walk 数据 ECC 错 |
+| `ctrl_err` | Page Walk 控制错 |
+| `other_err` | SDTLB 多命中 |
+
