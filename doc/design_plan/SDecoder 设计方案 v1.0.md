@@ -4,7 +4,7 @@
 
 ### 基本功能
 
-SDecoder 的核心功能做的是 **PA 到 SLMD 的代换**.
+SDecoder 的核心功能是 **PA 到 SLMD 的代换**.
 
 SDecoder 位于 User 侧 (内存物理资源的访问方), 挂在 SWLink 内, 它一方面接收从 MESH 网络传来的远端 PA 访问请求, 另一方面将这些请求转为 SLMD 并发送出去
 
@@ -32,26 +32,17 @@ flowchart LR
 3. SDTLB 未命中通路在 SDecoder 内部缓存, 并做 Page Walk 访存, 最终返回 SLMD 响应. SDecoder 只设 1 组访存接口, 一次只做一条请求的 Page Walk
 4. 响应不保序: hit 可以绕过 miss, 为了使请求和响应能够正确匹配, 请求和响应都带 id 号, 且要求 id 号在途唯一
 
-### 缩写表
+### 术语说明
 
 | 缩写 | 全称 |
 | --- | --- |
-| APB | Advanced Peripheral Bus |
-| AXI | Advanced eXtensible Interface |
 | CAM | Content Addressable Memory |
-| DDR | Double Data Rate |
-| ECC | Error Correcting Code |
 | EID | Entity Identifier |
-| FF | Flip-Flop |
-| FIFO | First In First Out |
-| HBM | High Bandwidth Memory |
-| IO | Input/Output |
 | IOR | IO Register |
-| L1 | Level 1 |
-| L2 | Level 2 |
 | MC | Memory Controller |
 | MMU | Memory Management Unit |
 | MQ | Miss Queue |
+| VA | Virtual Address |
 | PA | Physical Address |
 | PFN | Page Frame Number |
 | PTBR | Page Table Base Register |
@@ -59,22 +50,18 @@ flowchart LR
 | PTW | Page Table Walker |
 | PW | Page Walk |
 | RSVD | Reserved |
-| S_PFN | SLA Page Frame Number |
 | SDecoder | SWLink Decoder |
 | SDIOR | SDecoder IO Register |
 | SDMQ | SDecoder Miss Queue |
 | SDPWU | SDecoder Page Walk Unit |
 | SDT | SDecoder Table |
+| TLB | Translation Lookaside Buffer |
 | SDTLB | SDecoder TLB |
 | SEG | Segment |
 | SLA | SWLink Address |
 | SLMD | SWLink Memory Descriptor |
-| TLB | Translation Lookaside Buffer |
 | TokenID | Token Identifier |
-| VA | Virtual Address |
 | W1C | Write 1 to Clear |
-
-注: `SWLink` / `LCPM` / `MESH` / `DTB` 是系统级或 Core 内部实体名, 全称与职责由对应设计文档定义, 本文只引用, 不展开
 
 ## SDecoder 微结构
 
