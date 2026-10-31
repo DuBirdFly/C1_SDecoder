@@ -16,8 +16,8 @@ C1_SDecoder/
 │   ├── script/                   # 文档处理脚本
 │   ├── ubuntu_env/               # 本机 (Ubuntu) 环境与工具链说明
 │   ├── verif_plan/               # 验证计划类文档
-│   └── design_plan/              # 设计方案归档, 一个方案一个目录
-│       └── 内存池化SDecoder和SMMU部件设计方案2.6/
+│   └── design_plan/              # 设计方案与思考记录
+│       └── wavedrom_render/      # WaveDrom 渲染示例
 ├── formal/                       # 形式验证
 ├── rtl/                          # 设计代码 (RTL)
 ├── script/                       # 项目流程脚本
