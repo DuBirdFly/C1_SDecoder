@@ -36,30 +36,45 @@ flowchart LR
 
 | 缩写 | 全称 |
 | --- | --- |
-| SDecoder | SWLink Decoder |
-| SDTLB | SDecoder TLB |
-| SDPWU | SDecoder Page Walk Unit |
-| SDMQ | SDecoder Miss Queue |
-| SDIOR | SDecoder IO Register |
-| SDT | SDecoder Table |
-| SLMD | SWLink Memory Descriptor |
+| APB | Advanced Peripheral Bus |
+| AXI | Advanced eXtensible Interface |
+| CAM | Content Addressable Memory |
+| DDR | Double Data Rate |
+| ECC | Error Correcting Code |
 | EID | Entity Identifier |
-| TokenID | Token Identifier |
-| SLA | SWLink Address |
-| VA | Virtual Address |
+| FF | Flip-Flop |
+| FIFO | First In First Out |
+| HBM | High Bandwidth Memory |
+| IO | Input/Output |
+| IOR | IO Register |
+| L1 | Level 1 |
+| L2 | Level 2 |
+| MC | Memory Controller |
+| MMU | Memory Management Unit |
+| MQ | Miss Queue |
 | PA | Physical Address |
 | PFN | Page Frame Number |
-| TLB | Translation Lookaside Buffer |
-| CAM | Content Addressable Memory |
 | PTBR | Page Table Base Register |
 | PTE | Page Table Entry |
-| RSVD | Reserved |
+| PTW | Page Table Walker |
 | PW | Page Walk |
-| IOR | IO Register |
-| W1P | Write 1 to Pulse |
+| RSVD | Reserved |
+| S_PFN | SLA Page Frame Number |
+| SDecoder | SWLink Decoder |
+| SDIOR | SDecoder IO Register |
+| SDMQ | SDecoder Miss Queue |
+| SDPWU | SDecoder Page Walk Unit |
+| SDT | SDecoder Table |
+| SDTLB | SDecoder TLB |
+| SEG | Segment |
+| SLA | SWLink Address |
+| SLMD | SWLink Memory Descriptor |
+| TLB | Translation Lookaside Buffer |
+| TokenID | Token Identifier |
+| VA | Virtual Address |
 | W1C | Write 1 to Clear |
 
-<!-- [TODO] 其他缩写表内容后续待补充 -->
+注: `SWLink` / `LCPM` / `MESH` / `DTB` 是系统级或 Core 内部实体名, 全称与职责由对应设计文档定义, 本文只引用, 不展开
 
 ## SDecoder 微结构
 
