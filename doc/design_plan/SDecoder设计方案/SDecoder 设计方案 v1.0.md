@@ -97,7 +97,7 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 响应侧有 3 个相互独立的 SLMD_CALC 模块, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个 SLMD_CALC 模块互不阻塞, 独自响应, 只驱动自己那条响应通道
 
-图上只画了 SDIOR 与配置接口的连接, SDIOR 输出的置无效 (刷新) 命令作用于 SDTLB 与 SDMQ, 统计的异常信息从 SDecoder 顶层输出, 寄存器编码见 "可配置的寄存器" 一节
+图上只画了 SDIOR 的配置接口, SDIOR 输出的置无效 (刷新) 命令作用于 SDTLB 与 SDMQ, 统计的异常信息从 SDecoder 顶层输出, 寄存器编码见 "可配置的寄存器" 一节
 
 ### 接口分组
 
@@ -135,21 +135,21 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 ### 命中通路
 
 1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍并行接收请求
-2. 命中: 两路 cam 请求对 SDTLB 进行条目查询, 命中后将 tag 和 data 输出
-3. 计算: 将 tag, data, PA, id 送到对应的 SLMD_CALC 模块, 计算出 SLMD
+2. 命中: 两路 cam 请求对 SDTLB 进行条目查询, 命中后将 data 输出
+3. 计算: 将 data, PA, id 送到对应的 SLMD_CALC 模块, 计算出 SLMD
 
-注: CAM 命中到响应输出的通路不设 FIFO, `SLMD_CALC_CAM[n]` 接收 tag, data, PA, id 后, 拼装成 SLMD 输出到响应接口上
+注: CAM 命中到响应输出的通路不设 FIFO, `SLMD_CALC_CAM[n]` 接收 data, PA, id 后, 拼装成 SLMD 输出到响应接口上
 
 注: 由于不设 FIFO, 所以上级模块应尽快从响应接口取走数据, 取走不及时会反压该路的请求接口 (请求端 ready 拉低); 如果上游有能力做到无条件接收响应, 则可以在例化 SDecoder 时将响应端的 ready 信号置为常 1
 
 ### 未命中通路
 
 1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍并行接收请求
-2. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ, 支持同拍写入 2 个请求, 只要 SDMQ 还有足够的空间就可以接收请求; SDMQ 将满时同时拉低两路请求接口的 ready, 不再接受所有新的请求
+2. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ, 支持同拍写入 2 个请求, 只要 SDMQ 还有足够的空间就可以接收请求; SDMQ 将满时同时拉低两路请求接口的 ready, 不再接受新的请求
 3. Page Walk: SDPWU 从 SDMQ 取请求, 并能通过最多 2 次访存获取到 PTE. SDPWU 判定表项合法性, SLMD_CALC_PTW 拼装 SLMD 并检查 SLA 溢出
-   1. 表项合法: SDPWU 回填 SDTLB, 并将表项, PA , id 交给 SLMD_CALC_PTW 拼装 SLMD
+   1. 表项合法: SDPWU 回填 SDTLB, 并将表项, PA, id 交给 SLMD_CALC_PTW 拼装 SLMD
    2. 表项合法: SDMQ 中 "命中同段/页" 或 "被软件置无效 (刷新)" 的条目可以被提前弹出, 并继续交由 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
-   3. 表项非法: 本次 Page Walk 结果不回填 SDTLB, 不扫描 "命中同段/页" 的重复条目; 仍扫描 flushed 条目, 最后由 SLMD_CALC_PTW 返回异常响应
+   3. 表项非法: 本次 Page Walk 结果不回填 SDTLB, 不扫描 SDMQ "命中同段/页" 的重复条目; 仍扫描 SDMQ 的 flushed 条目, 最后由 SLMD_CALC_PTW 返回异常响应
 
 注: SDPWU 是串行的, 一次只能处理一个请求, SDMQ 按年龄从老到年轻取请求; 响应整体不保序, 上游按 ID 匹配
 
@@ -163,12 +163,12 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 ##### 地址划分
 
-核心视角的虚地址 VA 为 53 位, 物理地址 PA 为 48 位. PA[47] 用于区分地址空间:
+从 Core 的角度看, 虚地址 VA 为 53 位, 物理地址 PA 为 48 位. PA[47] 用于区分地址空间:
 
 - PA[47] = 0: Mem 空间, 共 128 TB
 - PA[47] = 1: IO 空间, 共 128 TB
 
-因为 SDecoder 只处理 Mem 空间, 所以断言 PA[47] 恒为 0, 实际有用的是 PA[46:0]
+SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 PA[46:0]
 
 虽然 PA[47] 恒为 0, 但现在 Page Table 中仍然保留该位:
 
@@ -211,7 +211,7 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 注 1: SEG_LEN 实际上是段表偏移, 其含义类似 AXI 的 AxLEN, 实际段的长度为 (SEG_LEN + 1) * 1GB
 注 2: 段表下界为 SEG_BASE, 上界为 SEG_BASE + SEG_LEN
-注 3: 一级表是 "段页混合" 式的表. 每个 Type 为 1 的 32GB 区间内段式映射有且仅有 1 个, 但在二级表内同时还可以有 0/1/N 个页式映射; Type 为 0 时区间全部为页表
+注 3: 一级表是 "段页混合" 式的表. 每个 Type 为 1 的 32GB 区间内段式映射有且仅有 1 个, 但在二级表内同时还可以有 0/1/N 个页式映射; Type 为 0 时区间全部为页式映射
 注 4: 优先查段式映射, 不命中再去查二级表
 
 一级表条目地址:
@@ -221,8 +221,8 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 一级表命中条件:
 
-1. 一级表条目位域 Valid = 1
-2. 一级表条目位域 Type = 1
+1. 一级表条目 Valid 位为 1
+2. 一级表条目 Type 位为 1
 3. SEG_BASE[34:30] <= PA[34:30] <= SEG_BASE[34:30] + SEG_LEN[34:30]
 
 一级表命中计算 SLA:
@@ -256,7 +256,7 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 二级表命中条件:
 
 1. 一级表条目位域 Valid = 1
-2. 一级表未命中段式映射 (Type = 0, 或 PA 不在段空间内)
+2. 一级表未命中段式映射 (Type = 0, 或 PA 不在段范围内)
 3. 二级表条目位域 Valid = 1
 
 二级表命中计算 SLA:
@@ -302,7 +302,7 @@ stateDiagram-v2
 - `SDT_L2_ITEM_CHK`: 根据二级表条目判定命中状态, 二级表 valid 则认为命中, 否则认为未命中
 - `SDTLB_FILL`: Page Walk 完成, 将合法条目回填 SDTLB
 - `SDMQ_POP`: 弹出当前待响应的 SDMQ 条目, 交给 SLMD_CALC_PTW 拼装 SLMD 或返回异常响应
-- `SDMQ_SCAN`: 扫描 SDMQ 中的条目, 弹出所有命中同段/页或被软件置无效 (刷新) 的条目, 交给 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
+- `SDMQ_SCAN`: 扫描 SDMQ 中的条目, 每次选出年龄最老的可弹出条目 (命中同段/页或被软件置无效), 交给 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
 
 
 `SDT_L1_ITEM_CHK` 状态转移表
@@ -310,7 +310,7 @@ stateDiagram-v2
 | valid | Type | illegal | hit | 行为 |
 | --- | --- | --- | --- | --- |
 | 0 | X | X | X | 缺页异常, 不装填 SDTLB |
-| 1 | 0 | 0 | 0 | 该 32GB 区间不存在段表, 前往访问二级表 |
+| 1 | 0 | 0 | 0 | 该 32GB 区间不存在段式映射, 前往访问二级表 |
 | 1 | 1 | 0 | 0 | 段式映射未命中, 前往访问二级表 |
 | 1 | 1 | 0 | 1 | 段式映射命中, Page Walk 结束, 装填 SDTLB |
 | 1 | X | 1 | X | 非法异常, PTE 非法, 不装填 SDTLB |
@@ -321,8 +321,8 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    IF0("cam0 未命中装填接口") --> ALLOC["申请条目"]
-    IF1("cam1 未命中装填接口") --> ALLOC
+    IF0("cam0 未命中申请接口") --> ALLOC["申请条目"]
+    IF1("cam1 未命中申请接口") --> ALLOC
     ALLOC --> ITEM["SDMQ"]
     ALLOC --> AGE["AgeMatrix"]
     INV("软件置无效接口") --> ITEM
@@ -338,7 +338,7 @@ flowchart LR
 图: SDMQ 内部结构
 
 注: 两路 CAM 未命中的请求可以同拍申请 SDMQ 条目, `AgeMatrix` 随之更新年龄关系
-注: 年龄选择按年龄挑出最老的条目, 送给 SDPWU 做 Page Walk
+注: 按年龄挑出最老的条目, 送给 SDPWU 做 Page Walk
 注: Page Walk 完成后, 用合法的 PTE 扫描 SDMQ 中重复命中的条目 (当前条目已弹出, 不参与), 并把它们弹出送给 SDPWU, 最终移交 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
 
 #### 条目内容
@@ -358,9 +358,9 @@ SDMQ 条目的字段:
 
 当 SDTLB 未命中时, 向 SDMQ 申请条目, 将该请求的 PA[46:0] 和 req_id 写入 SDMQ. 如果 SDMQ 将满, 则同时拉低两路请求接口的 ready, 不再接受任何新的请求
 
-由于 SDTLB 有 2 个 CAM 接口, 所以 SDMQ 可以同拍接收 2 条请求的条目申请, 所以 "SDMQ 将满" 指的是 SDMQ 里还剩 0 或 1 个空闲条目; 也就是说 SDMQ 的有效深度是 `SDMQ_DEPTH-1`
+由于 SDTLB 有 2 个 CAM 接口, SDMQ 可以同拍接收 2 条请求的条目申请, 所以 "SDMQ 将满" 指的是 SDMQ 里还剩 0 或 1 个空闲条目; 也就是说 SDMQ 的有效深度是 `SDMQ_DEPTH-1`
 
-SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**申请条目时的相关性判断. "同一时刻在途的 id 必须唯一, id 完全乱序, 上游按 id 匹配", 所以即使 PA[46:30] 完全相同, 它们的 id 也必然不同. 因此**不能把多个请求合并成同一个 SDMQ 条目**; 但一次 Page Walk 得到的 PTE 可以服务多个 SDMQ 条目, 一次 Page Walk 可能导致多个 SDMQ 条目被弹出
+SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**申请条目时的相关性判断. "同一时刻在途的 id 必须唯一, 响应按 id 乱序返回, 上游按 id 匹配", 所以即使 PA[46:30] 完全相同, 它们的 id 也必然不同. 因此**不能把多个请求合并成同一个 SDMQ 条目**; 但一次 Page Walk 得到的 PTE 可以服务多个 SDMQ 条目, 一次 Page Walk 可能导致多个 SDMQ 条目被弹出
 
 注: 当 SDMQ 还剩 2 个空闲条目, 此时 2 个 CAM 请求接口的 ready 信号还是处于高电平. 若此时 2 个请求同时申请 SDMQ, 则 SDMQ 会被写满, 即还剩 0 个空闲条目. 2 个 CAM 请求接口的 ready 信号此时应该拉低反压上游请求, 直到 SDMQ 弹出 2 个条目后才恢复 ready 高电平
 
@@ -370,7 +370,7 @@ SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**申请条目时的
 
 #### 删除条目
 
-Page Walk 完成后, 用本次 PTE 与 SDMQ 的所有条目做 CAM 比较; 如果条目 "命中同段/页" 或 "被软件置无效 (刷新)", 则把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 之后经 SDPWU 交给 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
+Page Walk 完成后, 用本次 PTE 覆盖的映射范围与 SDMQ 中剩余条目做 CAM 比较; 如果条目 "命中同段/页" 或 "被软件置无效 (刷新)", 则把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 之后经 SDPWU 交给 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
 
 #### 年龄矩阵
 
@@ -382,10 +382,107 @@ Page Walk 完成后, 用本次 PTE 与 SDMQ 的所有条目做 CAM 比较; 如�
 
 注: 如果 2 个 Miss 请求同拍申请 SDMQ 条目, 那么申请到条目号比较大的那个请求更年轻
 
+### SDTLB
+
+#### 微结构
+
+SDTLB 的主要功能是缓存 PA 到 SLMD 的映射, 命中时输出对应 TLB 条目的 Data
+
+```mermaid
+flowchart LR
+    REQ(["查表请求 (PA)"]) --> TAG["SDTLB_TAG"]
+    TAG --> HIT["hit_vector<br/>(onehot0)"]
+    HIT --> DATA["SDTLB_DATA"]
+    DATA --> OUT["命中条目的 Data"]
+    FILL(["Page Walk 回填"]) --> TAG
+    FILL --> DATA
+    INV(["软件置无效"]) --> TAG
+    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    class REQ,FILL,INV iface
+```
+
+| 功能 | 说明 |
+| --- | --- |
+| 条目数 | 128 |
+| 映射覆盖范围 | 1GB 到 32GB |
+| 组织结构 | 全相联 (CAM + FF + Latch) |
+| 查表 | 2 个 CAM 并行读端口 |
+| 写入 | 只允许硬件装填 |
+| 清除 | 由刷新接口置无效 |
+
+段式和页式统一按 "段" 处理, 把 1GB 页看作长度为 1 的段, 页和段都用 `PA_Base` / `PA_Up` 表示, 不设额外的粒度位.
+
+#### 条目内容
+
+| 字段组 | 字段 | 位宽 | 存储 | 说明 |
+| --- | --- | --- | --- | --- |
+| Tag | `PA_Base[47:30]` | 18 | Latch | 段/页基址, 1GB 对界 |
+| Tag | `PA_Up[34:30]` | 5 | Latch | 段/页上界 (含), 1GB 对界 |
+| Tag | `Valid` | 1 | FF | 条目有效位 |
+| Data | `EID[10:0]` | 11 | Latch | Entity 标识 |
+| Data | `TokenID[9:0]` | 10 | Latch | 查找上下文使用 |
+| Data | `TokenValue[9:0]` | 10 | Latch | 凭据校验使用 |
+| Data | `S_PFN[52:30]` | 23 | Latch | SLA 基址, 1GB 对界 |
+
+注: 页式条目 `PA_Base[34:30] = PA_Up`
+注: 段式条目 `PA_Up = SEG_BASE + SEG_LEN`
+
+#### 访问条目
+
+命中条件:
+
+1. `Valid = 1`.
+2. `PA[47:35] == PA_Base[47:35]`.
+3. `PA_Base[34:30] <= PA[34:30] <= PA_Up`.
+
+- 128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常配置下最多命中一个 SDTLB 条目; 多命中时数据未定义, 但响应带多命中异常标志
+- Tag CAM 比较是组合逻辑; `hit_vector` 打 1 拍后再用; 请求拍 T 时刻的命中结果固定在 T+1 时刻有效
+- SDTLB 的 Data 用 `hit_vector` 选出命中的条目并输出
+- 装填 SDTLB 在时钟上升沿完成, 同拍 CAM 读请求看到的是装填前的条目
+
+命中后的 SLA 计算:
+
+```text
+SLA[52:30] = S_PFN[52:30] + (PA[34:30] - PA_Base[34:30])
+SLA[29:0]  = PA[29:0]
+```
+
+#### 装填条目
+
+SDTLB 只允许硬件回填, 软件不可写入
+
+- 如果 Page Walk 命中段式映射 (一级表条目有效且落在段内), 则回填到 SDTLB 条目的 Tag 字段为
+  - `PA_Base = {PA[47:35], SEG_BASE[34:30]}`
+  - `PA_Up = SEG_BASE + SEG_LEN`
+- 如果 Page Walk 命中页式映射 (二级表条目有效), 则回填到 SDTLB 条目的 Tag 字段为
+  - `PA_Base = PA[47:30]`
+  - `PA_Up = PA[34:30]`
+- 装填 SDTLB 条目时, SDTLB 条目的其他字段直接取 PTE 的对应字段
+  - `EID / TokenID / TokenValue / S_PFN`
+
+只有无异常的 Page Walk 结果才会回填 SDTLB
+
+当 SDTLB 有空闲条目时, 将装填数据填入到空闲的 SDTLB 条目中, 若有多条空闲条目, 则优先装填低位的空闲条目
+
+当 SDTLB 没有空闲条目时, 将装填数据填入到**伪随机**选择的 SDTLB 条目中, SDTLB 不设多级结构, 被淘汰的条目将被完全丢弃, 只能通过 Page Walk 重新装填
+
+同一拍对同一条目同时进行置无效和装填时，置无效优先，本次装填丢弃
+
 ## 参数
 
 | 参数 | 默认值 |
 | --- | --- |
+| `PA_WIDTH` | 48 |
+| `PA_MEM_WIDTH` | 47 |
 | `SLA_WIDTH` | 53 |
+| `EID_WIDTH` | 11 |
+| `TOKEN_ID_WIDTH` | 10 |
+| `TOKEN_VALUE_WIDTH` | 10 |
+| `REQ_ID_WIDTH` | 8 |
+| `SDTLB_ENTRIES` | 128 |
+| `SDMQ_DEPTH` | 8 |
+| `SDIOR_DATA_WIDTH` | 64 |
+| `PW_RSP_ERR_WIDTH` | 6 |
+| `CAM_RSP_ERR_WIDTH` | 1 |
 
-<!-- [TODO] 其他参数待补充 -->
+注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
