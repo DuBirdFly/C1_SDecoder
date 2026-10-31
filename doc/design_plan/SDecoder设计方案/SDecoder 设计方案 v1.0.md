@@ -597,3 +597,41 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `ctrl_err` | Page Walk 控制错 |
 | `other_err` | SDTLB 多命中 |
 
+## 可配置的寄存器
+
+### 寄存器列表
+
+| 序号 | 名字 | 说明 |
+| --- | --- | --- |
+| 0 | `SDecoder_IA` | Invalid All, 软件刷新, 置无效所有 SDTLB 条目 |
+| 1 | `SDecoder_IS` | Invalid Selected, 软件刷新, 置无效指定的 SDTLB 条目 |
+| 2 | `SDecoder_PTBR_L1` | Page Table Base Register (Level 1), 一级表基地址 |
+| 3 | `SDecoder_ES` | 异常统计寄存器 |
+| 4 | `SDecoder_Perf_CTL` | Performance Control, 性能统计控制寄存器 |
+| 5 | `SDecoder_SDTLB_AccessCnt` | SDTLB Access Count, SDTLB 访问计数寄存器 |
+| 6 | `SDecoder_SDTLB_HitCnt` | SDTLB Hit Count, SDTLB 命中计数寄存器 |
+| 7 | `SDecoder_SDT_L1_AccessCnt` | SDTLB Level 1 Access Count, 一级表访问计数寄存器 |
+| 8 | `SDecoder_SDT_L2_AccessCnt` | SDTLB Level 2 Access Count, 二级表访问计数寄存器 |
+
+### 寄存器详细说明
+
+#### SDecoder_IA
+
+#### SDecoder_IS
+
+#### SDecoder_PTBR_L1
+
+#### SDecoder_ES
+
+#### SDecoder_Perf_CTL
+
+#### SDecoder_SDTLB_AccessCnt
+
+#### SDecoder_SDTLB_HitCnt
+
+#### SDecoder_SDT_L1_AccessCnt
+
+#### SDecoder_SDT_L2_AccessCnt
+
+
+
