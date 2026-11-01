@@ -145,15 +145,15 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 ### 模块划分
 
-**SDTLB**: 快表存储模块, 全相联 CAM, 共 `SDTLB_ENTRIES` 个条目, 对外暴露 2 组输入接口 CAM0/1, 两路可以并行查表; 如果命中 SDTLB, 则走命中通路, 命中结果按来源从对应的响应接口返回; 可被 SDPWU 回填; 可被 SDIOR 置无效
+- **SDTLB**: 快表存储模块, 全相联 CAM, 共 `SDTLB_ENTRIES` 个条目, 对外暴露 2 组输入接口 CAM0/1, 两路可以并行查表; 如果命中 SDTLB, 则走命中通路, 命中结果按来源从对应的响应接口返回; 可被 SDPWU 回填; 可被 SDIOR 置无效
 
-**SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 会附带一些其他标识位; 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄从老到年轻输出给 SDPWU; 可被 SDIOR 置无效
+- **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 会附带一些其他标识位; 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄从老到年轻输出给 SDPWU; 可被 SDIOR 置无效
 
-**SDPWU**: 串行 Page Table Walker 访存单元, 从 SDMQ 取未命中请求, 在访存接口上发起读请求, 做最多两级 Page Walk. SDPWU 在内部判定表项的合法性: 合法结果回填 SDTLB, 并连同请求的 PA 和 id 送到 SLMD_CALC_PTW; SLMD_CALC_PTW 拼装 SLMD 或返回异常响应
+- **SDPWU**: 串行 Page Table Walker 访存单元, 从 SDMQ 取未命中请求, 在访存接口上发起读请求, 做最多两级 Page Walk. SDPWU 在内部判定表项的合法性: 合法结果回填 SDTLB, 并连同请求的 PA 和 id 送到 SLMD_CALC_PTW; SLMD_CALC_PTW 拼装 SLMD 或返回异常响应
 
-**SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, Page Walk 完成; 3 个实例相互独立, 每个实例只驱动对应的响应接口
+- **SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, Page Walk 完成; 3 个实例相互独立, 每个实例只驱动对应的响应接口
 
-**SDIOR**: 配置 SDecoder 内部寄存器, 输出其他模块使用的可配置参数, 发起刷新命令, 统计异常信息
+- **SDIOR**: 配置 SDecoder 内部寄存器, 输出其他模块使用的可配置参数, 发起刷新命令, 统计异常信息
 
 ### 命中通路
 
@@ -189,9 +189,7 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 - PA[47] = 0: Mem 空间, 共 128 TB
 - PA[47] = 1: IO 空间, 共 128 TB
 
-SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 PA[46:0]
-
-虽然 PA[47] 恒为 0, 但现在 Page Table 中仍然保留该位:
+SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 PA[46:0]; 不过虽然 PA[47] 恒为 0, 但现在 Page Table 中仍然保留该位:
 
 1. 一级表的基地址 SDecoder_PTBR_L1[47]
 2. 二级表的基地址 SDecoder_PTBR_L2[47]
@@ -215,7 +213,6 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 #### 一级表条目
 
-一级表的条目宽度为 16B (128 bit)
 
 | 位域 | 位宽 | 名称 | 说明 |
 | --- | --- | --- | --- |
@@ -230,35 +227,36 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 | [1] | 1 | Type | 1: 该 32GB 区间存在 1 个段式映射; 0: 该 32GB 区间均为页表 |
 | [0] | 1 | Valid | 条目有效位 |
 
-注 1: SEG_LEN 实际上是段表偏移, 其含义类似 AXI 的 AxLEN, 实际段的长度为 (SEG_LEN + 1) * 1GB
-注 2: 段表下界为 SEG_BASE, 上界为 SEG_BASE + SEG_LEN
-注 3: 一级表是 "段页混合" 式的表. 每个 Type 为 1 的 32GB 区间内段式映射有且仅有 1 个, 但在二级表内同时还可以有 0/1/N 个页式映射; Type 为 0 时区间全部为页式映射
-注 4: 优先查段式映射, 不命中再去查二级表
+注: 一级表的条目宽度为 16B (128 bit)
+注: SEG_LEN 实际上是段表偏移, 其含义类似 AXI 的 AxLEN, 实际段的长度为 (SEG_LEN + 1) * 1GB
+注: 段表下界为 SEG_BASE, 上界为 SEG_BASE + SEG_LEN
+注: 一级表是 "段页混合" 式的表. 每个 Type 为 1 的 32GB 区间内段式映射有且仅有 1 个, 但在二级表内同时还可以有 0/1/N 个页式映射; Type 为 0 时区间全部为页式映射
+注: 优先查段式映射, 不命中再去查二级表
 
-一级表条目地址:
+- 一级表条目地址
+  - 按条目大小对界 (16B), 因此断言 SDecoder_PTBR_L1[3:0] 为 4'h0, 硬件取 {SDecoder_PTBR_L1[47:4], 4'h0}, 低 4 位忽略
+  - 一级表条目地址 = {SDecoder_PTBR_L1[47:4], 4'h0} + PA[46:35] * 16
 
-1. 按条目大小对界 (16B), 因此断言 SDecoder_PTBR_L1[3:0] 为 4'h0, 硬件取 {SDecoder_PTBR_L1[47:4], 4'h0}, 低 4 位忽略
-2. L1 条目地址 = {SDecoder_PTBR_L1[47:4], 4'h0} + PA[46:35] * 16
+<br>
 
-一级表命中条件:
+- 一级表命中条件
+  - 一级表条目 Valid 位为 1
+  - 一级表条目 Type 位为 1
+  - SEG_BASE[34:30] <= PA[34:30] <= SEG_BASE[34:30] + SEG_LEN[34:30]
 
-1. 一级表条目 Valid 位为 1
-2. 一级表条目 Type 位为 1
-3. SEG_BASE[34:30] <= PA[34:30] <= SEG_BASE[34:30] + SEG_LEN[34:30]
+<br>
 
-一级表命中计算 SLA:
+- 一级表命中计算 SLA
+  - SLA[52:30] = S_PFN[52:30] + (PA[34:30] - SEG_BASE[34:30])
+  - SLA[29:0] = PA[29:0]
 
-1. SLA[52:30] = S_PFN[52:30] + (PA[34:30] - SEG_BASE[34:30])
-2. SLA[29:0] = PA[29:0]
+<br>
 
-软件约束, 不能写非法的一级表条目:
-
-1. SEG_BASE + SEG_LEN > 31
-2. S_PFN[52:30] + (PA[34:30] - SEG_BASE[34:30]) 溢出
+- 软件约束, 不能写非法的一级表条目
+  - SEG_BASE + SEG_LEN > 31
+  - S_PFN[52:30] + (PA[34:30] - SEG_BASE[34:30]) 溢出
 
 #### 二级表条目
-
-二级表条目宽度 8B (64 bit)
 
 | 位域 | 位宽 | 名称 | 说明 |
 | --- | --- | --- | --- |
@@ -269,21 +267,24 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 | [23:1] | 23 | S_PFN[52:30] | 页式代换的 SLA 基址, 以 1GB 对界 |
 | [0] | 1 | Valid | 二级条目有效位 |
 
-二级表条目地址:
+注: 二级表条目宽度 8B (64 bit)
 
-1. 按条目大小对界 (8B), 因此断言 SDecoder_PTBR_L2[2:0] 为 3'h0, 硬件取 {SDecoder_PTBR_L2[47:3], 3'h0}, 低 3 位忽略
-2. L2 条目地址 = {SDecoder_PTBR_L2[47:3], 3'h0} + PA[34:30] * 8
+- 二级表条目地址
+  - 按条目大小对界 (8B), 因此断言 SDecoder_PTBR_L2[2:0] 为 3'h0, 硬件取 {SDecoder_PTBR_L2[47:3], 3'h0}, 低 3 位忽略
+  - L2 条目地址 = {SDecoder_PTBR_L2[47:3], 3'h0} + PA[34:30] * 8
 
-二级表命中条件:
+<br>
 
-1. 一级表条目位域 Valid = 1
-2. 一级表未命中段式映射 (Type = 0, 或 PA 不在段范围内)
-3. 二级表条目位域 Valid = 1
+- 二级表命中条件
+  - 一级表条目位域 Valid = 1
+  - 一级表未命中段式映射 (Type = 0, 或 PA 不在段范围内)
+  - 二级表条目位域 Valid = 1
 
-二级表命中计算 SLA:
+<br>
 
-1. SLA[52:30] = S_PFN[52:30]
-2. SLA[29:0] = PA[29:0]
+- 二级表命中计算 SLA
+  - SLA[52:30] = S_PFN[52:30]
+  - SLA[29:0] = PA[29:0]
 
 #### 状态机
 
@@ -316,11 +317,11 @@ stateDiagram-v2
 状态说明:
 
 - `IDLE`: 空闲, 取最老的 valid 条目. 若该条目未标识为 flushed, 则进入 Page Walk 阶段; 若该条目是 flushed 条目, 则直接弹出该条目, 不做 Page Walk
-- `SDT_L1_AR`/`SDT_L1_R`: 访问一级表, 读一级表条目
-- `SDT_L1_ITEM_CHK`: 根据一级表条目判定命中状态, 详细状态转移关系见后面的状态转移表
-- `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表条目
-- `SDT_L2_ITEM_CHK`: 根据二级表条目判定命中状态, 二级表 valid 则认为命中, 否则认为未命中
-- `SDTLB_FILL`: Page Walk 完成, 将合法条目回填 SDTLB
+- `SDT_L1_AR`/`SDT_L1_R`: 访问一级表, 读一级表表项
+- `SDT_L1_ITEM_CHK`: 根据一级表表项判定命中状态, 详细状态转移关系见后面的状态转移表
+- `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表表项
+- `SDT_L2_ITEM_CHK`: 根据二级表表项判定命中状态, 二级表 valid 则认为命中, 否则认为未命中
+- `SDTLB_FILL`: Page Walk 完成, 将合法表项回填 SDTLB
 - `SDMQ_POP`: 弹出当前待响应的 SDMQ 条目, 交给 SLMD_CALC_PTW 拼装 SLMD 或返回异常响应
 - `SDMQ_SCAN`: 扫描 SDMQ 中的条目, 每次选出年龄最老的可弹出条目 (命中同段/页或被软件置无效), 交给 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
 
@@ -453,9 +454,9 @@ flowchart LR
 
 命中条件:
 
-1. `Valid = 1`.
-2. `PA[47:35] == PA_Base[47:35]`.
-3. `PA_Base[34:30] <= PA[34:30] <= PA_Up`.
+1. `Valid = 1`
+2. `PA[47:35] == PA_Base[47:35]`
+3. `PA_Base[34:30] <= PA[34:30] <= PA_Up`
 
 - 128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常配置下最多命中一个 SDTLB 条目; 多命中时数据未定义, 但响应带多命中异常标志
 - Tag CAM 比较是组合逻辑; `hit_vector` 打 1 拍后再用; 请求拍 T 时刻的命中结果固定在 T+1 时刻有效
