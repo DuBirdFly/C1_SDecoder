@@ -32,7 +32,7 @@ flowchart LR
 3. SDTLB 未命中通路在 SDecoder 内部缓存, 并做 Page Walk 访存, 最终返回 SLMD 响应. SDecoder 只设 1 组访存接口, 一次只做一条请求的 Page Walk
 4. 响应不保序: hit 可以绕过 miss, 为了使请求和响应能够正确匹配, 请求和响应都带 id 号, 且要求 id 号在途唯一
 
-### 术语说明
+### 术语
 
 | 缩写 | 全称 |
 | --- | --- |
@@ -62,6 +62,27 @@ flowchart LR
 | SLMD | SWLink Memory Descriptor |
 | TokenID | Token Identifier |
 | W1C | Write 1 to Clear |
+
+### 参数
+
+| 参数 | 默认值 |
+| --- | --- |
+| `PA_WIDTH` | 48 |
+| `PA_MEM_WIDTH` | 47 |
+| `SLA_WIDTH` | 53 |
+| `EID_WIDTH` | 11 |
+| `TOKEN_ID_WIDTH` | 10 |
+| `TOKEN_VALUE_WIDTH` | 10 |
+| `REQ_ID_WIDTH` | 8 |
+| `SDTLB_ENTRIES` | 128 |
+| `SDMQ_DEPTH` | 8 |
+| `SDIOR_DATA_WIDTH` | 64 |
+| `CFG_ADDR_WIDTH` | 2 |
+| `PW_RDATA_WIDTH` | 128 |
+| `PW_RSP_ERR_WIDTH` | 6 |
+| `CAM_RSP_ERR_WIDTH` | 1 |
+
+注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
 
 ## SDecoder 微结构
 
@@ -161,9 +182,7 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 ### SDPWU
 
-#### Page Table 结构
-
-##### 地址划分
+#### 地址划分
 
 从 Core 的角度看, 虚地址 VA 为 53 位, 物理地址 PA 为 48 位. PA[47] 用于区分地址空间:
 
@@ -194,7 +213,7 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
    2. SDecoder_PTBR_L2 按 8B 对界 (二级条目大小为 8B)
 3. PA 查表的索引是"基地址 + 索引 × 条目宽度", 一级表本身基地址 SDecoder_PTBR_L1 由软件填写 IO 寄存器, 二级表基地址 SDecoder_PTBR_L2 由一级表条目提供
 
-##### 一级表条目
+#### 一级表条目
 
 一级表的条目宽度为 16B (128 bit)
 
@@ -237,7 +256,7 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 1. SEG_BASE + SEG_LEN > 31
 2. S_PFN[52:30] + (PA[34:30] - SEG_BASE[34:30]) 溢出
 
-##### 二级表条目
+#### 二级表条目
 
 二级表条目宽度 8B (64 bit)
 
@@ -266,7 +285,7 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 1. SLA[52:30] = S_PFN[52:30]
 2. SLA[29:0] = PA[29:0]
 
-#### Page Walk 状态机
+#### 状态机
 
 ```mermaid
 stateDiagram-v2
@@ -472,27 +491,6 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 同一拍对同一条目同时进行置无效和装填时, 置无效优先, 本次装填丢弃
 
-## 参数
-
-| 参数 | 默认值 |
-| --- | --- |
-| `PA_WIDTH` | 48 |
-| `PA_MEM_WIDTH` | 47 |
-| `SLA_WIDTH` | 53 |
-| `EID_WIDTH` | 11 |
-| `TOKEN_ID_WIDTH` | 10 |
-| `TOKEN_VALUE_WIDTH` | 10 |
-| `REQ_ID_WIDTH` | 8 |
-| `SDTLB_ENTRIES` | 128 |
-| `SDMQ_DEPTH` | 8 |
-| `SDIOR_DATA_WIDTH` | 64 |
-| `CFG_ADDR_WIDTH` | 2 |
-| `PW_RDATA_WIDTH` | 128 |
-| `PW_RSP_ERR_WIDTH` | 6 |
-| `CAM_RSP_ERR_WIDTH` | 1 |
-
-注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
-
 ## 接口信号
 
 ### 请求接口 (CAM)
@@ -574,7 +572,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `cfg_rd_addr` | I | `CFG_ADDR_WIDTH` | 读地址 |
 | `cfg_rd_data` | O | `SDIOR_DATA_WIDTH` | 读数据 |
 
-### 异常统计信号
+### 异常统计接口
 
 异常统计信号不是寄存器配置接口的一部分, 但异常统计寄存器位于 SDIOR 内, 异常发生的下一拍, SDIOR 的异常统计寄存器对应位被置 1, 并直通到 SDecoder 顶层输出
 
