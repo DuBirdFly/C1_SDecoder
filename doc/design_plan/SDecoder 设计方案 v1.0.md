@@ -294,24 +294,23 @@ stateDiagram-v2
     IDLE --> SDMQ_POP: SDMQ 存在 valid & flushed 的最老条目
     SDT_L1_AR --> SDT_L1_R
     SDT_L1_R --> SDT_L1_ITEM_CHK
-    SDT_L1_ITEM_CHK --> SDMQ_POP: 条目 !valid | (valid & illegal)
-    SDT_L1_ITEM_CHK --> SDT_L2_AR: 条目 valid & !illegal & !hit
-    SDT_L1_ITEM_CHK --> SDTLB_FILL: 条目 valid & !illegal & hit
+    SDT_L1_ITEM_CHK --> SDMQ_POP: 表项 !valid | (valid & illegal)
+    SDT_L1_ITEM_CHK --> SDT_L2_AR: 表项 valid & !illegal & !hit
+    SDT_L1_ITEM_CHK --> SDTLB_FILL: 表项 valid & !illegal & hit
     SDT_L2_AR --> SDT_L2_R
     SDT_L2_R --> SDT_L2_ITEM_CHK
-    SDT_L2_ITEM_CHK --> SDMQ_POP: 条目 !valid
-    SDT_L2_ITEM_CHK --> SDTLB_FILL: 条目 valid
+    SDT_L2_ITEM_CHK --> SDMQ_POP: 表项 !valid
+    SDT_L2_ITEM_CHK --> SDTLB_FILL: 表项 valid
     SDTLB_FILL --> SDMQ_POP
-    SDMQ_SCAN --> SDMQ_POP: 存在可弹出条目 (hit/flushed)
-    SDMQ_SCAN --> IDLE: 没有可弹出条目
+    SDMQ_SCAN --> SDMQ_POP: 存在可弹出的 SDMQ 条目 (hit/flushed)
+    SDMQ_SCAN --> IDLE: 没有可弹出的 SDMQ 条目
     SDMQ_POP --> SDMQ_SCAN: 响应握手完成
 ```
 
 图: SDPWU 的状态机
 
 注: flushed 即软件通过 IOR 对 SDecoder 进行置无效 (刷新) 操作
-注: 状态机图里的「条目」有两种含义, 注意区分: 一种是 SDMQ 条目, 另一种是 PTE
-注: 目前 `SDT_L1_ITEM_CHK` 判为非法的情况是段的 1GB 上界超出本条目的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`, 软件保证二级表基地址不越界
+注: 目前 `SDT_L1_ITEM_CHK` 判断非法表项的情况是段的 1GB 上界超出一级表表项的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`
 注: `SDT_L2_ITEM_CHK` 不判断二级表 PTE 合法性
 
 状态说明:
