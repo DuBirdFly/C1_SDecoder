@@ -504,6 +504,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 注 1: 共有 2 组请求接口 (CAM), N 可取 [0, 1], 分别对应 SDTLB 的两组输入接口 (cam0 / cam1)
 
+典型时序图: wavedrom_render, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
+
 ### 响应接口 (CAM)
 
 | 信号 | 方向 | 位宽 | 说明 |
@@ -526,6 +528,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `camN_rsp_hit_onehot0_fail` | [0] | CAM 命中 SDTLB 的条目不唯一 |
 
 注: 当软件修改了 Page Table 但未对 SDTLB 做刷新, 可能会出现 SDTLB 中存在多个条目命中同一个 PA 的情况, 即 CAM 命中 SDTLB 的条目不唯一
+
+典型时序图: wavedrom_render, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
 
 ### 响应接口 (Page Walk)
 
@@ -551,6 +555,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `pw_illegal_ptbr_l2` | [1] | 二级表基地址非法 |
 | `pw_illegal_ptbr_l1` | [0] | 一级表基地址非法 |
 
+典型时序图: wavedrom_render, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
+
 ### 访存接口 (Page Walk)
 
 | 信号 | 方向 | 位宽 | 说明 |
@@ -562,6 +568,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `pw_mem_rvalid` | I | 1 | / |
 | `pw_mem_rready` | O | 1 | / |
 
+典型时序图: wavedrom_render, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
+
 ### 寄存器配置接口
 
 | 信号 | 方向 | 位宽 | 说明 |
@@ -571,6 +579,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `cfg_wr_data` | I | `SDIOR_DATA_WIDTH` | 写数据 |
 | `cfg_rd_addr` | I | `CFG_ADDR_WIDTH` | 读地址 |
 | `cfg_rd_data` | O | `SDIOR_DATA_WIDTH` | 读数据 |
+
+典型时序图: wavedrom_render, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
 
 ### 异常统计接口
 
@@ -596,6 +606,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `data_ecc_err` | Page Walk 数据 ECC 错 |
 | `ctrl_err` | Page Walk 控制错 |
 | `other_err` | SDTLB 多命中 |
+
+典型时序图: wavedrom_render, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
 
 ## 可配置的寄存器
 
