@@ -29,3 +29,4 @@
 // +warn=noTMR
 // +warn=noPHNE
 // +warn=noIRIID-W
++warn=noUII-L           // Interface not instantiated

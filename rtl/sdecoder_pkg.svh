@@ -86,6 +86,9 @@ package sdecoder_pkg;
     localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IS = 2'd1;   // W1P: 置无效指定 PA 的条目
     localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDT_L1_BASE = 2'd2;   // RW: 一级表基地址
 
+
+    localparam SDMQ_DEPTH = 8;
+
 endpackage
 
 `endif // _SDECODER_PKG_SVH_

@@ -1,3 +1,4 @@
+`include "sdecoder_constants.svh"
 `default_nettype none
 
 module age_matrix_8x8 (
@@ -94,7 +95,13 @@ module age_matrix_8x8 (
                                          & ~(item_valid[6] & matrix[7][6]);
 
 
-    // [TODO] 断言 oldest_vec 为 $onehot0()
+`ifdef ASSERT_ON
+    // 本模块没有复位: 用 item_valid 代替 rst_n 门控, 只在 item_valid 不是未知
+    // ($isunknown) 时才检查, 避免上电 X 误报.
+    a_oldest_vec_onehot0: assert property (
+        @(posedge clk) disable iff ($isunknown(item_valid)) $onehot0(oldest_vec)
+    ) else $display(`ASSERT_MSG_LABELED(a_oldest_vec_onehot0));
+`endif
 
 
 endmodule
