@@ -23,10 +23,17 @@ module tb_age_matrix_8x8;
 
     age_matrix_8x8_if uif (clk);
 
+    logic [ITEM_DEPTH-1:0] matrix [ITEM_DEPTH-1:0];
+
     age_matrix_8x8 u_age_matrix_8x8 (
         .clk        (uif.clk),
         .req_pos_1  (uif.req_pos_1),
         .req_pos_2  (uif.req_pos_2),
+        .matrix     (matrix)
+    );
+
+    age_matrix_8x8_find_oldest u_find_oldest (
+        .matrix     (matrix),
         .item_valid (uif.item_valid),
         .oldest_vec (uif.oldest_vec)
     );
