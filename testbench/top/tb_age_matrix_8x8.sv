@@ -91,6 +91,63 @@ module tb_age_matrix_8x8;
 
     endtask
 
+    // 1. 向年龄矩阵删除条目 (删除 1 ~ N 个条目)
+    //    每拍删除 1 个条目, 允许连续多拍删除
+    // 2. 第一个条目必定删除最年老的条目
+    //    之后按顺序随机删除 N-1 个条目
+    task automatic del_item(input int unsigned n);
+
+        int pos;
+        int cnt;
+        int cand [ITEM_DEPTH];
+
+        if (n == 0) begin
+            return;
+        end
+
+        // 等 DUT 采样到上一拍写入的 item_valid, oldest_vec 才是最新的
+        repeat (2) @(uif.drv_cb);
+
+        for (int k = 0; k < n; k++) begin
+            if (k == 0) begin
+                // 最年老的条目: oldest_vec 里为 1 的那一位
+                pos = -1;
+                for (int i = 0; i < ITEM_DEPTH; i++) begin
+                    if (uif.mon_cb.oldest_vec[i]) begin
+                        pos = i;
+                    end
+                end
+            end
+            else begin
+                // 从剩余有效条目里随机挑一个
+                cnt = 0;
+                for (int i = 0; i < ITEM_DEPTH; i++) begin
+                    if (valid_shadow[i]) begin
+                        cand[cnt] = i;
+                        cnt++;
+                    end
+                end
+                if (cnt == 0) begin
+                    $display("[ERROR] @%0t: 没有可删除的条目", $realtime);
+                    return;
+                end
+                pos = cand[$urandom_range(cnt - 1)];
+            end
+
+            if ((pos < 0) || (valid_shadow[pos] != 1'b1)) begin
+                $display("[ERROR] @%0t: 没有可删除的条目 (oldest_vec=0b%b, item_valid=0b%b)",
+                         $realtime, uif.mon_cb.oldest_vec, valid_shadow);
+                return;
+            end
+
+            valid_shadow[pos] = 1'b0;
+            uif.drv_cb.item_valid <= valid_shadow;
+
+            $display("[INFO] @%0t: 删除条目 %0d, 剩余 item_valid = 0b%b", $realtime, pos, valid_shadow);
+
+            @(uif.drv_cb);
+        end
+    endtask
 
     initial begin
         uif.req_pos_1 = '0;
@@ -105,6 +162,9 @@ module tb_age_matrix_8x8;
         req_item(.req(2'b11));
         req_item(.req(2'b11));
         req_item(.req(2'b11));
+
+        // 先删最老的, 再随机删 2 个
+        del_item(3);
 
 
         repeat(100) @(posedge clk);
