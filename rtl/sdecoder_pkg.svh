@@ -89,6 +89,14 @@ package sdecoder_pkg;
 
     localparam SDMQ_DEPTH = 8;
 
+    typedef struct packed {
+        logic                       valid;
+        logic                       flushed;
+        logic [REQ_ID_WIDTH-1:0]    id;
+        logic [PA_WIDTH-1:0]        pa;
+    } SDMQ_ITEM_t;
+
+
 endpackage
 
 `endif // _SDECODER_PKG_SVH_
