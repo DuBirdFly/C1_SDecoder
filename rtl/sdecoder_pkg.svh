@@ -3,13 +3,13 @@
 
 package sdecoder_pkg;
 
-    // PA[47:30] 的位宽, 1GB 对界.
-    // 注: PA[47] = 1 是 IO 空间, SDecoder 只处理 Mem 空间, 请求侧 (req_pa / sdt_l1_base /
-    //     inv_pa 等) 都断言该位为 0; 字段里保留该位只为维持 48 位地址口径 —— 这样 SDTLB 的
-    //     Tag 是 24 位, Data 是 39 位, 合计 63 位, 不强行凑 64 位 (见设计方案 SDTLB 表项格式)
-    localparam PA_BASE_WIDTH = 18;
+    localparam PA_WIDTH      = 48; // PA[47:0]
+    localparam PA_BASE_WIDTH = 18; // PA[47:30]
     localparam PA_UP_WIDTH   = 5;  // PA[34:30]
-    localparam L2_BASE_WIDTH = 45; // L2_BASE[47:3]
+    localparam L2_BASE_WIDTH = 45; // SDecoder_PTBR_L2 [47:3]
+
+    localparam PA_BASE_LSB = PA_WIDTH - PA_BASE_WIDTH;      // 30: PA[47:30] 的 LSB (也是 PA[34:30] 的 LSB)
+    localparam PA_HIGH_LSB = PA_BASE_LSB + PA_UP_WIDTH;     // 35: PA[47:35] 的 LSB
 
     typedef struct packed {
         logic [PA_BASE_WIDTH-1:0]   pa_base;
@@ -30,7 +30,6 @@ package sdecoder_pkg;
     localparam SDTLB_TAG_ITEM_WIDTH = $bits(SDTLB_TAG_ITEM_t);
     localparam SDTLB_DATA_ITEM_WIDTH = $bits(SDTLB_DATA_ITEM_t);
 
-    localparam PA_WIDTH = 48;
     localparam REQ_ID_WIDTH = 8;
     localparam SLA_WIDTH = 48;
 
@@ -42,10 +41,6 @@ package sdecoder_pkg;
         logic [TOKEN_ID_WIDTH-1:0]  token_id;
         logic [SLA_WIDTH-1:0]       sla;
     } SDT_RSP_t;
-
-    // 整条 PA[47:0] 上的字段坐标 (端口收整条 PA, 切片时用这两个常量, 不用手写 30/35)
-    localparam PA_BASE_LSB = PA_WIDTH - PA_BASE_WIDTH;      // 30: PA[47:30] 的 LSB (也是 PA[34:30] 的 LSB)
-    localparam PA_HIGH_LSB = PA_BASE_LSB + PA_UP_WIDTH;     // 35: PA[47:35] 的 LSB
 
     // SDT_L1 条目 (16B), 位域见设计方案 一级表条目格式
     typedef struct packed {
