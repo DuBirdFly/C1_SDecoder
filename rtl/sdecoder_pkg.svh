@@ -82,7 +82,7 @@ package sdecoder_pkg;
     localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDT_L1_BASE = 2'd2;   // RW: 一级表基地址
 
 
-    localparam SDMQ_DEPTH = 8;
+    localparam SDMQ_DEPTH = 16;
 
     typedef struct packed {
         logic                       valid;

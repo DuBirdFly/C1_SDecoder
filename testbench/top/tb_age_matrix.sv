@@ -21,7 +21,9 @@ module tb_age_matrix;
         .rst_n   (         )
     );
 
-    age_matrix_if uif (clk);
+    age_matrix_if #(
+        .ITEM_DEPTH (ITEM_DEPTH)
+    ) uif (clk);
 
     logic [ITEM_DEPTH-1:0] matrix [ITEM_DEPTH-1:0];
 
@@ -167,12 +169,8 @@ module tb_age_matrix;
 
         repeat(10) @(uif.drv_cb);
 
-        req_item(.req(2'b11));
-        req_item(.req(2'b11));
-        req_item(.req(2'b11));
-        req_item(.req(2'b11));
-        req_item(.req(2'b11));
-        req_item(.req(2'b11));
+        // 16 深: 8 次申请刚好填满, 第 9/10 次应被拒绝
+        repeat (10) req_item(.req(2'b11));
 
         // 先删最老的, 再随机删 2 个
         del_item(3);
