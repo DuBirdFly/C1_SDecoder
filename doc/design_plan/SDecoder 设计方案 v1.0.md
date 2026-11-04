@@ -47,8 +47,8 @@ flowchart LR
 | PFN | Page Frame Number |
 | PTBR | Page Table Base Register |
 | PTE | Page Table Entry |
-| PTW | Page Table Walker |
 | PW | Page Walk |
+| PWU | Page Walk Unit |
 | RSVD | Reserved |
 | SDecoder | SWLink Decoder |
 | SDIOR | SDecoder IO Register |
@@ -103,7 +103,7 @@ flowchart LR
     PWU@{ shape: dbl-circ, label: "SDPWU" }
     PWU -->|"访存读表项"| TW(["Page Walk 访存接口"])
     PWU -->|"回填"| TLB
-    PWU -->|"PA, id, 附带信息"| CALC2["SLMD_CALC_PTW"]
+    PWU -->|"PA, id, 附带信息"| CALC2["SLMD_CALC_PWU"]
     CALC0 -->|"SLMD"| RSP0(["cam0 响应接口"])
     CALC1 -->|"SLMD"| RSP1(["cam1 响应接口"])
     CALC2 -->|"SLMD"| PWRSP(["Page Walk 响应接口"])
@@ -149,7 +149,7 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 - **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 会附带一些其他标识位; 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄从老到年轻输出给 SDPWU; 可被 SDIOR 置无效
 
-- **SDPWU**: 串行 Page Table Walker 访存单元, 从 SDMQ 取未命中请求, 在访存接口上发起读请求, 做最多两级 Page Walk. SDPWU 在内部判定表项的合法性: 合法结果回填 SDTLB, 并连同请求的 PA 和 id 送到 SLMD_CALC_PTW; SLMD_CALC_PTW 拼装 SLMD 或返回异常响应
+- **SDPWU**: 串行 Page Walk 访存单元, 从 SDMQ 取未命中请求, 在访存接口上发起读请求, 做最多两级 Page Walk. SDPWU 在内部判定表项的合法性: 合法结果回填 SDTLB, 并连同请求的 PA 和 id 送到 SLMD_CALC_PWU; SLMD_CALC_PWU 拼装 SLMD 或返回异常响应
 
 - **SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, Page Walk 完成; 3 个实例相互独立, 每个实例只驱动对应的响应接口
 
@@ -169,10 +169,10 @@ SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分�
 
 1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍并行接收请求
 2. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ, 支持同拍写入 2 个请求, 只要 SDMQ 还有足够的空间就可以接收请求; SDMQ 将满时同时拉低两路请求接口的 ready, 不再接受新的请求
-3. Page Walk: SDPWU 从 SDMQ 取请求, 并能通过最多 2 次访存获取到 PTE. SDPWU 判定表项合法性, SLMD_CALC_PTW 拼装 SLMD 并检查 SLA 溢出
-   1. 表项合法: SDPWU 回填 SDTLB, 并将表项, PA, id 交给 SLMD_CALC_PTW 拼装 SLMD
-   2. 表项合法: SDMQ 中 "命中同段/页" 或 "被软件置无效 (刷新)" 的条目可以被提前弹出, 并继续交由 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
-   3. 表项非法: 本次 Page Walk 结果不回填 SDTLB, 不扫描 SDMQ "命中同段/页" 的重复条目; 仍扫描 SDMQ 的 flushed 条目, 最后由 SLMD_CALC_PTW 返回异常响应
+3. Page Walk: SDPWU 从 SDMQ 取请求, 并能通过最多 2 次访存获取到 PTE. SDPWU 判定表项合法性, SLMD_CALC_PWU 拼装 SLMD 并检查 SLA 溢出
+   1. 表项合法: SDPWU 回填 SDTLB, 并将表项, PA, id 交给 SLMD_CALC_PWU 拼装 SLMD
+   2. 表项合法: SDMQ 中 "命中同段/页" 或 "被软件置无效 (刷新)" 的条目可以被提前弹出, 并继续交由 SLMD_CALC_PWU 做 SLMD 拼装或返回异常响应
+   3. 表项非法: 本次 Page Walk 结果不回填 SDTLB, 不扫描 SDMQ "命中同段/页" 的重复条目; 仍扫描 SDMQ 的 flushed 条目, 最后由 SLMD_CALC_PWU 返回异常响应
 
 注: SDPWU 是串行的, 一次只能处理一个请求, SDMQ 按年龄从老到年轻取请求; 响应整体不保序, 上游按 ID 匹配
 
@@ -322,8 +322,8 @@ stateDiagram-v2
 - `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表表项
 - `SDT_L2_ITEM_CHK`: 根据二级表表项判定命中状态, 二级表 valid 则认为命中, 否则认为未命中
 - `SDTLB_FILL`: Page Walk 完成, 将合法表项回填 SDTLB
-- `SDMQ_POP`: 弹出当前待响应的 SDMQ 条目, 交给 SLMD_CALC_PTW 拼装 SLMD 或返回异常响应
-- `SDMQ_SCAN`: 扫描 SDMQ 中的条目, 每次选出年龄最老的可弹出条目 (命中同段/页或被软件置无效), 交给 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
+- `SDMQ_POP`: 弹出当前待响应的 SDMQ 条目, 交给 SLMD_CALC_PWU 拼装 SLMD 或返回异常响应
+- `SDMQ_SCAN`: 扫描 SDMQ 中的条目, 每次选出年龄最老的可弹出条目 (命中同段/页或被软件置无效), 交给 SLMD_CALC_PWU 做 SLMD 拼装或返回异常响应
 
 
 `SDT_L1_ITEM_CHK` 状态转移表
@@ -360,7 +360,7 @@ flowchart LR
 
 注: 两路 CAM 未命中的请求可以同拍申请 SDMQ 条目, `AgeMatrix` 随之更新年龄关系
 注: 按年龄挑出最老的条目, 送给 SDPWU 做 Page Walk
-注: Page Walk 完成后, 用合法的 PTE 扫描 SDMQ 中重复命中的条目 (当前条目已弹出, 不参与), 并把它们弹出送给 SDPWU, 最终移交 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
+注: Page Walk 完成后, 用合法的 PTE 扫描 SDMQ 中重复命中的条目 (当前条目已弹出, 不参与), 并把它们弹出送给 SDPWU, 最终移交 SLMD_CALC_PWU 做 SLMD 拼装或返回异常响应
 
 #### 条目内容
 
@@ -391,7 +391,7 @@ SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**申请条目时的
 
 #### 删除条目
 
-Page Walk 完成后, 用本次 PTE 覆盖的映射范围与 SDMQ 中剩余条目做 CAM 比较; 如果条目 "命中同段/页" 或 "被软件置无效 (刷新)", 则把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 之后经 SDPWU 交给 SLMD_CALC_PTW 做 SLMD 拼装或返回异常响应
+Page Walk 完成后, 用本次 PTE 覆盖的映射范围与 SDMQ 中剩余条目做 CAM 比较; 如果条目 "命中同段/页" 或 "被软件置无效 (刷新)", 则把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 之后经 SDPWU 交给 SLMD_CALC_PWU 做 SLMD 拼装或返回异常响应
 
 #### 年龄矩阵
 

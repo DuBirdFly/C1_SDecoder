@@ -12,7 +12,7 @@ import sdecoder_pkg::*;
 
     // 命中查询请求 (Page Walk 完成后, 查看合法的 PTE 能不能覆盖本条目)
     // 这组接口的 input 值只在 Page Walk 返回合法 PTE 时才进行修改
-    // 由于 valid 为 0 时条目无意义, 所以空闲条目 chk_hit 必定为 0
+    // chk_hit 只有在这个条目 valid 时才有意义 (无效条目固定为 0)
     input  logic [PA_BASE_WIDTH-1:0]    chk_hit_pa_base,
     input  logic [PA_UP_WIDTH-1:0]      chk_hit_pa_up,
     output logic                        chk_hit,
@@ -67,6 +67,7 @@ import sdecoder_pkg::*;
         end
         else if (del_en) begin
             sdmq_item.valid <= 1'b0;
+            sdmq_item.flushed <= 1'b0;
         end
         else if (sdmq_item.valid && (inv_all || inv_match)) begin
             sdmq_item.flushed <= 1'b1;
