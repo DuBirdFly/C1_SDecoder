@@ -4,6 +4,7 @@
 ./rtl/common/age_matrix.sv
 ./rtl/common/decoder_bin2onehot.sv
 ./rtl/common/encoder_onehot2bin.sv
+./rtl/common/lod.sv
 ./rtl/common/onehot0_mux.sv
 ./rtl/common/syn_fifo.sv
 ./rtl/common/tlb_victim_pointer.sv

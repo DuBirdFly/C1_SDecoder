@@ -24,3 +24,4 @@
 ./testbench/top/tb_sdtlb.sv
 ./testbench/top/tb_sdptw.sv
 ./testbench/top/tb_age_matrix.sv
+./testbench/top/tb_lod.sv
