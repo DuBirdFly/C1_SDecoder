@@ -10,16 +10,26 @@ SDecoder 位于 User 侧 (内存物理资源的访问方), 挂在 SWLink 内, �
 
 ```mermaid
 flowchart LR
-    subgraph CoreGroup
-        CORE@{ shape: procs, label: "Core" } -->|"VA"| MMU["MMU"]
-        MMU -->|"PA"| LCPM["LCPM"]
+    subgraph CG0["CoreGroup 0"]
+        C0@{ shape: procs, label: "Core" } -->|"VA"| M0["MMU"]
+        M0 -->|"PA"| L0["LCPM"]
     end
+    subgraph CG1["CoreGroup 1"]
+        C1@{ shape: procs, label: "Core" } -->|"VA"| M1["MMU"]
+        M1 -->|"PA"| L1["LCPM"]
+    end
+    subgraph CGN["CoreGroup N"]
+        CN@{ shape: procs, label: "Core" } -->|"VA"| MN["MMU"]
+        MN -->|"PA"| LN["LCPM"]
+    end
+    style CGN stroke-dasharray: 5 5
     subgraph SWLink
         SDEC["SDecoder"]
     end
-    LCPM -->|"PA(远端)"| MESH["MESH"]
+    L0 & L1 & LN -->|"PA(远端)"| MESH["MESH"]
     MESH -->|"PA(远端)"| SDEC
     MESH <--> MC["MC"]
+    MC <--> MEM["Memory"]
     SDEC -->|"SLMD"| SWITCH["Switch"]
 ```
 
@@ -27,10 +37,15 @@ flowchart LR
 
 ### 性能要求
 
-1. SDTLB 采用全相联结构, 双 CAM 接口, 每拍最多可并行进行 2 次查表请求
-2. SDTLB 命中通路采用顺序流水线. 接收方可以无阻塞接收命中通路的响应时, 该流水线本身是无阻塞的; 但 SDMQ 将满时, 拉低请求通路的 ready 信号, 阻塞命中通路流水线, 请求接口不再接受新的请求
-3. SDTLB 未命中通路在 SDecoder 内部缓存, 并做 Page Walk 访存, 最终返回 SLMD 响应. SDecoder 只设 1 组访存接口, 一次只做一条请求的 Page Walk
-4. 响应不保序: hit 可以绕过 miss, 为了使请求和响应能够正确匹配, 请求和响应都带 id 号, 且要求 id 号在途唯一
+1. SDTLB 采用全相联结构, 双 CAM 接口, 每拍最多可并行进行 2 个查表请求
+2. SDTLB 命中通路采用顺序流水线, 该流水线多数情况下是无阻塞的, 会发生阻塞的条件如下 (请求端的 ready 拉低):
+   1. 命中通路的响应接口数据无法被取走时, 由于命中通路不设 FIFO, 此时不能再接收新的请求
+   2. 当 SDMQ 将满时, 为避免队列溢出, 不再接收新的请求
+   3. 由于 SDTLB 采用 Latch, 不允许同拍同时进行读写, 所以在装填 SDTLB 的当拍, 阻塞请求源的请求
+3. SDTLB 未命中通路设置未命中缓冲队列, 从该队列中取条目做 Page Walk, 完成后装填 SDTLB 并返回 SLMD 响应
+   1. 设置 2 套 SDPWU, 最多允许 2 个在途访存请求
+   2. 设置 1 组访存接口, 2 个 Page Walk 模块共用一组访存接口, 由 Page Walk 模块的 id 号区分访存请求源
+4. 响应不保序: hit 可以绕过 miss, 为了使请求和响应能够正确匹配, 请求和响应都带请求的 id 号, 且要求 id 号在途唯一
 
 ### 术语
 
@@ -82,8 +97,6 @@ flowchart LR
 | `PW_RSP_ERR_WIDTH` | 6 |
 | `CAM_RSP_ERR_WIDTH` | 1 |
 
-注: `SDIOR_DATA_WIDTH` 目前是 64 bit, 但建议用 32 bit 以匹配 APB
-
 ## SDecoder 微结构
 
 ### SDecoder 内部结构
@@ -99,26 +112,51 @@ flowchart LR
     TLB -->|"cam1 命中"| CALC1["SLMD_CALC_CAM[1]"]
     TLB -->|"cam0 未命中"| SDMQ["SDMQ"]
     TLB -->|"cam1 未命中"| SDMQ
-    SDMQ --> PWU
-    PWU@{ shape: dbl-circ, label: "SDPWU" }
-    PWU -->|"访存读表项"| TW(["Page Walk 访存接口"])
-    PWU -->|"回填"| TLB
-    PWU -->|"PA, id, 附带信息"| CALC2["SLMD_CALC_PWU"]
+    SDMQ --> PWU0 & PWU1
+    PWU0@{ shape: dbl-circ, label: "SDPWU[0]" }
+    PWU1@{ shape: dbl-circ, label: "SDPWU[1]" }
+    PWU0 & PWU1 -->|"回填"| TLB
+    PWU0 -->|"PA, id, 附带信息"| CALC2_0["SLMD_CALC_PWU[0]"]
+    PWU1 -->|"PA, id, 附带信息"| CALC2_1["SLMD_CALC_PWU[1]"]
     CALC0 -->|"SLMD"| RSP0(["cam0 响应接口"])
     CALC1 -->|"SLMD"| RSP1(["cam1 响应接口"])
-    CALC2 -->|"SLMD"| PWRSP(["Page Walk 响应接口"])
+    CALC2_0 -->|"SLMD"| PWRSP0(["Page Walk 响应接口[0]"])
+    CALC2_1 -->|"SLMD"| PWRSP1(["Page Walk 响应接口[1]"])
     CFG(["配置接口"]) <--> SDIOR["SDIOR<br/>配置与刷新寄存器"]
     classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
-    class REQ0,REQ1,TW,RSP0,RSP1,PWRSP,CFG iface
+    class REQ0,REQ1,RSP0,RSP1,PWRSP0,PWRSP1,CFG iface
 ```
 
 图: SDecoder 的内部结构
 
-SDTLB 的物理实现只有 1 份, 但有 2 组独立的输入接口 (CAM), 分别接上游的 2 个请求, 两路 CAM 请求接口可以并行查表
+```mermaid
+flowchart LR
+    subgraph SDEC["SDecoder"]
+        PWU0@{ shape: dbl-circ, label: "SDPWU[0]" }
+        PWU1@{ shape: dbl-circ, label: "SDPWU[1]" }
+        ARB["仲裁"]
+        ROUTE["路由"]
+    end
+    IF(["Page Walk 访存接口"])
+    PWU0 -->|"读请求"| ARB
+    PWU1 -->|"读请求"| ARB
+    ARB -->|"ar 通道<br/>附带请求源 id"| IF
+    IF -->|"r 通道<br/>附带请求源 id"| ROUTE
+    ROUTE -->|"读数据"| PWU0
+    ROUTE -->|"读数据"| PWU1
+    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    class IF iface
+```
 
-两路 CAM 请求未命中 SDTLB 都进入同一个 SDMQ, 由一套串行的 SDPWU 做 Page Walk, Page Walk 完成后将合法表项回填 SDTLB
+图: PWU 访存示意图
 
-响应侧有 3 个相互独立的 SLMD_CALC 模块, 分别归属 cam0 命中, cam1 命中, Page Walk 结果, 每个 SLMD_CALC 模块互不阻塞, 独自响应, 只驱动自己那条响应通道
+SDecoder 支持 2 路独立的输入请求, 2 路请求进入同一个 SDTLB 做 CAM 查表, 这两路 CAM 请求接口可以并行查表
+
+两路 CAM 请求如果未命中 SDTLB, 则进入同一个 SDMQ 进行缓存, 由 2 套 SDPWU 做 Page Walk, 每套一次只处理一个请求, Page Walk 完成后将合法表项回填 SDTLB
+
+2 个 SDPWU 共用 1 组访存接口: 读请求经仲裁后带上请求源 id 发出; 读回数据按 id 路由回各自的 SDPWU
+
+SLMD_CALC 模块是相互独立的, 纯组合逻辑实现, 用于计算 SLMD, 并将 SLMD 输出到对应的响应接口上
 
 图上只画了 SDIOR 的配置接口, SDIOR 输出的置无效 (刷新) 命令作用于 SDTLB 与 SDMQ, 统计的异常信息从 SDecoder 顶层输出, 寄存器编码见 "可配置的寄存器" 一节
 
