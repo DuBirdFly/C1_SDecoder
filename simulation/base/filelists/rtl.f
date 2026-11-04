@@ -1,7 +1,7 @@
 +incdir+./rtl
 
-./rtl/common/age_matrix_8x8_find_oldest.sv
-./rtl/common/age_matrix_8x8.sv
+./rtl/common/age_matrix_find_oldest.sv
+./rtl/common/age_matrix.sv
 ./rtl/common/decoder_bin2onehot.sv
 ./rtl/common/encoder_onehot2bin.sv
 ./rtl/common/onehot0_mux.sv

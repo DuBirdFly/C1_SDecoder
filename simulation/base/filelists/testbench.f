@@ -10,7 +10,7 @@
 // interface files
 ./testbench/top/interface/sdtlb_if.sv
 ./testbench/top/interface/sdecoder_if.sv
-./testbench/top/interface/age_matrix_8x8_if.sv
+./testbench/top/interface/age_matrix_if.sv
 
 // UVM files
 ./testbench/inc/uvm_header.svh
@@ -23,4 +23,4 @@
 ./testbench/top/tb_sdecoder.sv
 ./testbench/top/tb_sdtlb.sv
 ./testbench/top/tb_sdptw.sv
-./testbench/top/tb_age_matrix_8x8.sv
+./testbench/top/tb_age_matrix.sv

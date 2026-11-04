@@ -2,7 +2,7 @@
 
 `timescale 1ns/1ps
 
-module tb_age_matrix_8x8;
+module tb_age_matrix;
 
     localparam int unsigned ITEM_DEPTH = sdecoder_pkg::SDMQ_DEPTH;
 
@@ -21,18 +21,22 @@ module tb_age_matrix_8x8;
         .rst_n   (         )
     );
 
-    age_matrix_8x8_if uif (clk);
+    age_matrix_if uif (clk);
 
     logic [ITEM_DEPTH-1:0] matrix [ITEM_DEPTH-1:0];
 
-    age_matrix_8x8 u_age_matrix_8x8 (
+    age_matrix #(
+        .ITEM_DEPTH (ITEM_DEPTH)
+    ) u_age_matrix (
         .clk        (uif.clk),
         .req_pos_1  (uif.req_pos_1),
         .req_pos_2  (uif.req_pos_2),
         .matrix     (matrix)
     );
 
-    age_matrix_8x8_find_oldest u_find_oldest (
+    age_matrix_find_oldest #(
+        .ITEM_DEPTH (ITEM_DEPTH)
+    ) u_find_oldest (
         .matrix     (matrix),
         .item_valid (uif.item_valid),
         .oldest_vec (uif.oldest_vec)
@@ -43,7 +47,7 @@ module tb_age_matrix_8x8;
         $display("===============================================");
         $display("Dumping FSDB waveforms");
         $fsdbAutoSwitchDumpfile(dump_wave_pkg::FSDB_LIMIT_SIZE, dump_wave_pkg::FSDB_FILENAME, dump_wave_pkg::FSDB_FILE_AMOUNT);
-        $fsdbDumpvars(0, tb_age_matrix_8x8, "+all");
+        $fsdbDumpvars(0, tb_age_matrix, "+all");
         $display("===============================================");
     end
 `endif

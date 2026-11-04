@@ -1,6 +1,6 @@
 `default_nettype none
 
-interface age_matrix_8x8_if(
+interface age_matrix_if(
     input  logic            clk
 );
 
