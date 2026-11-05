@@ -170,9 +170,10 @@ flowchart LR
 | `cam0_rsp_*` | Slave | 输出 | cam0 命中时返回 SLMD |
 | `cam1_req_*` | Slave | 输入 | 上游 master 发起的请求 |
 | `cam1_rsp_*` | Slave | 输出 | cam1 命中时返回 SLMD |
-| `pw_rsp_*` | Slave | 输出 | SDTLB 未命中, Page Walk 完成后返回的 SLMD 或错误 |
-| `pw_mem_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道 |
-| `pw_mem_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道 |
+| `pw0_rsp_*` | Slave | 输出 | SDPWU[0] 的 Page Walk 响应 (SLMD 或错误) |
+| `pw1_rsp_*` | Slave | 输出 | SDPWU[1] 的 Page Walk 响应 (SLMD 或错误) |
+| `pw_mem_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道, 2 套 SDPWU 共用, 带 arid 号 |
+| `pw_mem_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道, 2 套 SDPWU 共用, 带 rid 号 |
 | `cfg_*` | Slave | 输入 / 输出 | 配置内部的寄存器 |
 
 各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 整个 SDecoder 工作在单时钟域下
