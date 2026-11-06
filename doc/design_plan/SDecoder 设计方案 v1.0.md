@@ -39,7 +39,7 @@ flowchart LR
 
 1. 2 路请求独立, 并行处理
 2. 命中通路流水线处理, 特殊情况下阻塞流水线
-3. 设置 2 个 Page Walk Unit, 但共用 1 组访存接口
+3. 设置 2 个 SDPWU_SUB, 但共用 1 组访存接口
 4. 乱序响应
 
 ### 术语
@@ -64,6 +64,7 @@ flowchart LR
 | SDIOR | SDecoder IO Register |
 | SDMQ | SDecoder Miss Queue |
 | SDPWU | SDecoder Page Walk Unit |
+| SDPWU_SUB | SDPWU Sub-unit |
 | SDT | SDecoder Table |
 | TLB | Translation Lookaside Buffer |
 | SDTLB | SDecoder TLB |
@@ -108,7 +109,7 @@ flowchart LR
     TLB -->|"cam0 未命中"| SDMQ["SDMQ"]
     TLB -->|"cam1 未命中"| SDMQ
     SDMQ --> PWU
-    PWU@{ shape: dbl-circ, label: "SDPWU<br/>(含 2 个 SubPWU)" }
+    PWU@{ shape: dbl-circ, label: "SDPWU<br/>(含 2 个 SDPWU_SUB)" }
     PWU <-->|"读表项"| TW(["Page Walk 访存接口"])
     PWU -->|"回填"| TLB
     PWU -->|"PA, id, 附带信息"| CALC2["SLMD_CALC_PWU"]
@@ -120,26 +121,23 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,PWRSP,CFG iface
 ```
 
-1. SDecoder 支持 2 路独立的输入请求, 2 路请求进入同一个 SDTLB 做 CAM 查表
-2. SDTLB 采用全相联结构, 双 CAM 接口, 每拍最多可并行进行 2 个查表请求
-3. SDTLB 命中通路采用顺序流水线, 该流水线通常情况下是无阻塞的, 会发生阻塞的条件如下:
-   1. 因为命中通路不设 FIFO, 当响应接口数据无法被取走时, 阻塞请求源的请求
-   2. 当 SDMQ 将满时, 为避免队列溢出, 阻塞请求源的请求
-   3. 由于 SDTLB 采用 Latch, 不允许同拍同时进行读写, 所以在装填 SDTLB 的当拍, 阻塞请求源的请求
-4. SDTLB 未命中通路设置 1 个未命中缓冲队列 SDMQ (而不是每个请求源各自设置一个队列)
-   1. 允许 2 个未命中的请求同拍写入 SDMQ
-5. SDTLB 未命中请求由 Page Walk 模块 (SDPWU) 处理, 从 SDMQ 中取条目做 Page Walk
-   1. 设置 2 套 SDPWU 做 Page Walk, 每套一次只处理一个未命中请求
-   2. Page Walk 完成后将合法表项回填 SDTLB
-   3. 2 套 SDPWU 共用 1 组访存接口, 由 SDPWU 的 id 号区分访存请求源. 读请求经仲裁后带上请求源 id 发出; 读回数据按 id 路由回各自的 SDPWU
-6. SLMD_CALC 模块是相互独立的, 纯组合逻辑实现, 用于计算 SLMD, 并将 SLMD 输出到对应的响应接口上
-7. 响应不保序, hit 可以绕过 miss, 上游按 id 匹配
-8. SDPWU 涉及 3 组接口, 2 个 SubPWU 分时复用这 3 组接口 (同一时刻每组接口最多只被 1 个 SubPWU 占用):
-   1. 取数请求: 从 SDMQ 取未命中条目
-   2. 访存: 通过 Page Walk 访存接口读出表项
-   3. 响应: 经 SLMD_CALC_PWU 计算 SLMD, 从 Page Walk 响应接口返回
+2 路独立的输入请求进入同一个 SDTLB 做 CAM 查表: 命中时由对应的 SLMD_CALC_CAM 计算出 SLMD, 从该路的响应接口返回 (命中通路); 未命中时写入 SDMQ, 由 SDPWU 做 Page Walk, Page Walk 得到的合法表项回填 SDTLB, 同时经 SLMD_CALC_PWU 计算出 SLMD, 从 Page Walk 响应接口返回 (未命中通路)
+
+各模块的职责如下:
+
+- **SDTLB**: 快表存储模块, 全相联 CAM, 共 `SDTLB_ENTRIES` 个条目, 对外暴露 2 组输入接口 CAM0/1, 两路可以并行查表; 如果命中 SDTLB, 则走命中通路, 命中结果按来源从对应的响应接口返回; SDTLB 可被 SDPWU 回填; SDTLB 可被 SDIOR 置无效
+
+- **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 且会额外附带一些其他标识位; SDMQ 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄从老到年轻输出给 SDPWU; SDMQ 可被 SDIOR 置无效
+
+- **SDPWU**: Page Walk 访存单元 (状态机), 从 SDMQ 取未命中请求, 在访存接口上发起 Page Walk 访存, 做最多两级 Page Walk; 内含 2 个 SDPWU_SUB (子状态机), 每个 SDPWU_SUB 一次处理一个未命中请求; 2 个 SDPWU_SUB 受顶层状态机控制, 分时复用 SDPWU 的 3 组接口 (同一时刻每组接口最多只被 1 个 SDPWU_SUB 占用). SDPWU 在内部判定表项的合法性, 合法结果回填 SDTLB, 并连同请求的 PA 和 id 送到 SLMD_CALC_PWU; SLMD_CALC_PWU 拼装 SLMD 或返回异常响应
+
+- **SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, Page Walk 完成; 3 个实例相互独立, 每个实例只驱动对应的响应接口
+
+- **SDIOR**: 配置 SDecoder 内部寄存器, 输出其他模块使用的可配置参数, 发起刷新命令, 统计异常信息
 
 注: SDecoder 内部结构图上只画了 SDIOR 的配置接口, SDIOR 输出的置无效 (刷新) 命令作用于 SDTLB 与 SDMQ, 统计的异常信息从 SDecoder 顶层输出, 详细内容见后续章节
+
+注: SDPWU 的 3 组接口指的是 "从 SDMQ 取条目", "通过 Page Walk 访存接口读表项", "经 SLMD_CALC_PWU 计算出 SLMD 后从 Page Walk 响应接口返回"
 
 ### 接口分组
 
@@ -149,9 +147,9 @@ flowchart LR
 | `cam0_rsp_*` | Slave | 输出 | cam0 命中时返回 SLMD |
 | `cam1_req_*` | Slave | 输入 | 上游 master 发起的请求 |
 | `cam1_rsp_*` | Slave | 输出 | cam1 命中时返回 SLMD |
-| `pw_rsp_*` | Slave | 输出 | 2 套 SDPWU 共用, Page Walk 完成后返回的 SLMD 或错误 |
-| `pw_mem_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道, 2 套 SDPWU 共用, 带 arid 号 |
-| `pw_mem_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道, 2 套 SDPWU 共用, 带 rid 号 |
+| `pw_rsp_*` | Slave | 输出 | 2 个 SDPWU_SUB 共用, Page Walk 完成后返回的 SLMD 或错误 |
+| `pw_mem_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道, 2 个 SDPWU_SUB 共用, 带 arid 号 |
+| `pw_mem_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道, 2 个 SDPWU_SUB 共用, 带 rid 号 |
 | `cfg_*` | Slave | 输入 / 输出 | 配置内部的寄存器 |
 
 各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 整个 SDecoder 工作在单时钟域下
@@ -161,18 +159,6 @@ flowchart LR
 由于响应**不**保序, 为了使请求和响应能够匹配, 请求和响应接口都需要带 id 号, **且同一时刻在途的 id 必须唯一**, 上游只能按 id 进行匹配, 不能依赖响应顺序进行匹配
 
 注: 例如先到的请求未命中 SDTLB, 经过长时间 Page Walk 后才能响应, 但后到的请求如果命中 SDTLB, 则会先返回这个后到的命中 SDTLB 的响应
-
-### 模块划分
-
-- **SDTLB**: 快表存储模块, 全相联 CAM, 共 `SDTLB_ENTRIES` 个条目, 对外暴露 2 组输入接口 CAM0/1, 两路可以并行查表; 如果命中 SDTLB, 则走命中通路, 命中结果按来源从对应的响应接口返回; SDTLB 可被 SDPWU 回填; SDTLB 可被 SDIOR 置无效
-
-- **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 且会额外附带一些其他标识位; 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄从老到年轻输出给 SDPWU; 可被 SDIOR 置无效
-
-- **SDPWU**: 串行 Page Walk 访存单元, 从 SDMQ 取未命中请求, 在访存接口上发起读请求, 做最多两级 Page Walk. SDPWU 在内部判定表项的合法性: 合法结果回填 SDTLB, 并连同请求的 PA 和 id 送到 SLMD_CALC_PWU; SLMD_CALC_PWU 拼装 SLMD 或返回异常响应
-
-- **SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, Page Walk 完成; 3 个实例相互独立, 每个实例只驱动对应的响应接口
-
-- **SDIOR**: 配置 SDecoder 内部寄存器, 输出其他模块使用的可配置参数, 发起刷新命令, 统计异常信息
 
 ### 命中通路
 
@@ -184,6 +170,8 @@ flowchart LR
 
 注: 由于不设 FIFO, 所以上级模块应尽快从响应接口取走数据, 取走不及时会反压该路的请求接口 (请求端 ready 拉低); 如果上游有能力做到无条件接收响应, 则可以在例化 SDecoder 时将响应端的 ready 信号置为常 1
 
+注: 命中通路通常情况下无阻塞, 会阻塞请求源请求的情况有 3 种: 响应接口数据无法被取走 (命中通路不设 FIFO); SDMQ 将满, 为避免队列溢出; 装填 SDTLB 的当拍 (SDTLB 采用 Latch, 不支持同拍读写)
+
 ### 未命中通路
 
 1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍并行接收请求
@@ -193,7 +181,7 @@ flowchart LR
    2. 表项合法: SDMQ 中 "命中同段/页" 或 "被软件置无效 (刷新)" 的条目可以被提前弹出, 并继续交由 SLMD_CALC_PWU 做 SLMD 拼装或返回异常响应
    3. 表项非法: 本次 Page Walk 结果不回填 SDTLB, 不扫描 SDMQ "命中同段/页" 的重复条目; 仍扫描 SDMQ 的 flushed 条目, 最后由 SLMD_CALC_PWU 返回异常响应
 
-注: SDPWU 是串行的, 一次只能处理一个请求, SDMQ 按年龄从老到年轻取请求; 响应整体不保序, 上游按 ID 匹配
+注: 每个 SDPWU_SUB 一次只能处理一个未命中请求, SDMQ 按年龄从老到年轻取请求; 响应整体不保序, 上游按 ID 匹配
 
 注: 由于 2 路共用 SDMQ, 且 2 路 cam 请求机会均等, 所以 SDMQ 将满时同时反压 2 路 cam 请求
 
