@@ -5,6 +5,8 @@ import sdecoder_pkg::*;
     input logic                 rst_n
 );
 
+    timeunit 1ps/1ps;
+
     // 代换请求
     logic                       req_valid;
     logic                       req_ready;
@@ -37,7 +39,7 @@ import sdecoder_pkg::*;
     logic [SDIOR_DATA_WIDTH-1:0] cfg_rdata;
 
     clocking drv @(posedge clk);
-        default input #0 output #1;
+        default input #1 output #1;
 
         output req_valid;
         output req_pa;

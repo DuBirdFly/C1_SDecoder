@@ -59,25 +59,8 @@ import sdecoder_pkg::*;
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
     SDTLB_DATA_ITEM_t data_item [SDTLB_ENTRIES];
 
-    // 装填 / 置无效的寄存器化版本 (请求拍采, 下一拍写)
-    logic                       fill_en_q;
-    logic [PA_BASE_WIDTH-1:0]   fill_pa_base_q;
-    logic [PA_UP_WIDTH-1:0]     fill_pa_up_q;
-    logic [EID_WIDTH-1:0]       fill_eid_q;
-    logic [TOKEN_ID_WIDTH-1:0]  fill_token_id_q;
-    logic [S_PFN_WIDTH-1:0]     fill_s_pfn_q;
-    logic [SDTLB_ENTRIES-1:0]   fill_wr_en_vector;
-
-    // 写数据缓冲: 与写使能错开一个 delta 再进 Latch 阵列. 使能与数据同沿更新时,
-    // 事件驱动仿真里 Latch 可能在使能还没落下的那个 delta 里抓到下一拍的写数据.
-    logic [PA_BASE_WIDTH-1:0]   fill_pa_base_wr;
-    logic [PA_UP_WIDTH-1:0]     fill_pa_up_wr;
-    logic [EID_WIDTH-1:0]       fill_eid_wr;
-    logic [TOKEN_ID_WIDTH-1:0]  fill_token_id_wr;
-    logic [S_PFN_WIDTH-1:0]     fill_s_pfn_wr;
-    logic                       inv_all_q;
-    logic                       inv_en_q;
-    logic [PA_WIDTH-1:0]        inv_pa_q;
+    // 装填的写使能: 选中的条目在本拍写 Latch (目标由轮转指针给出)
+    logic [SDTLB_ENTRIES-1:0]   fill_en_vector;
 
     logic [SDTLB_ENTRIES-1:0] cam0_hit_vector;
     logic [SDTLB_ENTRIES-1:0] cam1_hit_vector;
@@ -96,21 +79,14 @@ import sdecoder_pkg::*;
     SDTLB_DATA_ITEM_t cam1_hit_data_r;
 
     // 写 Latch 当拍反压两路查表: Latch 不支持同拍读写
-    assign cam0_req_ready = rst_n && !fill_en_q;
-    assign cam1_req_ready = rst_n && !fill_en_q;
+    assign cam0_req_ready = rst_n && !fill_en;
+    assign cam1_req_ready = rst_n && !fill_en;
 
     // 比较使能取 "accept": 只有真正握手的那一拍才产生命中, 被反压的拍按 0 打拍
     wire cam0_en = cam0_req_valid && cam0_req_ready;
     wire cam1_en = cam1_req_valid && cam1_req_ready;
 
-    // 写数据经一级缓冲再进 Latch 阵列, 与写使能错开一个 delta
-    always_comb begin
-        fill_pa_base_wr  = fill_pa_base_q;
-        fill_pa_up_wr    = fill_pa_up_q;
-        fill_eid_wr      = fill_eid_q;
-        fill_token_id_wr = fill_token_id_q;
-        fill_s_pfn_wr    = fill_s_pfn_q;
-    end
+    assign fill_en_vector = fill_en ? victim_sel : '0;
 
     assign cam0_hit           = |cam0_hit_vector_r;
     assign cam0_hit_tag_item  = cam0_hit_tag_r;
@@ -138,36 +114,6 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 装填打 1 拍: 写 Latch 的使能与数据都来自寄存器.
-    // inv_*_q 是上一拍的置无效请求, 只用来取消 "本拍才写" 的那次装填;
-    // 置无效本身是立即生效的 (见 sdtlb_tag_item).
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            fill_en_q         <= 1'b0;
-            fill_wr_en_vector <= '0;
-            fill_pa_base_q    <= '0;
-            fill_pa_up_q      <= '0;
-            fill_eid_q        <= '0;
-            fill_token_id_q   <= '0;
-            fill_s_pfn_q      <= '0;
-            inv_all_q         <= 1'b0;
-            inv_en_q          <= 1'b0;
-            inv_pa_q          <= '0;
-        end
-        else begin
-            fill_en_q         <= fill_en;
-            fill_wr_en_vector <= fill_en ? victim_sel : '0;
-            fill_pa_base_q    <= fill_pa_base;
-            fill_pa_up_q      <= fill_pa_up;
-            fill_eid_q        <= fill_eid;
-            fill_token_id_q   <= fill_token_id;
-            fill_s_pfn_q      <= fill_s_pfn;
-            inv_all_q         <= inv_all;
-            inv_en_q          <= inv_en;
-            inv_pa_q          <= inv_pa;
-        end
-    end
-
     // 被替换条目指针: 严格 one-hot 左移循环, 每次装填都步进
     tlb_victim_pointer #(
         .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES)
@@ -190,16 +136,13 @@ import sdecoder_pkg::*;
         .req1_pa            (cam1_req_pa        ),
         .req1_hit_vector    (cam1_hit_vector    ),
 
-        .fill_wr_en_vector  (fill_wr_en_vector  ),
-        .fill_wr_pa_base    (fill_pa_base_wr    ),
-        .fill_wr_pa_up      (fill_pa_up_wr      ),
+        .fill_wr_en_vector  (fill_en_vector     ),
+        .fill_wr_pa_base    (fill_pa_base       ),
+        .fill_wr_pa_up      (fill_pa_up         ),
 
         .inv_all            (inv_all            ),
         .inv_en             (inv_en             ),
         .inv_pa             (inv_pa             ),
-        .inv_all_d          (inv_all_q          ),
-        .inv_en_d           (inv_en_q           ),
-        .inv_pa_d           (inv_pa_q           ),
 
         .tag_item           (tag_item           )
     );
@@ -208,10 +151,10 @@ import sdecoder_pkg::*;
         .clk                (clk                ),
         .rst_n              (rst_n              ),
 
-        .fill_en_vector     (fill_wr_en_vector  ),
-        .fill_eid           (fill_eid_wr        ),
-        .fill_token_id      (fill_token_id_wr   ),
-        .fill_s_pfn         (fill_s_pfn_wr      ),
+        .fill_en_vector     (fill_en_vector     ),
+        .fill_eid           (fill_eid           ),
+        .fill_token_id      (fill_token_id      ),
+        .fill_s_pfn         (fill_s_pfn         ),
 
         .data_item          (data_item          )
     );
@@ -257,11 +200,11 @@ import sdecoder_pkg::*;
     `assert_clk(a_cam0_hit_vector_onehot0, $onehot0(cam0_hit_vector_r))
     `assert_clk(a_cam1_hit_vector_onehot0, $onehot0(cam1_hit_vector_r))
     // 写选择就是轮转指针, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
-    `assert_clk(a_fill_wr_onehot0, $onehot0(fill_wr_en_vector))
+    `assert_clk(a_fill_wr_onehot0, $onehot0(fill_en_vector))
 
     // 写 Latch 当拍两路查表都必须被反压: Latch 不支持同拍读写
     `assert_clk(a_fill_backpressure,
-                (fill_en_q |-> (!cam0_req_ready && !cam1_req_ready)))
+                (fill_en |-> (!cam0_req_ready && !cam1_req_ready)))
 
     // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 查表 / 装填 / 置无效地址的 PA[47] 都必须为 0.
     // 口径: camN_req_pa / inv_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),

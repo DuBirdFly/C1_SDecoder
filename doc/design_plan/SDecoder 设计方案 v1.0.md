@@ -527,7 +527,7 @@ flowchart LR
 | 写入 | 只允许硬件装填 |
 | 清除 | 由刷新接口置无效 |
 
-注: SDTLB 条目除 `Valid` 用 FF 外, 其余字段都用 Latch. Latch 被同拍读写时行为未知, 因此装填与查表不能同拍进行: 装填的 `fill_en` 是请求拍, 数据与目标条目打 1 拍后, 在下一拍 (写拍) 才写入 Latch; 写拍由 SDTLB 拉低两路 `camN_req_ready` 反压查表请求 (断言写拍与查表握手不同时发生). 置无效立即生效, 与装填同拍时置无效优先, 本次装填丢弃
+注: SDTLB 条目除 `Valid` 用 FF 外, 其余字段都用 Latch. Latch 被同拍读写时行为未知, 因此装填与查表不能同拍进行: 装填当拍写入 Latch, 该拍由 SDTLB 拉低两路 `camN_req_ready` 反压查表请求. 置无效与装填同拍时置无效优先, 本次装填丢弃 (`Valid` 不被置起)
 
 段式和页式统一按 "段" 处理, 把 1GB 页看作长度为 1 的段, 页和段都用 `PA_Base` / `PA_Up` 表示, 不设额外的粒度位.
 
@@ -557,7 +557,7 @@ flowchart LR
 - 128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常配置下最多命中一个 SDTLB 条目; 多命中时数据未定义, 但响应带多命中异常标志
 - Tag CAM 比较是组合逻辑; `hit_vector` 打 1 拍后再用; 请求拍 T 时刻的命中结果固定在 T+1 时刻有效
 - SDTLB 的 Data 用 `hit_vector` 选出命中的条目并输出
-- 装填请求打 1 拍后在时钟上升沿写入 Latch; 写 Latch 的那拍 `camN_req_ready` 拉低, 两路查表请求被反压 (见微结构的 Latch 说明)
+- 装填当拍写入 Latch; 该拍 `camN_req_ready` 拉低, 两路查表请求被反压 (见微结构的 Latch 说明)
 
 命中后的 SLA 计算:
 

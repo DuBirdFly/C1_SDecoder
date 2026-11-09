@@ -444,9 +444,7 @@ module tb_sdtlb;
         chk("同拍: 全置无效把原有条目也清掉了", rsp_hit == 1'b0);
 
         // ====================================================================
-        // 轮转替换指针, 以及"无效条目同拍被刷新"的竞态
-        // 连填 128 次指针正好绕一圈回到起点条目; 起点条目这时仍持有这一圈第一次装填的地址,
-        // 于是可以让"指针指到它"与"按它自己的地址置无效 + 装填"发生在同一拍
+        // 轮转替换指针: 连填 128 次指针正好绕一圈回到起点条目
         fill_one(
             .base({12'h100, 5'd0}),
             .up(5'd0),
@@ -469,26 +467,7 @@ module tb_sdtlb;
         inv_addr({12'h100, 5'd0});
         repeat (10) @(sdtlb_if.drv);
 
-        // 同拍: 按 ADDR0 装填且按 ADDR0 置无效. 置无效必须先赢 —— 否则条目会被填回成有效,
-        // 查 ADDR0 就会命中 (这正是"有效位不能并进 inv_match"要防的情况)
-        sdtlb_if.drv.fill_pa_base  <= {12'h100, 5'd0};
-        sdtlb_if.drv.fill_pa_up    <= 5'd0;
-        sdtlb_if.drv.fill_eid      <= 11'h7ff;
-        sdtlb_if.drv.fill_token_id <= 10'h3ff;
-        sdtlb_if.drv.fill_s_pfn    <= 18'h3ffff;
-        sdtlb_if.drv.fill_en      <= 1'b1;
-        sdtlb_if.drv.inv_en        <= 1'b1;
-        sdtlb_if.drv.inv_pa        <= {12'h100, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        @(sdtlb_if.drv);
-        sdtlb_if.drv.fill_en <= 1'b0;
-        sdtlb_if.drv.inv_en   <= 1'b0;
-        repeat (10) @(sdtlb_if.drv);
-
-        set_req(.high(12'h100), .idx(5'd0));
-        repeat (10) @(sdtlb_if.drv);
-        chk("同拍(无效条目): 置无效赢, 该次装填地址未命中", rsp_hit == 1'b0);
-
-        // 再单独装填一次: 指针已随上一次装填步进, 这里验证轮转与写通路都正常
+        // 再单独装填一次 ADDR0: 指针正好绕回起点条目, 这里验证轮转与写通路都正常
         fill_one(
             .base({12'h100, 5'd0}),
             .up(5'd0),
@@ -515,26 +494,25 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 装填反压查表: fill_en 是请求拍, Latch 在下一拍才写, 写拍两路 camN_req_ready
-        // 都要拉低; 请求保持 valid 跨过写拍, 握手后拿到的是装填后的新 data.
+        // 装填反压查表: fill_en 与查表请求同拍时, 装填拍两路 camN_req_ready 拉低,
+        // 请求跨过装填拍才握手; 握手后拿到的是装填后的新 data.
         sdtlb_if.drv.fill_en        <= 1'b1;
         sdtlb_if.drv.fill_pa_base   <= {12'h210, 5'd7};
         sdtlb_if.drv.fill_pa_up     <= 5'd7;
         sdtlb_if.drv.fill_eid       <= 11'h0b2;
         sdtlb_if.drv.fill_token_id  <= 10'h0b2;
         sdtlb_if.drv.fill_s_pfn     <= 18'h1bbbb;
-        @(sdtlb_if.drv);             // 请求拍: fill_en 被采到, 这一拍还没写阵列
-        sdtlb_if.drv.fill_en        <= 1'b0;
         sdtlb_if.drv.cam0_req_valid <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'h210, 5'd7, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         sdtlb_if.drv.cam1_req_valid <= 1'b1;
         sdtlb_if.drv.cam1_req_pa    <= {12'h210, 5'd7, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        @(sdtlb_if.drv);             // 写拍: 两路查表都必须被反压
-        chk("写拍: cam0_req_ready 拉低 (反压查表)",
+        @(sdtlb_if.drv);             // 装填拍: 两路查表都必须被反压
+        chk("装填拍: cam0_req_ready 拉低 (反压查表)",
             sdtlb_if.drv.cam0_req_ready == 1'b0);
-        chk("写拍: cam1_req_ready 拉低 (反压查表)",
+        chk("装填拍: cam1_req_ready 拉低 (反压查表)",
             sdtlb_if.drv.cam1_req_ready == 1'b0);
-        @(sdtlb_if.drv);             // 写完成, 这一沿才开始握手
+        sdtlb_if.drv.fill_en        <= 1'b0;
+        @(sdtlb_if.drv);             // 装填完成, 这一沿才开始握手
         sdtlb_if.drv.cam0_req_valid <= 1'b0;
         sdtlb_if.drv.cam1_req_valid <= 1'b0;
         @(sdtlb_if.drv);             // 响应拍

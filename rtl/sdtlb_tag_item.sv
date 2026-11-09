@@ -38,11 +38,6 @@ import sdecoder_pkg::*;
     input  logic                        inv_en,
     input  logic [PA_WIDTH-1:0]         inv_pa,
 
-    // 上一拍的置无效请求: 用来取消 "上一拍请求、本拍才写" 的那次装填 (置无效优先)
-    input  logic                        inv_all_d,
-    input  logic                        inv_en_d,
-    input  logic [PA_WIDTH-1:0]         inv_pa_d,
-
     // 本条目内容静默输出 (valid 来自 FF, 其余字段来自 Latch)
     output SDTLB_TAG_ITEM_t             tag_item
 );
@@ -78,16 +73,6 @@ import sdecoder_pkg::*;
     //       被选中, 同拍的装填会照常执行, 把一条覆盖 "正在被刷新的地址" 的映射填进去.
     wire inv_match = inv_en && inv_high_hit && inv_range_hit;
 
-    // 上一拍的置无效是否覆盖 "本拍要写进去的 tag": 覆盖则本次装填丢弃
-    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] fill_high = fill_wr_pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH];
-    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] inv_d_high = inv_pa_d[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
-    wire [PA_UP_WIDTH-1:0]               inv_d_up   = inv_pa_d[PA_BASE_LSB +: PA_UP_WIDTH];
-    wire fill_inv_match = inv_en_d &&
-                          (inv_d_high == fill_high) &&
-                          (fill_wr_pa_base[PA_UP_WIDTH-1:0] <= inv_d_up) &&
-                          (inv_d_up <= fill_wr_pa_up);
-    wire fill_cancel = inv_all_d || fill_inv_match;
-
     // 除 valid 外的字段用 Latch, 只在写周期打开.
     // 使能直接用寄存器出来的 fill_wr_en, 不再串组合门: 使能与写数据同拍变化时,
     // 组合门会晚一个 delta 稳定, Latch 可能在使能还高的时候抓到下一拍的写数据.
@@ -106,7 +91,7 @@ import sdecoder_pkg::*;
         else if (inv_all || inv_match) begin
             valid_q <= 1'b0;
         end
-        else if (fill_wr_en && !fill_cancel) begin
+        else if (fill_wr_en) begin
             valid_q <= 1'b1;
         end
     end
