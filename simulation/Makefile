@@ -10,6 +10,7 @@
 TB_TOP ?= tb_sdtlb
 TESTNAME ?= TestBase
 DUMP_WAVE ?= 1
+DUMP_SVA ?= 1
 
 ######################################################
 # GLOBAL CONFIG
@@ -54,7 +55,13 @@ VCS += -Mdir=./output/csrc
 VCS += -top $(TB_TOP)
 
 ifeq ($(DUMP_WAVE), 1)
-	VCS += +define+DUMP_FSDB
+VCS += +define+DUMP_FSDB
+endif
+
+ifeq ($(DUMP_SVA), 1)
+VCS += +define+DUMP_SVA
+VCS += -assert enable_diag
+VCS += -assert enable_hier
 endif
 
 vcs: base
@@ -65,6 +72,19 @@ SIMV  = ./output/simv +UVM_TESTNAME=$(TESTNAME)
 SIMV += -f ./base/option/simulate_base.f
 SIMV += -l ./log/simv.log
 SIMV += -k ./output/ucli.key
+
+ifeq ($(DUMP_SVA), 1)
+# 让 fsdb 波形也能看到波形
+SIMV += +fsdb+sva_success
+# 让每一次成功的断言都留下 log 记录
+# SIMV += -assert success
+# 限制每一次成功的断言都留下 log 记录的个数
+# SIMV += -assert maxsuccess=100
+# 设置断言失败的最大打印次数 (以免 log 过大)
+SIMV += -assert maxfail=100
+# "熔断" 机制, 超过某个断言次数后, 自动 $finish
+SIMV += -assert finish_maxfail=200
+endif
 
 simv_only:
 	cd $(RUN_DIR) && $(SIMV)

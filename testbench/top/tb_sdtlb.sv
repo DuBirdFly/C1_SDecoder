@@ -64,6 +64,15 @@ module tb_sdtlb;
     end
 `endif
 
+`ifdef DUMP_SVA
+    initial begin
+        $display("===============================================");
+        $display("Dumping FSDB SVA");
+        $fsdbDumpSVA(0, tb_sdtlb);
+        $display("===============================================");
+    end
+`endif
+
     task automatic chk(input string name, input logic cond);
         checks++;
         if (!cond) begin
