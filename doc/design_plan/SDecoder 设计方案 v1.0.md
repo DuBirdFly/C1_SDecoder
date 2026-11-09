@@ -297,6 +297,36 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 ##### SDPWU 顶层状态机
 
+```mermaid
+flowchart TD
+    IDLE
+    IDLE -->|"存在可以 PageWalk 的条目, 且存在空闲的 PWU"| SDMQ_POP_PW_ITEM
+    IDLE -->|"存在可 flushed 的条目"| SDMQ_CHK
+    SDMQ_POP_PW_ITEM --> PWU_REQ
+    PWU_REQ --> IDLE
+    IDLE -->|"收到 pw_finish_valid"| PWU_RSP
+    PWU_RSP -->|"表项有效"| FILL_SDTLB
+    FILL_SDTLB --> SLMD_RSP_PW_ITEM
+    PWU_RSP -->|"表项无效"| SLMD_RSP_PW_ITEM
+    SLMD_RSP_PW_ITEM --> SDMQ_CHK
+    SDMQ_CHK -->|"有可提前弹出的条目"| SLMD_RSP_PRE_ITEM
+    SLMD_RSP_PRE_ITEM --> SDMQ_CHK
+    SDMQ_CHK -->|"无可提前弹出的条目"| IDLE
+    classDef blue fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    class IDLE blue
+```
+
+图: SDPWU 顶层状态机图
+
+IDLE 状态向别的状态跳转情况有优先级, 优先级为:
+
+1. IDLE -> SDMQ_CHK
+2. IDLE -> PWU_RSP
+3. IDLE -> SDMQ_POP_PW_ITEM
+
+SDMQ_POP_PW_ITEM 仅维持 1 拍, 在这 1 拍弹出 SDMQ 的 1 个最老的需要做 Page Walk 的条目, 并仲裁一个空闲的 PWU
+
+PWU_REQ 仅维持 1 拍, 将 pwu_start_ready 信号的值拉高, 完成与 SDPWU_SUB 子状态机的握手
 
 ##### SDPWU 子状态机
 
@@ -326,9 +356,10 @@ flowchart LR
     end
     HS_START <--> IDLE
     FINISH <--> HS_FINISH
+    WALK <--> TW(["访存接口"])
     classDef iface fill:#ffffff,stroke:#0288d1,color:#01579b
     classDef state fill:#ede9fe,stroke:#7c3aed,color:#3b0764
-    class S_VALID,S_READY,F_VALID,F_READY iface
+    class S_VALID,S_READY,F_VALID,F_READY,TW iface
     class IDLE,WALK,FINISH state
     style SUB fill:#faf5ff,stroke:#a78bfa
     style HS_START fill:#e1f5fe,stroke:#0288d1,rx:12px
