@@ -88,6 +88,15 @@ module tb_sdptw;
     end
 `endif
 
+`ifdef DUMP_SVA
+    initial begin
+        $display("===============================================");
+        $display("Dumping FSDB SVA");
+        $fsdbDumpSVA(0, tb_sdptw);
+        $display("===============================================");
+    end
+`endif
+
     // ========================================================================
     // 本地存储模型: AXI4-Lite 读从端 (暂时没有读错误入口).
     // mem 按 8B 单元存 (key 是 8B 对界地址), 一次读返回"包含该地址的 16B 行":

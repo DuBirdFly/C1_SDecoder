@@ -42,6 +42,15 @@ module tb_lod;
     end
 `endif
 
+`ifdef DUMP_SVA
+    initial begin
+        $display("===============================================");
+        $display("Dumping FSDB SVA");
+        $fsdbDumpSVA(0, tb_lod);
+        $display("===============================================");
+    end
+`endif
+
     // 参考模型: 从 MSB 起第一个 0 的 one-hot; 全 1 时为 0
     function automatic logic [A_WIDTH-1:0] ref_dec(input logic [A_WIDTH-1:0] vec);
         logic found;

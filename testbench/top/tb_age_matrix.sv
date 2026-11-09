@@ -54,6 +54,15 @@ module tb_age_matrix;
     end
 `endif
 
+`ifdef DUMP_SVA
+    initial begin
+        $display("===============================================");
+        $display("Dumping FSDB SVA");
+        $fsdbDumpSVA(0, tb_age_matrix);
+        $display("===============================================");
+    end
+`endif
+
     // 找第 1 个 0 的位置, 没有则返回 -1
     // direction: 0, LSB2MSB; 1, MSB2LSB
     function automatic int find_first_zero(input logic [ITEM_DEPTH-1:0] vec, bit direction);

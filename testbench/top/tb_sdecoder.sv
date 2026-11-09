@@ -58,6 +58,15 @@ module tb_sdecoder;
 
     // 本地表模型在 testbench/env 下, 由 SdecoderEnv 创建
 
+`ifdef DUMP_SVA
+    initial begin
+        $display("===============================================");
+        $display("Dumping FSDB SVA");
+        $fsdbDumpSVA(0, tb_sdecoder);
+        $display("===============================================");
+    end
+`endif
+
     initial begin
         uvm_config_db#(virtual sdecoder_if)::set(null, "*", "vif", sdecoder_if);
         run_test();
