@@ -82,6 +82,7 @@ import sdecoder_pkg::*;
         end
         else if (item_valid && (inv_all || inv_match)) begin
             item_flushed <= 1'b1;
+            item_flushed <= item_flushed;
         end
     end
 

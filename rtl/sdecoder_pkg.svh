@@ -87,6 +87,8 @@ package sdecoder_pkg;
     typedef struct packed {
         logic                       valid;
         logic                       flushed;
+        logic                       page_walking;
+        logic                       responsed;
         logic [REQ_ID_WIDTH-1:0]    id;
         logic [PA_WIDTH-1:0]        pa;
     } SDMQ_ITEM_t;
