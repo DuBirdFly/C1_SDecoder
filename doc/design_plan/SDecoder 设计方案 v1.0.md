@@ -137,7 +137,7 @@ flowchart LR
 
 注: SDecoder 内部结构图上只画了 SDIOR 的配置接口, SDIOR 输出的置无效 (刷新) 命令作用于 SDTLB 与 SDMQ, 统计的异常信息从 SDecoder 顶层输出, 详细内容见后续章节
 
-注: SDPWU 的 3 组接口指的是 "从 SDMQ 取条目", "通过 Page Walk 访存接口读表项", "经 SLMD_CALC_PWU 计算出 SLMD 后从 Page Walk 响应接口返回"
+注: SDPWU 的 3 组接口指的是 "从 SDMQ 取条目", "通过 Page Walk 访存接口读表项", "向 SLMD_CALC_PWU 发响应数据". 其中 "从 SDMQ 取条目" 和 "向 SLMD_CALC_PWU 发响应数据" 由 SDPWU 顶层状态机串行完成 (从 SDMQ 一次只取 1 个), SDPWU_SUB 不直接竞争这两组接口
 
 ### 接口分组
 
@@ -295,27 +295,54 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 #### 状态机
 
+##### SDPWU 顶层状态机
+
+
+##### SDPWU 子状态机
+
+SDPWU 子状态机由 SDPWU_SUB 模块实现, 下图为 SDPWU_SUB 的主要接口.
+
+SDPWU_SUB 的开始和结束采用 valid+ready 握手
+
+- pwu_start_valid 和 pwu_finish_valid 是 SDPWU_SUB 的输出
+- pwu_start_ready 和 pwu_finish_ready 是 SDPWU_SUB 的输入
+- pwu_finish_valid 附带 sideband 数据
+
 ```mermaid
-stateDiagram-v2
-    [*] --> IDLE
-    IDLE --> SDT_L1_AR: SDMQ 存在 valid & !flushed 的最老条目
-    IDLE --> SDMQ_POP: SDMQ 存在 valid & flushed 的最老条目
-    SDT_L1_AR --> SDT_L1_R
-    SDT_L1_R --> SDT_L1_ITEM_CHK
-    SDT_L1_ITEM_CHK --> SDMQ_POP: 表项 !valid | (valid & illegal)
-    SDT_L1_ITEM_CHK --> SDT_L2_AR: 表项 valid & !illegal & !hit
-    SDT_L1_ITEM_CHK --> SDTLB_FILL: 表项 valid & !illegal & hit
-    SDT_L2_AR --> SDT_L2_R
-    SDT_L2_R --> SDT_L2_ITEM_CHK
-    SDT_L2_ITEM_CHK --> SDMQ_POP: 表项 !valid
-    SDT_L2_ITEM_CHK --> SDTLB_FILL: 表项 valid
-    SDTLB_FILL --> SDMQ_POP
-    SDMQ_SCAN --> SDMQ_POP: 存在可弹出的 SDMQ 条目 (hit/flushed)
-    SDMQ_SCAN --> IDLE: 没有可弹出的 SDMQ 条目
-    SDMQ_POP --> SDMQ_SCAN: 响应握手完成
+flowchart LR
+    subgraph SUB["SDPWU_SUB"]
+        IDLE["IDLE"] --> WALK["Page Walk"] --> FINISH["FINISH"]
+        FINISH --> IDLE
+    end
+    START(["pwu_start_valid<br/>pwu_start_ready"]) <-->|"握手"| IDLE
+    FINISH <-->|"握手"| RSP(["pwu_finish_valid<br/>pwu_finish_ready"])
+    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    classDef state fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    class START,RSP iface
+    class IDLE,WALK,FINISH state
+    style SUB fill:#faf5ff,stroke:#a78bfa
 ```
 
-图: SDPWU 的状态机
+图: SDPWU_SUB 的接口
+
+```mermaid
+flowchart TD
+    IDLE
+    IDLE -->|"pwu_start_valid & pwu_start_ready"| SDT_L1_AR
+    SDT_L1_AR --> SDT_L1_R
+    SDT_L1_R --> SDT_L1_ITEM_CHK
+    SDT_L1_ITEM_CHK -->|"表项 valid & !illegal 且条目 !hit"| SDT_L2_AR
+    SDT_L1_ITEM_CHK -->|"表项 valid & !illegal 且条目 hit"| FINISH
+    SDT_L1_ITEM_CHK -->|"表项 valid & illegal"| FINISH
+    SDT_L1_ITEM_CHK -->|"表项 !valid"| FINISH
+    SDT_L2_AR --> SDT_L2_R
+    SDT_L2_R --> SDT_L2_ITEM_CHK
+    SDT_L2_ITEM_CHK -->|"表项 valid"| FINISH
+    SDT_L2_ITEM_CHK -->|"表项 !valid"| FINISH
+    FINISH -->|"pwu_finish_valid & pwu_finish_ready"| IDLE
+```
+
+图: SDPWU_SUB 状态机
 
 注: flushed 即软件通过 IOR 对 SDecoder 进行置无效 (刷新) 操作
 注: 目前 `SDT_L1_ITEM_CHK` 判断非法表项的情况是段的 1GB 上界超出一级表表项的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`
@@ -323,25 +350,28 @@ stateDiagram-v2
 
 状态说明:
 
-- `IDLE`: 空闲, 取最老的 valid 条目. 若该条目未标识为 flushed, 则进入 Page Walk 阶段; 若该条目是 flushed 条目, 则直接弹出该条目, 不做 Page Walk
+- `IDLE`: 空闲, 拉高 `pwu_start_valid` 向顶层状态机申请新的未命中请求; 顶层状态机拉高 `pwu_start_ready` 完成握手后, 进入 Page Walk
 - `SDT_L1_AR`/`SDT_L1_R`: 访问一级表, 读一级表表项
-- `SDT_L1_ITEM_CHK`: 根据一级表表项判定命中状态, 详细状态转移关系见后面的状态转移表
+- `SDT_L1_ITEM_CHK`: 根据一级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
 - `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表表项
-- `SDT_L2_ITEM_CHK`: 根据二级表表项判定命中状态, 二级表 valid 则认为命中, 否则认为未命中
-- `SDTLB_FILL`: Page Walk 完成, 将合法表项回填 SDTLB
-- `SDMQ_POP`: 弹出当前待响应的 SDMQ 条目, 交给 SLMD_CALC_PWU 拼装 SLMD 或返回异常响应
-- `SDMQ_SCAN`: 扫描 SDMQ 中的条目, 每次选出年龄最老的可弹出条目 (命中同段/页或被软件置无效), 交给 SLMD_CALC_PWU 做 SLMD 拼装或返回异常响应
-
+- `SDT_L2_ITEM_CHK`: 根据二级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
+- `FINISH`: Page Walk 结束, 拉高 `pwu_finish_valid` 并附带 sideband 数据; 顶层状态机拉高 `pwu_finish_ready` 完成握手后, 回到 `IDLE`
 
 `SDT_L1_ITEM_CHK` 状态转移表
 
 | valid | Type | illegal | hit | 行为 |
 | --- | --- | --- | --- | --- |
-| 0 | X | X | X | 缺页异常, 不装填 SDTLB |
-| 1 | 0 | 0 | 0 | 该 32GB 区间不存在段式映射, 前往访问二级表 |
-| 1 | 1 | 0 | 0 | 段式映射未命中, 前往访问二级表 |
-| 1 | 1 | 0 | 1 | 段式映射命中, Page Walk 结束, 装填 SDTLB |
-| 1 | X | 1 | X | 非法异常, PTE 非法, 不装填 SDTLB |
+| 0 | X | X | X | 缺页异常, Page Walk 结束 |
+| 1 | X | 0 | 0 | 该 32GB 区间不存在段式映射或段式映射未命中, 前往访问二级表 |
+| 1 | X | 1 | X | 非法异常, Page Walk 结束 |
+| 1 | 1 | 0 | 1 | 段式映射命中, Page Walk 结束 |
+
+`SDT_L2_ITEM_CHK` 状态转移表
+
+| valid | 行为 |
+| --- | --- |
+| 0 | 缺页异常, Page Walk 结束 |
+| 1 | 二级表 (页表) 命中, Page Walk 结束 |
 
 ### SDMQ
 
