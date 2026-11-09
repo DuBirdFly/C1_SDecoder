@@ -6,6 +6,8 @@
 
 见 [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
+注: 不要主动把 mermaid 图渲染成图片来核对 (AI 读图慢), 图的效果由用户看; agent 只跑 `script/ci/check.sh mermaid` 做语法检查, 需要核对渲染效果时明确说明并请用户确认
+
 ## 写 python 文件
 
 见 [`CONTRIBUTING.md`](CONTRIBUTING.md)
