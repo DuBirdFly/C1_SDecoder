@@ -416,6 +416,20 @@ flowchart TD
 | 0 | 缺页异常, Page Walk 结束 |
 | 1 | 二级表 (页表) 命中, Page Walk 结束 |
 
+```mermaid
+flowchart LR
+    RSP("访存接口<br/>(读响应)") --> ROUTER["路由"]
+    ROUTER -->|"读响应"| SUB0(("SubPWU[0]"))
+    ROUTER -->|"读响应"| SUB1(("SubPWU[1]"))
+    SUB0 -->|"读请求"| ARB["仲裁"]
+    SUB1 -->|"读请求"| ARB
+    ARB --> REQ("访存接口<br/>(读请求)")
+    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    class RSP,REQ iface
+```
+
+图: SDPWU_SUB 复用一套访存接口示意图
+
 ### SDMQ
 
 #### 微结构
