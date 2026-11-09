@@ -314,13 +314,25 @@ flowchart LR
         IDLE["IDLE"] --> WALK["Page Walk"] --> FINISH["FINISH"]
         FINISH --> IDLE
     end
-    START(["pwu_start_valid<br/>pwu_start_ready"]) <-->|"握手"| IDLE
-    FINISH <-->|"握手"| RSP(["pwu_finish_valid<br/>pwu_finish_ready"])
-    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    subgraph HS_START["start 握手"]
+        direction TB
+        S_VALID("pwu_start_valid")
+        S_READY("pwu_start_ready")
+    end
+    subgraph HS_FINISH["finish 握手"]
+        direction TB
+        F_VALID("pwu_finish_valid")
+        F_READY("pwu_finish_ready")
+    end
+    HS_START <--> IDLE
+    FINISH <--> HS_FINISH
+    classDef iface fill:#ffffff,stroke:#0288d1,color:#01579b
     classDef state fill:#ede9fe,stroke:#7c3aed,color:#3b0764
-    class START,RSP iface
+    class S_VALID,S_READY,F_VALID,F_READY iface
     class IDLE,WALK,FINISH state
     style SUB fill:#faf5ff,stroke:#a78bfa
+    style HS_START fill:#e1f5fe,stroke:#0288d1,rx:12px
+    style HS_FINISH fill:#e1f5fe,stroke:#0288d1,rx:12px
 ```
 
 图: SDPWU_SUB 的接口
