@@ -77,6 +77,7 @@ import sdecoder_pkg::*;
     logic                       sdptw_l2_read;
 
     // SDTLB
+    logic                       sdtlb_cam0_ready;
     logic                       sdtlb_req_hit;
     SDTLB_TAG_ITEM_t            sdtlb_hit_tag;
     SDTLB_DATA_ITEM_t           sdtlb_hit_data;
@@ -112,8 +113,9 @@ import sdecoder_pkg::*;
     logic                       push_miss;
     logic                       miss_ok;
 
-    // 请求握手: MISS_FIFO 满或响应 FIFO 将满时不再接收新请求
-    assign req_ready = rst_n && !miss_fifo_full && !rsp_fifo_almost_full;
+    // 请求握手: MISS_FIFO 满或响应 FIFO 将满时不再接收新请求;
+    // SDTLB 装填当拍会把 cam 的 ready 拉低 (Latch 不支持同拍读写), 这里一并反压
+    assign req_ready = rst_n && !miss_fifo_full && !rsp_fifo_almost_full && sdtlb_cam0_ready;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -238,15 +240,24 @@ import sdecoder_pkg::*;
         .almost_empty()
     );
 
+    // 当前顶层还是单请求口径: 只用了 CAM0, CAM1 先闲置
     sdtlb u_sdtlb (
         .clk                (clk),
         .rst_n              (rst_n),
 
-        .req_en             (req_accept),
-        .req_pa             (req_pa),
-        .req_hit            (sdtlb_req_hit),
-        .req_hit_tag_item   (sdtlb_hit_tag),
-        .req_hit_data_item  (sdtlb_hit_data),
+        .cam0_req_valid     (req_valid),
+        .cam0_req_ready     (sdtlb_cam0_ready),
+        .cam0_req_pa        (req_pa),
+        .cam0_hit           (sdtlb_req_hit),
+        .cam0_hit_tag_item  (sdtlb_hit_tag),
+        .cam0_hit_data_item (sdtlb_hit_data),
+
+        .cam1_req_valid     (1'b0),
+        .cam1_req_ready     (),
+        .cam1_req_pa        ('0),
+        .cam1_hit           (),
+        .cam1_hit_tag_item  (),
+        .cam1_hit_data_item (),
 
         .fill_en           (sdtlb_fill_en),
         .fill_pa_base       (sdtlb_fill_pa_base),

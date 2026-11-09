@@ -2,29 +2,46 @@
 `include "sdecoder_pkg.svh"
 `default_nettype none
 
-// 命中读出的 tag/data 与命中向量一起在请求拍打拍:
-//   请求拍 T 用 fill 之前的旧 tag 做命中判定; 同一拍用 tag_hit_vector 从旧的
-//   tag_item / data_item 选出命中内容, 并在时钟沿寄存.
-//   下一拍 req_hit / req_hit_tag_item / req_hit_data_item 都来自 T 拍快照.
-//   因此 req_en 和 fill_en (或 inv_en) 同拍有效时, 表项更新只影响后续请求,
-//   不会出现 "旧命中 + 新 tag/data" 的不一致.
-
+// SDTLB: 全相联 (CAM + FF + Latch), 2 个查表端口 (CAM0 / CAM1)
+//
+// 查表时序:
+//   请求拍 T 两路各自握手 (valid && ready), 用当拍条目的内容做组合比较;
+//   命中向量与选出的 tag / data 快照在 T 的上升沿打 1 拍, T+1 拍由
+//   camN_hit / camN_hit_tag_item / camN_hit_data_item 给出.
+//   camN_hit 同时充当响应的 valid: 没有握手的拍按 0 打拍, 所以请求撤掉后
+//   下一拍命中自然归 0, 被反压的拍也不会漏出上一拍的陈旧结果.
+//
+// 装填 / 置无效时序:
+//   条目除 Valid (FF) 外都用 Latch. Latch 的写使能必须来自寄存器, 否则
+//   fill_en / inv_* 与写数据同拍变化时, 使能会短暂指向上一次的目标条目,
+//   把数据写进别的条目. 因此装填与置无效都先在请求拍寄存:
+//     T   拍: fill_en 有效, 选定目标条目 (空闲 / 轮转 victim)
+//     T+1 拍: Latch 用寄存的使能和数据写入, Valid 也在这一拍置位 / 清位
+//   写周期内 Latch 对输入透明, 不能查表, 因此 T+1 拍把两路 camN_req_ready 都拉低.
 module sdtlb
 import sdecoder_pkg::*;
 (
     input  logic                                clk,
     input  logic                                rst_n,
 
-    // 代换请求: 查表. 地址是整条 PA[47:0] (条目里只存 PA[47:30], 见 sdtlb_tag_item)
-    // req_en 被采到的那一拍是请求拍, 响应 (req_hit 与读出数据) 下一拍才有效
-    input  logic                                req_en,
-    input  logic [PA_WIDTH-1:0]                 req_pa,
-    output logic                                req_hit,
-    output SDTLB_TAG_ITEM_t                     req_hit_tag_item,
-    output SDTLB_DATA_ITEM_t                    req_hit_data_item,
+    // 查表端口 0 (CAM0). 地址是整条 PA[47:0] (条目里只存 PA[47:30], 见 sdtlb_tag_item)
+    input  logic                                cam0_req_valid,
+    output logic                                cam0_req_ready,
+    input  logic [PA_WIDTH-1:0]                 cam0_req_pa,
+    output logic                                cam0_hit,
+    output SDTLB_TAG_ITEM_t                     cam0_hit_tag_item,
+    output SDTLB_DATA_ITEM_t                    cam0_hit_data_item,
 
-    // 装填: SDPTW 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目.
-    // 注意这里与 req_pa / inv_pa 口径不同: 装填来自 sdptw, 它本来就算在 PA[47:30] 上,
+    // 查表端口 1 (CAM1)
+    input  logic                                cam1_req_valid,
+    output logic                                cam1_req_ready,
+    input  logic [PA_WIDTH-1:0]                 cam1_req_pa,
+    output logic                                cam1_hit,
+    output SDTLB_TAG_ITEM_t                     cam1_hit_tag_item,
+    output SDTLB_DATA_ITEM_t                    cam1_hit_data_item,
+
+    // 装填: sdptw 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目, 请求拍有效.
+    // 注意这里与 camN_req_pa / inv_pa 口径不同: 装填来自 sdptw, 它本来就算在 PA[47:30] 上,
     // 所以 fill_pa_base 就保持 PA[47:30] (18 位), 不必先补齐到整条 PA 再切回来
     input  logic                                fill_en,
     input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
@@ -42,120 +59,217 @@ import sdecoder_pkg::*;
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
     SDTLB_DATA_ITEM_t data_item [SDTLB_ENTRIES];
 
-    // 命中向量由 sdtlb_tag 组合给出 (比较链长, 时序差), 这里打 1 拍后再用:
-    // req_en / req_pa 被采到的那一拍 (记作 T) 只是请求拍, 响应 (req_hit 与读出数据)
-    // 在 T+1 拍才有效; req_en 可以拍拍有效, 响应逐拍滞后 1 拍 (流水线)
-    logic [SDTLB_ENTRIES-1:0] tag_hit_vector;
-    logic [SDTLB_ENTRIES-1:0] tag_hit_vector_r1;
-    logic [SDTLB_ENTRIES-1:0] fill_sel;
-    logic [SDTLB_ENTRIES-1:0] fill_hit_vector;
-    logic [SDTLB_ENTRIES-1:0] fill_en_vector;
+    // 装填 / 置无效的寄存器化版本 (请求拍采, 下一拍写)
+    logic                       fill_en_q;
+    logic [PA_BASE_WIDTH-1:0]   fill_pa_base_q;
+    logic [PA_UP_WIDTH-1:0]     fill_pa_up_q;
+    logic [EID_WIDTH-1:0]       fill_eid_q;
+    logic [TOKEN_ID_WIDTH-1:0]  fill_token_id_q;
+    logic [S_PFN_WIDTH-1:0]     fill_s_pfn_q;
+    logic [SDTLB_ENTRIES-1:0]   fill_wr_en_vector;
+
+    // 写数据缓冲: 与写使能错开一个 delta 再进 Latch 阵列. 使能与数据同沿更新时,
+    // 事件驱动仿真里 Latch 可能在使能还没落下的那个 delta 里抓到下一拍的写数据.
+    logic [PA_BASE_WIDTH-1:0]   fill_pa_base_wr;
+    logic [PA_UP_WIDTH-1:0]     fill_pa_up_wr;
+    logic [EID_WIDTH-1:0]       fill_eid_wr;
+    logic [TOKEN_ID_WIDTH-1:0]  fill_token_id_wr;
+    logic [S_PFN_WIDTH-1:0]     fill_s_pfn_wr;
+    logic                       inv_all_q;
+    logic                       inv_en_q;
+    logic [PA_WIDTH-1:0]        inv_pa_q;
+
+    logic [SDTLB_ENTRIES-1:0] cam0_hit_vector;
+    logic [SDTLB_ENTRIES-1:0] cam1_hit_vector;
+    logic [SDTLB_ENTRIES-1:0] cam0_hit_vector_r;
+    logic [SDTLB_ENTRIES-1:0] cam1_hit_vector_r;
     logic [SDTLB_ENTRIES-1:0] victim_sel;
 
-    // 请求拍 T 选出的命中 tag/data 快照, 和 tag_hit_vector_r1 同一沿寄存
-    SDTLB_TAG_ITEM_t  hit_tag_sel;
-    SDTLB_DATA_ITEM_t hit_data_sel;
-    SDTLB_TAG_ITEM_t  req_hit_tag_item_r;
-    SDTLB_DATA_ITEM_t req_hit_data_item_r;
+    // 请求拍选出的命中 tag / data 快照, 与命中向量在同一沿寄存
+    SDTLB_TAG_ITEM_t  cam0_hit_tag_sel;
+    SDTLB_DATA_ITEM_t cam0_hit_data_sel;
+    SDTLB_TAG_ITEM_t  cam1_hit_tag_sel;
+    SDTLB_DATA_ITEM_t cam1_hit_data_sel;
+    SDTLB_TAG_ITEM_t  cam0_hit_tag_r;
+    SDTLB_DATA_ITEM_t cam0_hit_data_r;
+    SDTLB_TAG_ITEM_t  cam1_hit_tag_r;
+    SDTLB_DATA_ITEM_t cam1_hit_data_r;
 
-    assign req_hit = |tag_hit_vector_r1;
-    assign fill_en_vector = fill_en ? fill_sel : 0;
+    // 写 Latch 当拍反压两路查表: Latch 不支持同拍读写
+    assign cam0_req_ready = rst_n && !fill_en_q;
+    assign cam1_req_ready = rst_n && !fill_en_q;
 
-    // fill 去重: 每个 tag item 比较本次 fill tag, fill_hit_vector 由 sdtlb_tag 给出.
-    // 同一个 tag 已经存在时, 更新原条目, 不再分配新条目.
-    assign fill_sel = (|fill_hit_vector) ? fill_hit_vector : victim_sel;
+    // 比较使能取 "accept": 只有真正握手的那一拍才产生命中, 被反压的拍按 0 打拍
+    wire cam0_en = cam0_req_valid && cam0_req_ready;
+    wire cam1_en = cam1_req_valid && cam1_req_ready;
+
+    // 写数据经一级缓冲再进 Latch 阵列, 与写使能错开一个 delta
+    always_comb begin
+        fill_pa_base_wr  = fill_pa_base_q;
+        fill_pa_up_wr    = fill_pa_up_q;
+        fill_eid_wr      = fill_eid_q;
+        fill_token_id_wr = fill_token_id_q;
+        fill_s_pfn_wr    = fill_s_pfn_q;
+    end
+
+    assign cam0_hit           = |cam0_hit_vector_r;
+    assign cam0_hit_tag_item  = cam0_hit_tag_r;
+    assign cam0_hit_data_item = cam0_hit_data_r;
+    assign cam1_hit           = |cam1_hit_vector_r;
+    assign cam1_hit_tag_item  = cam1_hit_tag_r;
+    assign cam1_hit_data_item = cam1_hit_data_r;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            tag_hit_vector_r1   <= '0;
-            req_hit_tag_item_r  <= '0;
-            req_hit_data_item_r <= '0;
+            cam0_hit_vector_r <= '0;
+            cam1_hit_vector_r <= '0;
+            cam0_hit_tag_r    <= '0;
+            cam0_hit_data_r   <= '0;
+            cam1_hit_tag_r    <= '0;
+            cam1_hit_data_r   <= '0;
         end
         else begin
-            tag_hit_vector_r1   <= tag_hit_vector;
-            req_hit_tag_item_r  <= hit_tag_sel;
-            req_hit_data_item_r <= hit_data_sel;
+            cam0_hit_vector_r <= cam0_hit_vector;
+            cam1_hit_vector_r <= cam1_hit_vector;
+            cam0_hit_tag_r    <= cam0_hit_tag_sel;
+            cam0_hit_data_r   <= cam0_hit_data_sel;
+            cam1_hit_tag_r    <= cam1_hit_tag_sel;
+            cam1_hit_data_r   <= cam1_hit_data_sel;
         end
     end
 
-    // 被替换条目指针: 严格 one-hot 左移循环, 只有真正分配新条目时才步进
+    // 装填打 1 拍: 写 Latch 的使能与数据都来自寄存器.
+    // inv_*_q 是上一拍的置无效请求, 只用来取消 "本拍才写" 的那次装填;
+    // 置无效本身是立即生效的 (见 sdtlb_tag_item).
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            fill_en_q         <= 1'b0;
+            fill_wr_en_vector <= '0;
+            fill_pa_base_q    <= '0;
+            fill_pa_up_q      <= '0;
+            fill_eid_q        <= '0;
+            fill_token_id_q   <= '0;
+            fill_s_pfn_q      <= '0;
+            inv_all_q         <= 1'b0;
+            inv_en_q          <= 1'b0;
+            inv_pa_q          <= '0;
+        end
+        else begin
+            fill_en_q         <= fill_en;
+            fill_wr_en_vector <= fill_en ? victim_sel : '0;
+            fill_pa_base_q    <= fill_pa_base;
+            fill_pa_up_q      <= fill_pa_up;
+            fill_eid_q        <= fill_eid;
+            fill_token_id_q   <= fill_token_id;
+            fill_s_pfn_q      <= fill_s_pfn;
+            inv_all_q         <= inv_all;
+            inv_en_q          <= inv_en;
+            inv_pa_q          <= inv_pa;
+        end
+    end
+
+    // 被替换条目指针: 严格 one-hot 左移循环, 每次装填都步进
     tlb_victim_pointer #(
         .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES)
     ) u_tlb_victim_pointer (
         .clk                (clk),
         .rst_n              (rst_n),
-        .step               (fill_en && !(|fill_hit_vector)),
+        .step               (fill_en),
         .victim_sel         (victim_sel)
     );
 
-    sdtlb_tag u_sdtlb_tag(
+    sdtlb_tag u_sdtlb_tag (
         .clk                (clk                ),
         .rst_n              (rst_n              ),
 
-        .req_en             (req_en             ),
-        .req_pa             (req_pa             ),
-        .req_hit_vector     (tag_hit_vector     ),
+        .req0_en            (cam0_en            ),
+        .req0_pa            (cam0_req_pa        ),
+        .req0_hit_vector    (cam0_hit_vector    ),
 
-        .fill_pa_base       (fill_pa_base       ),
-        .fill_pa_up         (fill_pa_up         ),
-        .fill_en_vector     (fill_en_vector     ),
-        .fill_hit_vector    (fill_hit_vector    ),
+        .req1_en            (cam1_en            ),
+        .req1_pa            (cam1_req_pa        ),
+        .req1_hit_vector    (cam1_hit_vector    ),
+
+        .fill_wr_en_vector  (fill_wr_en_vector  ),
+        .fill_wr_pa_base    (fill_pa_base_wr    ),
+        .fill_wr_pa_up      (fill_pa_up_wr      ),
 
         .inv_all            (inv_all            ),
         .inv_en             (inv_en             ),
         .inv_pa             (inv_pa             ),
+        .inv_all_d          (inv_all_q          ),
+        .inv_en_d           (inv_en_q           ),
+        .inv_pa_d           (inv_pa_q           ),
 
         .tag_item           (tag_item           )
     );
 
-    sdtlb_data u_sdtlb_data(
+    sdtlb_data u_sdtlb_data (
         .clk                (clk                ),
         .rst_n              (rst_n              ),
 
-        .fill_en_vector     (fill_en_vector     ),
-        .fill_eid           (fill_eid           ),
-        .fill_token_id      (fill_token_id      ),
-        .fill_s_pfn         (fill_s_pfn         ),
+        .fill_en_vector     (fill_wr_en_vector  ),
+        .fill_eid           (fill_eid_wr        ),
+        .fill_token_id      (fill_token_id_wr   ),
+        .fill_s_pfn         (fill_s_pfn_wr      ),
 
         .data_item          (data_item          )
     );
 
-    // 命中读出: 请求拍 T 用组合 hit vector 从旧 tag/data 选出快照,
-    // 和 tag_hit_vector_r1 在同一沿寄存; 同拍 fill/inv 不会改到本次响应.
+    // 命中读出: 请求拍用组合命中向量从旧 tag / data 选出快照, 与命中向量在同一沿寄存
     onehot0_mux #(
         .N      (SDTLB_ENTRIES),
         .WIDTH  (SDTLB_TAG_ITEM_WIDTH)
-    ) u_onehot0_mux_tag (
-        .sel    (tag_hit_vector),
+    ) u_onehot0_mux_tag0 (
+        .sel    (cam0_hit_vector),
         .din    (tag_item),
-        .dout   (hit_tag_sel)
+        .dout   (cam0_hit_tag_sel)
     );
 
     onehot0_mux #(
         .N      (SDTLB_ENTRIES),
         .WIDTH  (SDTLB_DATA_ITEM_WIDTH)
-    ) u_onehot0_mux_data (
-        .sel    (tag_hit_vector),
+    ) u_onehot0_mux_data0 (
+        .sel    (cam0_hit_vector),
         .din    (data_item),
-        .dout   (hit_data_sel)
+        .dout   (cam0_hit_data_sel)
     );
 
-    assign req_hit_tag_item  = req_hit_tag_item_r;
-    assign req_hit_data_item = req_hit_data_item_r;
+    onehot0_mux #(
+        .N      (SDTLB_ENTRIES),
+        .WIDTH  (SDTLB_TAG_ITEM_WIDTH)
+    ) u_onehot0_mux_tag1 (
+        .sel    (cam1_hit_vector),
+        .din    (tag_item),
+        .dout   (cam1_hit_tag_sel)
+    );
+
+    onehot0_mux #(
+        .N      (SDTLB_ENTRIES),
+        .WIDTH  (SDTLB_DATA_ITEM_WIDTH)
+    ) u_onehot0_mux_data1 (
+        .sel    (cam1_hit_vector),
+        .din    (data_item),
+        .dout   (cam1_hit_data_sel)
+    );
 
 `ifdef ASSERT_ON
-    `assert_clk(a_tag_hit_vector_onehot0, $onehot0(tag_hit_vector_r1))
-    // fill_hit_vector 是"已有相同 tag"的选择结果, 正常情况下最多一个
-    `assert_clk(a_fill_hit_onehot0, $onehot0(fill_hit_vector))
-    // fill_sel 是写使能, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
-    `assert_clk(a_fill_sel_onehot, $onehot(fill_sel))
+    `assert_clk(a_cam0_hit_vector_onehot0, $onehot0(cam0_hit_vector_r))
+    `assert_clk(a_cam1_hit_vector_onehot0, $onehot0(cam1_hit_vector_r))
+    // 写选择就是轮转指针, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
+    `assert_clk(a_fill_wr_onehot0, $onehot0(fill_wr_en_vector))
+
+    // 写 Latch 当拍两路查表都必须被反压: Latch 不支持同拍读写
+    `assert_clk(a_fill_backpressure,
+                (fill_en_q |-> (!cam0_req_ready && !cam1_req_ready)))
 
     // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 查表 / 装填 / 置无效地址的 PA[47] 都必须为 0.
-    // 口径: req_pa / inv_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),
+    // 口径: camN_req_pa / inv_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),
     //       fill_pa_base 是 PA[47:30] (bit[PA_BASE_WIDTH-1] 才是 PA[47])
-    `assert_clk(a_req_pa47_zero,  (req_en  |-> !req_pa[PA_WIDTH-1]))
+    `assert_clk(a_cam0_pa47_zero, (cam0_en |-> !cam0_req_pa[PA_WIDTH-1]))
+    `assert_clk(a_cam1_pa47_zero, (cam1_en |-> !cam1_req_pa[PA_WIDTH-1]))
     `assert_clk(a_fill_pa47_zero, (fill_en |-> !fill_pa_base[PA_BASE_WIDTH-1]))
-    `assert_clk(a_inv_pa47_zero,  (inv_en   |-> !inv_pa[PA_WIDTH-1]))
+    `assert_clk(a_inv_pa47_zero,  (inv_en  |-> !inv_pa[PA_WIDTH-1]))
 `endif
 
 endmodule
