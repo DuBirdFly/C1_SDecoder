@@ -64,6 +64,7 @@ flowchart LR
 | SDIOR | SDecoder IO Register |
 | SDMQ | SDecoder Miss Queue |
 | SDPWU | SDecoder Page Walk Unit |
+| SDPWU_CTRL | SDPWU Control |
 | SDPWU_SUB | SDPWU Sub-unit |
 | SDT | SDecoder Table |
 | TLB | Translation Lookaside Buffer |
@@ -88,7 +89,7 @@ flowchart LR
 | `SDTLB_ENTRIES` | 128 |
 | `SDMQ_DEPTH` | 8 |
 | `SDIOR_DATA_WIDTH` | 64 |
-| `CFG_ADDR_WIDTH` | 2 |
+| `IOR_ADDR_WIDTH` | 2 |
 | `PW_RDATA_WIDTH` | 128 |
 | `MQ_RSP_ERR_WIDTH` | 6 |
 | `CAM_RSP_ERR_WIDTH` | 1 |
@@ -121,23 +122,21 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,MQRSP,CFG iface
 ```
 
-2 路独立的输入请求进入同一个 SDTLB 做 CAM 查表: 命中时由对应的 SLMD_CALC_CAM 计算出 SLMD, 从该路的响应接口返回 (命中通路); 未命中时写入 SDMQ, 由 SDPWU 做 Page Walk, Page Walk 得到的合法表项由 SDMQ 回填 SDTLB, 同时经 SLMD_CALC_MQ 计算出 SLMD, 从未命中队列响应接口返回 (未命中通路)
+2 路独立的输入请求进入同一个 SDTLB 做 CAM 查表: 命中时由对应的 SLMD_CALC_CAM 计算出 SLMD, 从该路的响应接口返回 (命中通路); 未命中时写入 SDMQ, 由 SDPWU 做 Page Walk, Page Walk 得到的合法表项由 SDMQ 回填 SDTLB, 同时经 SLMD_CALC_MQ 计算出 SLMD, 并从未命中队列响应接口返回 (未命中通路)
 
 各模块的职责如下:
 
-- **SDTLB**: 快表存储模块, 全相联 CAM, 共 `SDTLB_ENTRIES` 个条目, 对外暴露 2 组输入接口 CAM0/1, 两路可以并行查表; 如果命中 SDTLB, 则走命中通路, 命中结果按来源从对应的响应接口返回; SDTLB 可被 SDMQ 回填; SDTLB 可被 SDIOR 置无效
+- **SDTLB**: 快表存储模块, 全相联 CAM, 共 `SDTLB_ENTRIES` 个条目, 对外暴露 2 组输入接口 (CAM0/CAM1), 两组输入接口可以并行查表; 如果命中 SDTLB, 则走命中通路, 命中结果按来源从对应的响应接口返回; SDTLB 可被 SDMQ 回填; SDTLB 可被 SDIOR 置无效
 
-- **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 且会额外附带一些其他标识位; SDMQ 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄从老到年轻输出给 SDPWU; SDMQ 负责用 Page Walk 得到的合法表项回填 SDTLB; SDMQ 可被 SDIOR 置无效
+- **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 且会额外附带一些其他标识位; SDMQ 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄关系和标识位信息, 把 SDMQ 的条目从老到年轻输出给 SDPWU 做 Page Walk; SDMQ 可以用 Page Walk 返回的合法的表项回填 SDTLB; SDMQ 可以被 SDIOR 置无效
 
-- **SDPWU**: Page Walk 访存单元 (状态机), 从 SDMQ 取未命中请求, 在访存接口上发起 Page Walk 访存, 做最多两级 Page Walk; 内含 2 个 SDPWU_SUB (子状态机), 每个 SDPWU_SUB 一次处理一个未命中请求; 2 个 SDPWU_SUB 受顶层状态机控制, 分时复用 SDPWU 的 3 组接口 (同一时刻每组接口最多只被 1 个 SDPWU_SUB 占用). SDPWU 在内部判定表项的合法性, 把合法的表项连同请求的 PA 和 id 交给 SDMQ, 由 SDMQ 回填 SDTLB; SLMD_CALC_MQ 负责拼装 SLMD 或返回异常响应
+- **SDPWU**: Page Walk 访存单元 (状态机), 从 SDMQ 取最年老的未命中请求, 在访存接口上发起 Page Walk 访存, 最多可以做两级 Page Walk; 内含 N 个 SDPWU_SUB (子状态机), 每个 SDPWU_SUB 一次处理一个未命中请求; N 个 SDPWU_SUB 受 SDPWU_CTRL 控制, 分时复用 SDPWU 的访存接口和 SDMQ 的条目接口 (同一时刻每组接口最多只被 1 个 SDPWU_SUB 占用). SDPWU_SUB 在内部判定表项的合法性, 把表项连同合法性判定结果交给 SDMQ, 并由 SDMQ 回填 SDTLB; SLMD_CALC_MQ 负责拼装 SLMD 或返回异常响应
 
 - **SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, 未命中队列响应 (SDMQ 条目弹出); 3 个实例相互独立, 每个实例只驱动对应的响应接口
 
-- **SDIOR**: 配置 SDecoder 内部寄存器, 输出其他模块使用的可配置参数, 发起刷新命令, 统计异常信息
+- **SDIOR**: 配置 SDecoder 内部寄存器, 用于输出其他模块使用的可配置参数, 发起刷新命令, 统计异常信息等
 
-注: SDecoder 内部结构图上只画了 SDIOR 的配置接口, SDIOR 输出的置无效 (刷新) 命令作用于 SDTLB 与 SDMQ, 统计的异常信息从 SDecoder 顶层输出, 详细内容见后续章节
-
-注: SDPWU 的 3 组接口指的是 "从 SDMQ 取条目", "通过 Page Walk 访存接口读表项", "向 SDMQ 交表项". 其中 "从 SDMQ 取条目" 和 "向 SDMQ 交表项" 由 SDPWU 顶层状态机串行完成 (从 SDMQ 一次只取 1 个), SDPWU_SUB 不直接竞争这两组接口
+注: SDecoder 内部结构图上只画了 SDIOR 的配置接口, SDIOR 输出的置无效 (刷新) 命令同时作用于 SDTLB 与 SDMQ, SDIOR 统计的异常信息从 SDecoder 顶层输出, 详细内容见后续章节
 
 ### 接口分组
 
@@ -148,9 +147,9 @@ flowchart LR
 | `cam1_req_*` | Slave | 输入 | 上游 master 发起的请求 |
 | `cam1_rsp_*` | Slave | 输出 | cam1 命中时返回 SLMD |
 | `mq_rsp_*` | Slave | 输出 | 未命中队列的响应, 条目从 SDMQ 弹出后返回的 SLMD 或错误 |
-| `pw_mem_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道, 2 个 SDPWU_SUB 共用, 带 arid 号 |
-| `pw_mem_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道, 2 个 SDPWU_SUB 共用, 带 rid 号 |
-| `cfg_*` | Slave | 输入 / 输出 | 配置内部的寄存器 |
+| `pw_mem_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道, N 个 SDPWU_SUB 共用, 带 arid 号 |
+| `pw_mem_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道, N 个 SDPWU_SUB 共用, 带 rid 号 |
+| `ior_*` | Slave | 输入 / 输出 | 配置内部的寄存器 |
 
 各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 整个 SDecoder 工作在单时钟域下
 
@@ -158,7 +157,7 @@ flowchart LR
 
 由于响应**不**保序, 为了使请求和响应能够匹配, 请求和响应接口都需要带 id 号, **且同一时刻在途的 id 必须唯一**, 上游只能按 id 进行匹配, 不能依赖响应顺序进行匹配
 
-注: 例如先到的请求未命中 SDTLB, 经过长时间 Page Walk 后才能响应, 但后到的请求如果命中 SDTLB, 则会先返回这个后到的命中 SDTLB 的响应
+注: 乱序响应示例: 先到的请求未命中 SDTLB, 经过长时间 Page Walk 后才能响应, 但后到的请求如果命中 SDTLB, 则会先返回这个后到的命中 SDTLB 的响应
 
 ### 命中通路
 
@@ -170,14 +169,18 @@ flowchart LR
 
 注: 由于不设 FIFO, 所以上级模块应尽快从响应接口取走数据, 取走不及时会反压该路的请求接口 (请求端 ready 拉低); 如果上游有能力做到无条件接收响应, 则可以在例化 SDecoder 时将响应端的 ready 信号置为常 1
 
-注: 命中通路通常情况下无阻塞, 会阻塞请求源请求的情况有 3 种: 响应接口数据无法被取走 (命中通路不设 FIFO); SDMQ 将满, 为避免队列溢出; 装填 SDTLB 的当拍 (SDTLB 采用 Latch, 不支持同拍读写)
+注: 命中通路通常情况下无阻塞, 会阻塞请求源请求的情况有 3 种:
+
+1. 响应接口数据无法被取走 (ready 为 0)
+2. SDMQ 将满, 避免队列溢出
+3. 装填 SDTLB 的当拍 (SDTLB 采用 Latch, 不支持同拍读写)
 
 ### 未命中通路
 
 1. 接收: cam0 和 cam1 两组接口独立握手, 两路可以同拍并行接收请求
 2. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ, 支持同拍写入 2 个请求, 只要 SDMQ 还有足够的空间就可以接收请求; SDMQ 将满时同时拉低两路请求接口的 ready, 不再接受新的请求
-3. Page Walk: SDPWU 从 SDMQ 取请求, 并能通过最多 2 次访存获取到 PTE. SDPWU 判定表项合法性, SLMD_CALC_MQ 拼装 SLMD 并检查 SLA 溢出
-   1. 表项合法: SDPWU 把表项交给 SDMQ, 由 SDMQ 回填 SDTLB, 并把表项, PA, id 交给 SLMD_CALC_MQ 拼装 SLMD
+3. Page Walk: SDPWU 从 SDMQ 取请求, 并能通过最多 2 次访存获取到 PTE. SDPWU_SUB 判定表项合法性, SLMD_CALC_MQ 拼装 SLMD 并检查 SLA 溢出
+   1. 表项合法: SDPWU_SUB 把表项连同合法性判定结果交给 SDMQ, 由 SDMQ 回填 SDTLB, 并把表项, PA, id 交给 SLMD_CALC_MQ 拼装 SLMD
    2. 表项合法: SDMQ 中 "命中同段/页" 或 "被软件置无效 (刷新)" 的条目可以被提前弹出, 并继续交由 SLMD_CALC_MQ 做 SLMD 拼装或返回异常响应
    3. 表项非法: 本次 Page Walk 结果不回填 SDTLB, 不扫描 SDMQ "命中同段/页" 的重复条目; 仍扫描 SDMQ 的 flushed 条目, 最后由 SLMD_CALC_MQ 返回异常响应
 
@@ -295,7 +298,7 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 #### 状态机
 
-##### SDPWU 顶层状态机
+##### SDPWU_CTRL
 
 ```mermaid
 flowchart TD
@@ -316,7 +319,7 @@ flowchart TD
     class IDLE blue
 ```
 
-图: SDPWU 顶层状态机图
+图: SDPWU_CTRL 状态机
 
 IDLE 状态向别的状态跳转情况有优先级, 优先级为:
 
@@ -393,12 +396,12 @@ flowchart TD
 
 状态说明:
 
-- `IDLE`: 空闲, 拉高 `pwu_start_valid` 向顶层状态机申请新的未命中请求; 顶层状态机拉高 `pwu_start_ready` 完成握手后, 进入 Page Walk
+- `IDLE`: 空闲, 拉高 `pwu_start_valid` 向 SDPWU_CTRL 申请新的未命中请求; SDPWU_CTRL 拉高 `pwu_start_ready` 完成握手后, 进入 Page Walk
 - `SDT_L1_AR`/`SDT_L1_R`: 访问一级表, 读一级表表项
 - `SDT_L1_ITEM_CHK`: 根据一级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
 - `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表表项
 - `SDT_L2_ITEM_CHK`: 根据二级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
-- `FINISH`: Page Walk 结束, 拉高 `pwu_finish_valid` 并附带 sideband 数据; 顶层状态机拉高 `pwu_finish_ready` 完成握手后, 回到 `IDLE`
+- `FINISH`: Page Walk 结束, 拉高 `pwu_finish_valid` 并附带 sideband 数据; SDPWU_CTRL 拉高 `pwu_finish_ready` 完成握手后, 回到 `IDLE`
 
 `SDT_L1_ITEM_CHK` 状态转移表
 
@@ -664,11 +667,11 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
-| `cfg_wr_en` | I | 1 | 写使能 |
-| `cfg_wr_addr` | I | `CFG_ADDR_WIDTH` | 写地址 |
-| `cfg_wr_data` | I | `SDIOR_DATA_WIDTH` | 写数据 |
-| `cfg_rd_addr` | I | `CFG_ADDR_WIDTH` | 读地址 |
-| `cfg_rd_data` | O | `SDIOR_DATA_WIDTH` | 读数据 |
+| `ior_wr_en` | I | 1 | 写使能 |
+| `ior_wr_addr` | I | `IOR_ADDR_WIDTH` | 写地址 |
+| `ior_wr_data` | I | `SDIOR_DATA_WIDTH` | 写数据 |
+| `ior_rd_addr` | I | `IOR_ADDR_WIDTH` | 读地址 |
+| `ior_rd_data` | O | `SDIOR_DATA_WIDTH` | 读数据 |
 
 ### 异常统计接口
 
