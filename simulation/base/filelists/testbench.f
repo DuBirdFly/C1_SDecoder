@@ -12,6 +12,9 @@
 ./testbench/top/interface/sdecoder_if.sv
 ./testbench/top/interface/age_matrix_if.sv
 
+// Testbench wrapper files
+./testbench/top/wrapper/wrapper_sdtlb.sv
+
 // UVM files
 ./testbench/inc/uvm_header.svh
 ./testbench/seqlib/sdecoder_seq_pkg.svh
@@ -21,5 +24,7 @@
 // Testbench top files
 ./testbench/top/crg.sv
 ./testbench/top/tb_sdtlb.sv
+./testbench/top/tb_sdtlb_err.sv
+./testbench/top/tb_sdtlb_fix.sv
 ./testbench/top/tb_sdtlb_tag_item.sv
 ./testbench/top/tb_age_matrix.sv

@@ -9,9 +9,9 @@ module tb_sdtlb;
     int                                  errors = 0;
     int                                  checks = 0;
 
-    // 响应 (req_hit 与读出的 Tag / Data) 统一从时钟块采样取: DUT 把命中向量打了 1 拍,
-    // 响应只在"请求拍"的下一拍有效, 直接读 `sdtlb_if.req_*` 会和 DUT 输出挤在同一时刻,
-    // 打没打拍都"看起来"一样, 起不到验证作用
+    // 响应 (req_hit 与读出的 Tag / Data) 统一从时钟块采样取: wrapper_sdtlb 把输入打 1 拍,
+    // DUT 再把命中打 1 拍, 响应只在"请求拍"之后第 2 拍有效; 直接读 `sdtlb_if.req_*`
+    // 会和输出挤在同一时刻, 起不到验证作用
     logic                                rsp_hit;
     SDTLB_TAG_ITEM_t                     rsp_tag;
     SDTLB_DATA_ITEM_t                    rsp_data;
@@ -34,25 +34,8 @@ module tb_sdtlb;
     // 实体接口实例, 名字不带 _vif 后缀 (_vif 只给 virtual interface 用)
     sdtlb_if sdtlb_if (.clk(clk), .rst_n(rst_n));
 
-    // DUT 按名字连到接口信号
-    sdtlb dut (
-        .clk(clk), .rst_n(rst_n),
-
-        .cam0_req_valid(sdtlb_if.cam0_req_valid), .cam0_req_ready(sdtlb_if.cam0_req_ready),
-        .cam0_req_pa(sdtlb_if.cam0_req_pa),
-        .cam0_hit(sdtlb_if.cam0_hit),
-        .cam0_hit_tag_item(sdtlb_if.cam0_hit_tag_item), .cam0_hit_data_item(sdtlb_if.cam0_hit_data_item),
-
-        .cam1_req_valid(sdtlb_if.cam1_req_valid), .cam1_req_ready(sdtlb_if.cam1_req_ready),
-        .cam1_req_pa(sdtlb_if.cam1_req_pa),
-        .cam1_hit(sdtlb_if.cam1_hit),
-        .cam1_hit_tag_item(sdtlb_if.cam1_hit_tag_item), .cam1_hit_data_item(sdtlb_if.cam1_hit_data_item),
-
-        .fill_en(sdtlb_if.fill_en), .fill_pa_base(sdtlb_if.fill_pa_base), .fill_pa_up(sdtlb_if.fill_pa_up),
-        .fill_eid(sdtlb_if.fill_eid), .fill_token_id(sdtlb_if.fill_token_id),
-        .fill_s_pfn(sdtlb_if.fill_s_pfn),
-        .inv_all(sdtlb_if.inv_all), .inv_en(sdtlb_if.inv_en), .inv_pa(sdtlb_if.inv_pa)
-    );
+    // DUT 走 wrapper: 所有 input 打 1 拍, tb 只跟 sdtlb_if 打交道
+    wrapper_sdtlb dut (.sdtlb_if(sdtlb_if));
 
 `ifdef DUMP_FSDB
     initial begin
@@ -95,8 +78,9 @@ module tb_sdtlb;
     // 页内偏移 PA[29:0]}; 默认 offset = 0, 需要查"偏移与命中无关"时再给.
     // 本 tb 只打 PA[47] = 0 的地址, 因为 SDecoder 只处理 Mem 空间.
     // 握手完成后 valid 就自行拉低. 打 1 拍的口径:
-    //   "请求拍" —— DUT 刚在这一沿采到 valid / pa, 本次请求的响应还没出来;
-    //   "响应拍" —— 请求拍的下一拍, 这一拍采到的才是本次请求的响应.
+    //   "请求拍" —— wrapper 刚在这一沿采到 valid / pa, 本次请求还没进 DUT;
+    //   "响应拍" —— 请求拍之后第 2 拍 (wrapper 打 1 拍 + DUT 命中打 1 拍),
+    //               这一拍采到的才是本次请求的响应.
     // 本任务等到响应拍才返回, 返回时 rsp_* 即本次请求的响应 (见 sample_rsp);
     // 所以各测试点都是"驱动 -> 取值 -> 再等若干拍才动下一次激励"的次序.
     task automatic set_req(
@@ -109,7 +93,8 @@ module tb_sdtlb;
         // 请求拍: 握手的那一沿 (写 Latch 当拍 ready 为低, 要一直保持 valid 直到被接收)
         do @(sdtlb_if.drv); while (!sdtlb_if.drv.cam0_req_ready);
         sdtlb_if.drv.cam0_req_valid <= 1'b0;
-        @(sdtlb_if.drv);                    // 响应拍 (打 1 拍)
+        @(sdtlb_if.drv);                    // 输入寄存器拍 (wrapper 的所有 input 打 1 拍)
+        @(sdtlb_if.drv);                    // 响应拍 (DUT 自己再打 1 拍)
         sample_rsp();
     endtask
 
@@ -198,8 +183,8 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 打 1 拍: 命中向量的比较链在请求拍末才被采到, 请求拍看不到本次请求的响应,
-        // 响应要到下一拍才有效 (两次采样分别落在请求拍与响应拍)
+        // 打 1 拍: wrapper 先把输入打 1 拍, DUT 再把命中打 1 拍, 所以请求拍看不到
+        // 本次响应, 响应要到请求拍之后第 2 拍才有效
         sdtlb_if.drv.cam0_req_valid <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'hfff, 5'h1f, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);                                // 请求拍
@@ -207,10 +192,13 @@ module tb_sdtlb;
         chk("latency: 请求当拍无命中", rsp_hit == 1'b0);
         chk("latency: 请求当拍读出全 0", (rsp_tag == '0) && (rsp_data == '0));
         sdtlb_if.drv.cam0_req_valid <= 1'b0;
+        @(sdtlb_if.drv);                                // 输入寄存器拍
+        sample_rsp();
+        chk("latency: 输入打拍拍仍无命中", rsp_hit == 1'b0);
         @(sdtlb_if.drv);                                // 响应拍
         sample_rsp();
-        chk("latency: 下一拍才命中", rsp_hit == 1'b1);
-        chk("latency: 下一拍读出正确",
+        chk("latency: 响应拍才命中", rsp_hit == 1'b1);
+        chk("latency: 响应拍读出正确",
             (rsp_tag.pa_base == {12'hfff, 5'h1f}) && (rsp_data.s_pfn == 18'h33333));
         repeat (10) @(sdtlb_if.drv);
 
@@ -300,27 +288,28 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 流水线: valid 可以拍拍有效 (本拍给地址, 下一拍换新地址且 valid 保持),
-        // 响应逐拍滞后 1 拍出现, 且不会串到别的地址上
+        // 流水线: valid 可以拍拍有效 (本拍给地址, 下一拍换新地址且 valid 保持);
+        // wrapper 再打 1 拍后, 响应相对外部请求逐拍滞后 2 拍, 且不会串到别的地址上
         sdtlb_if.drv.cam0_req_valid <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'hfff, 5'h1f, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};   // A: 命中
-        @(sdtlb_if.drv);                                // 请求拍 A
+        @(sdtlb_if.drv);                                // 请求拍 A (wrapper 采样)
         sdtlb_if.drv.cam0_req_pa    <= {12'h001, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};    // B: 命中
-        @(sdtlb_if.drv);                                // 请求拍 B; 响应拍 A
+        @(sdtlb_if.drv);                                // 请求拍 B; A 进 DUT
+        sdtlb_if.drv.cam0_req_pa    <= {12'h002, 5'd9, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};    // C: 未命中
+        @(sdtlb_if.drv);                                // 请求拍 C; 响应拍 A
         sample_rsp();
-        chk("pipeline: 第 2 拍出 A 的响应",
+        chk("pipeline: 第 3 拍出 A 的响应",
             (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'hfff, 5'h1f}) &&
             (rsp_data.s_pfn == 18'h33333));
-        sdtlb_if.drv.cam0_req_pa    <= {12'h002, 5'd9, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};    // C: 未命中
-        @(sdtlb_if.drv);                                // 请求拍 C; 响应拍 B
+        sdtlb_if.drv.cam0_req_valid <= 1'b0;
+        @(sdtlb_if.drv);                                // 响应拍 B
         sample_rsp();
-        chk("pipeline: 第 3 拍出 B 的响应",
+        chk("pipeline: 第 4 拍出 B 的响应",
             (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h001, 5'd0}) &&
             (rsp_data.s_pfn == 18'h0cccc));
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
         @(sdtlb_if.drv);                                // 响应拍 C
         sample_rsp();
-        chk("pipeline: 第 4 拍出 C 的响应 (未命中)",
+        chk("pipeline: 第 5 拍出 C 的响应 (未命中)",
             (rsp_hit == 1'b0) && (rsp_tag == '0) && (rsp_data == '0));
         repeat (10) @(sdtlb_if.drv);
 
@@ -453,7 +442,7 @@ module tb_sdtlb;
         chk("同拍: 全置无效把原有条目也清掉了", rsp_hit == 1'b0);
 
         // ====================================================================
-        // 轮转替换指针: 连填 128 次指针正好绕一圈回到起点条目
+        // 轮转替换指针: 连填 SDTLB_ENTRIES 次指针正好绕一圈回到起点条目
         fill_one(
             .base({12'h100, 5'd0}),
             .up(5'd0),
@@ -461,7 +450,7 @@ module tb_sdtlb;
             .tok(10'h001),
             .pfn(18'h00001)
         );
-        for (int i = 1; i < 128; i++) begin
+        for (int i = 1; i < SDTLB_ENTRIES; i++) begin
             fill_one(
                 .base({12'h100 + 12'(i / 32), 5'(i % 32)}),
                 .up(5'(i % 32)),
@@ -470,7 +459,62 @@ module tb_sdtlb;
                 .pfn(18'(i))
             );
         end
-        repeat (10) @(sdtlb_if.drv);
+        repeat (50) @(sdtlb_if.drv);
+
+        // 给所有 sdtlb 的条目装填上内容后, 逐条回读条目内容, 确保与写入的一致.
+        // 装填从轮转指针当前指向的条目开始, 128 次正好绕一圈, 所以装填结束后指针又回到
+        // 起点: 用 victim_sel 的 one-hot 位置反推 "条目号 -> 第几次装填" 的映射.
+        begin : readback_all_entries
+            int                         start_idx;
+            int                         fill_idx;
+            int                         data_val;
+            int                         mismatch;
+            logic [PA_BASE_WIDTH-1:0]   exp_base;
+            logic [PA_UP_WIDTH-1:0]     exp_up;
+            logic [EID_WIDTH-1:0]       exp_eid;
+            logic [TOKEN_ID_WIDTH-1:0]  exp_tok;
+            logic [S_PFN_WIDTH-1:0]     exp_pfn;
+
+            start_idx = 0;
+            for (int k = 0; k < SDTLB_ENTRIES; k++) begin
+                if (dut.u_sdtlb.victim_sel[k]) begin
+                    start_idx = k;
+                end
+            end
+
+            mismatch = 0;
+            for (int e = 0; e < SDTLB_ENTRIES; e++) begin
+                fill_idx = (e - start_idx + SDTLB_ENTRIES) % SDTLB_ENTRIES;
+
+                // 与上面的装填序列一一对应: 第 0 次用 001/001/00001, 第 i 次用 i
+                exp_base = {12'h100 + 12'(fill_idx / 32), 5'(fill_idx % 32)};
+                exp_up   = 5'(fill_idx % 32);
+                data_val = (fill_idx == 0) ? 1 : fill_idx;
+                exp_eid  = 11'(data_val);
+                exp_tok  = 10'(data_val);
+                exp_pfn  = 18'(data_val);
+
+                if (!((dut.u_sdtlb.tag_item[e].valid === 1'b1) &&
+                      (dut.u_sdtlb.tag_item[e].pa_base === exp_base) &&
+                      (dut.u_sdtlb.tag_item[e].pa_up === exp_up) &&
+                      (dut.u_sdtlb.data_item[e].eid === exp_eid) &&
+                      (dut.u_sdtlb.data_item[e].token_id === exp_tok) &&
+                      (dut.u_sdtlb.data_item[e].s_pfn === exp_pfn))) begin
+                    mismatch++;
+                    $display("FAIL 回读 entry[%0d] (第 %0d 次装填): valid=%b tag=%h/up=%0d data=%h/%h/%h, 期望 tag=%h/up=%0d data=%h/%h/%h",
+                             e, fill_idx,
+                             dut.u_sdtlb.tag_item[e].valid,
+                             dut.u_sdtlb.tag_item[e].pa_base, dut.u_sdtlb.tag_item[e].pa_up,
+                             dut.u_sdtlb.data_item[e].eid, dut.u_sdtlb.data_item[e].token_id,
+                             dut.u_sdtlb.data_item[e].s_pfn,
+                             exp_base, exp_up, exp_eid, exp_tok, exp_pfn);
+                end
+            end
+
+            $display("装填后回读: 起点 entry[%0d], 共比对 %0d 个条目的 Tag / Data",
+                     start_idx, SDTLB_ENTRIES);
+            chk("装填后回读: 所有条目内容与写入一致", mismatch == 0);
+        end
 
         // 先单独按 ADDR0 置无效: 条目变为无效, 但 pa_base / pa_up 仍是 ADDR0 的值
         inv_addr({12'h100, 5'd0});
@@ -497,14 +541,14 @@ module tb_sdtlb;
             (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'd2));
         repeat (10) @(sdtlb_if.drv);
 
-        set_req(.high(12'h103), .idx(5'd31));
-        chk("轮转: 绕圈里的占位条目仍在 (第 128 个)",
-            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'd127));
+        set_req(.high(12'h100 + 12'((SDTLB_ENTRIES - 1) / 32)), .idx(5'((SDTLB_ENTRIES - 1) % 32)));
+        chk("轮转: 绕圈里的占位条目仍在 (最后一个)",
+            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'(SDTLB_ENTRIES - 1)));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 装填反压查表: fill_en 与查表请求同拍时, 装填拍两路 camN_req_ready 拉低,
-        // 请求跨过装填拍才握手; 握手后拿到的是装填后的新 data.
+        // 装填反压查表: wrapper 把输入打 1 拍, 所以 fill 在请求拍的下一个写拍才进 DUT;
+        // 反压也在写拍出现, 查表要跨过写拍才握手, 握手后拿到的是装填后的新 data.
         sdtlb_if.drv.fill_en        <= 1'b1;
         sdtlb_if.drv.fill_pa_base   <= {12'h210, 5'd7};
         sdtlb_if.drv.fill_pa_up     <= 5'd7;
@@ -515,15 +559,22 @@ module tb_sdtlb;
         sdtlb_if.drv.cam0_req_pa    <= {12'h210, 5'd7, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         sdtlb_if.drv.cam1_req_valid <= 1'b1;
         sdtlb_if.drv.cam1_req_pa    <= {12'h210, 5'd7, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        @(sdtlb_if.drv);             // 装填拍: 两路查表都必须被反压
-        chk("装填拍: cam0_req_ready 拉低 (反压查表)",
-            sdtlb_if.drv.cam0_req_ready == 1'b0);
-        chk("装填拍: cam1_req_ready 拉低 (反压查表)",
-            sdtlb_if.drv.cam1_req_ready == 1'b0);
+        @(sdtlb_if.drv);             // 请求拍: fill 还没进 DUT, 两路 ready 仍为高
+        chk("请求拍: ready 尚未拉低 (wrapper 打 1 拍)",
+            (sdtlb_if.drv.cam0_req_ready == 1'b1) &&
+            (sdtlb_if.drv.cam1_req_ready == 1'b1));
         sdtlb_if.drv.fill_en        <= 1'b0;
-        @(sdtlb_if.drv);             // 装填完成, 这一沿才开始握手
+        @(sdtlb_if.drv);             // 写拍: 两路查表都必须被反压
+        chk("写拍: cam0_req_ready 拉低 (反压查表)",
+            sdtlb_if.drv.cam0_req_ready == 1'b0);
+        chk("写拍: cam1_req_ready 拉低 (反压查表)",
+            sdtlb_if.drv.cam1_req_ready == 1'b0);
         sdtlb_if.drv.cam0_req_valid <= 1'b0;
         sdtlb_if.drv.cam1_req_valid <= 1'b0;
+        @(sdtlb_if.drv);             // 写拍之后: 这一沿握手
+        chk("写拍后: ready 恢复",
+            (sdtlb_if.drv.cam0_req_ready == 1'b1) &&
+            (sdtlb_if.drv.cam1_req_ready == 1'b1));
         @(sdtlb_if.drv);             // 响应拍
         sample_rsp();
         chk("fill 后握手: 命中且看到新 data",
@@ -560,6 +611,7 @@ module tb_sdtlb;
         @(sdtlb_if.drv);             // 两路同拍握手
         sdtlb_if.drv.cam0_req_valid <= 1'b0;
         sdtlb_if.drv.cam1_req_valid <= 1'b0;
+        @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
         chk("双端口: cam0 命中自己的条目",
             (sdtlb_if.drv.cam0_hit == 1'b1) &&
@@ -579,7 +631,8 @@ module tb_sdtlb;
         @(sdtlb_if.drv);
         sdtlb_if.drv.cam0_req_valid <= 1'b0;
         sdtlb_if.drv.cam1_req_valid <= 1'b0;
-        @(sdtlb_if.drv);
+        @(sdtlb_if.drv);             // 输入寄存器拍
+        @(sdtlb_if.drv);             // 响应拍
         chk("双端口: cam0 命中 (cam1 未命中不影响它)",
             (sdtlb_if.drv.cam0_hit == 1'b1) &&
             (sdtlb_if.drv.cam0_hit_tag_item.pa_base == {12'h400, 5'd0}) &&
@@ -598,7 +651,8 @@ module tb_sdtlb;
         @(sdtlb_if.drv);
         sdtlb_if.drv.cam0_req_valid <= 1'b0;
         sdtlb_if.drv.cam1_req_valid <= 1'b0;
-        @(sdtlb_if.drv);
+        @(sdtlb_if.drv);             // 输入寄存器拍
+        @(sdtlb_if.drv);             // 响应拍
         chk("双端口: 地址对调后 cam0 读到 400 条目",
             (sdtlb_if.drv.cam0_hit == 1'b1) &&
             (sdtlb_if.drv.cam0_hit_tag_item.pa_base == {12'h400, 5'd0}) &&
