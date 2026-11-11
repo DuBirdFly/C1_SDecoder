@@ -39,7 +39,7 @@ flowchart LR
 
 1. 2 路请求独立, 并行处理
 2. 命中通路流水线处理, 只特殊情况下阻塞流水线
-3. 设置多个 SDPWU_SUB, 但共用 1 组访存接口
+3. 设置 N 个 SDPWU_SUB, 但共用 1 组访存接口
 4. 乱序响应
 
 ### 术语
@@ -90,11 +90,14 @@ flowchart LR
 | `SDMQ_DEPTH` | 8 |
 | `SDIOR_DATA_WIDTH` | 64 |
 | `IOR_ADDR_WIDTH` | 2 |
-| `PW_ID_WIDTH` | 1 |
+| `SDPWU_SUB_NUM` | 4 |
+| `PW_ID_WIDTH` | `$clog2(SDPWU_SUB_NUM)` |
 | `PW_RDATA_WIDTH` | 128 |
 | `PW_RDATA_ERR_WIDTH` | 3 |
 | `MQ_RSP_ERR_WIDTH` | 4 |
 | `CAM_RSP_ERR_WIDTH` | 1 |
+
+注: 暂定 4 个 SDPWU_SUB, 即 SDPWU_SUB_NUM 的数量为 4
 
 ## SDecoder 微结构
 
