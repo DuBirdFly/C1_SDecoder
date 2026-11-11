@@ -83,15 +83,17 @@ flowchart LR
 | `PA_MEM_WIDTH` | 47 |
 | `SLA_WIDTH` | 53 |
 | `EID_WIDTH` | 11 |
-| `TOKEN_ID_WIDTH` | 10 |
+| `TOKEN_ID_WIDTH` | 11 |
 | `TOKEN_VALUE_WIDTH` | 10 |
 | `REQ_ID_WIDTH` | 8 |
 | `SDTLB_ENTRIES` | 128 |
 | `SDMQ_DEPTH` | 8 |
 | `SDIOR_DATA_WIDTH` | 64 |
 | `IOR_ADDR_WIDTH` | 2 |
+| `PW_ID_WIDTH` | 1 |
 | `PW_RDATA_WIDTH` | 128 |
-| `MQ_RSP_ERR_WIDTH` | 6 |
+| `PW_RDATA_ERR_WIDTH` | 3 |
+| `MQ_RSP_ERR_WIDTH` | 4 |
 | `CAM_RSP_ERR_WIDTH` | 1 |
 
 ## SDecoder 微结构
@@ -147,8 +149,8 @@ flowchart LR
 | `cam1_req_*` | Slave | 输入 | 上游 master 发起的请求 |
 | `cam1_rsp_*` | Slave | 输出 | cam1 命中时返回 SLMD |
 | `mq_rsp_*` | Slave | 输出 | 未命中队列的响应, 条目从 SDMQ 弹出后返回的 SLMD 或错误 |
-| `pw_mem_ar*` | Master | 输出 | Page Walk 访存请求, 读地址通道, N 个 SDPWU_SUB 共用, 带 arid 号 |
-| `pw_mem_r*` | Master | 输入 | Page Walk 访存请求, 读数据通道, N 个 SDPWU_SUB 共用, 带 rid 号 |
+| `pw_mem_raddr*` | Master | 输出 | Page Walk 访存请求, 读地址通道, N 个 SDPWU_SUB 共用, 带 id 号 |
+| `pw_mem_rdata*` | Master | 输入 | Page Walk 访存响应, 读数据通道, N 个 SDPWU_SUB 共用, 带 id 号与错误 |
 | `ior_*` | Slave | 输入 / 输出 | 配置内部的寄存器 |
 
 各接口逐信号的定义见 "接口信号" 一节; 另有 `clk` / `rst_n`, 整个 SDecoder 工作在单时钟域下
@@ -201,8 +203,8 @@ flowchart LR
 
 SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 PA[46:0]; 不过虽然 PA[47] 恒为 0, 但现在 Page Table 中仍然保留该位:
 
-1. 一级表的基地址 SDecoder_PTBR_L1[47]
-2. 二级表的基地址 SDecoder_PTBR_L2[47]
+1. 一级表的基地址 IOR.SDecoder_PTBR.SDT_L1_BASE[47]
+2. 二级表的基地址 PTE.SDT_L2_BASE[47]
 
 所以对于一个 PA 请求, 其位域划分如下:
 
@@ -217,19 +219,18 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 1. 代换表必须存放在本芯片的本地 HBM / DDR 上, 不允许存放在远端池化内存中. 否则读表本身就会变成一次远端访问, 会经过一次 SWLink 环回
 2. 代换表在内存中的基地址对界 (要求): 硬件只使用基地址的高位, 不对对界做检查
-   1. SDecoder_PTBR_L1 按 16B 对界 (一级条目大小为 16B)
-   2. SDecoder_PTBR_L2 按 8B 对界 (二级条目大小为 8B)
-3. PA 查表的索引是"基地址 + 索引 × 条目宽度", 一级表本身基地址 SDecoder_PTBR_L1 由软件填写 IO 寄存器, 二级表基地址 SDecoder_PTBR_L2 由一级表条目提供
+   1. IOR.SDecoder_PTBR.SDT_L1_BASE 按 16B 对界 (一级条目大小为 16B)
+   2. PTE.SDT_L2_BASE 按 8B 对界 (二级条目大小为 8B)
+3. PA 查表的索引是"基地址 + 索引 × 条目宽度", 一级表本身基地址 IOR.SDecoder_PTBR.SDT_L1_BASE 由软件填写 IO 寄存器, 二级表基地址 PTE.SDT_L2_BASE 由一级表条目提供
 
 #### 一级表条目
 
-
 | 位域 | 位宽 | 名称 | 说明 |
 | --- | --- | --- | --- |
-| [127:111] | 17 | RSVD | 保留 |
-| [110:66] | 45 | SDecoder_PTBR_L2[47:3] | 二级表基地址字段 |
-| [65:55] | 11 | EID[10:0] | SLMD 的组成部分 |
-| [54:45] | 10 | TokenID[9:0] | SLMD 的组成部分 |
+| [127:112] | 16 | RSVD | 保留 |
+| [111:67] | 45 | PTE.SDT_L2_BASE[47:3] | 二级表基地址字段 |
+| [66:56] | 11 | EID[10:0] | SLMD 的组成部分 |
+| [55:45] | 11 | TokenID[10:0] | SLMD 的组成部分 |
 | [44:35] | 10 | TokenValue[9:0] | SLMD 的组成部分 |
 | [34:12] | 23 | S_PFN[52:30] | 段式代换的 SLA 基址, 以 1GB 对界 |
 | [11:7] | 5 | SEG_LEN[34:30] | 段长度, 以 1GB 对界 |
@@ -244,8 +245,8 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 注: 优先查段式映射, 不命中再去查二级表
 
 - 一级表条目地址
-  - 按条目大小对界 (16B), 因此断言 SDecoder_PTBR_L1[3:0] 为 4'h0, 硬件取 {SDecoder_PTBR_L1[47:4], 4'h0}, 低 4 位忽略
-  - 一级表条目地址 = {SDecoder_PTBR_L1[47:4], 4'h0} + PA[46:35] * 16
+  - 按条目大小对界 (16B), 因此断言 IOR.SDecoder_PTBR.SDT_L1_BASE[3:0] 为 4'h0, 硬件取 {IOR.SDecoder_PTBR.SDT_L1_BASE[47:4], 4'h0}, 低 4 位忽略
+  - 一级表条目地址 = {IOR.SDecoder_PTBR.SDT_L1_BASE[47:4], 4'h0} + PA[46:35] * 16
 
 <br>
 
@@ -270,9 +271,9 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 | 位域 | 位宽 | 名称 | 说明 |
 | --- | --- | --- | --- |
-| [63:55] | 9 | RSVD | 保留 |
-| [54:44] | 11 | EID[10:0] | SLMD 的组成部分 |
-| [43:34] | 10 | TokenID[9:0] | SLMD 的组成部分 |
+| [63:56] | 8 | RSVD | 保留 |
+| [55:45] | 11 | EID[10:0] | SLMD 的组成部分 |
+| [44:34] | 11 | TokenID[10:0] | SLMD 的组成部分 |
 | [33:24] | 10 | TokenValue[9:0] | SLMD 的组成部分 |
 | [23:1] | 23 | S_PFN[52:30] | 页式代换的 SLA 基址, 以 1GB 对界 |
 | [0] | 1 | Valid | 二级条目有效位 |
@@ -280,8 +281,8 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 注: 二级表条目宽度 8B (64 bit)
 
 - 二级表条目地址
-  - 按条目大小对界 (8B), 因此断言 SDecoder_PTBR_L2[2:0] 为 3'h0, 硬件取 {SDecoder_PTBR_L2[47:3], 3'h0}, 低 3 位忽略
-  - L2 条目地址 = {SDecoder_PTBR_L2[47:3], 3'h0} + PA[34:30] * 8
+  - 按条目大小对界 (8B), 因此断言 PTE.SDT_L2_BASE[2:0] 为 3'h0, 硬件取 {PTE.SDT_L2_BASE[47:3], 3'h0}, 低 3 位忽略
+  - L2 条目地址 = {PTE.SDT_L2_BASE[47:3], 3'h0} + PA[34:30] * 8
 
 <br>
 
@@ -303,18 +304,9 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 ```mermaid
 flowchart TD
     IDLE
-    IDLE -->|"存在可以 PageWalk 的条目, 且存在空闲的 PWU"| SDMQ_POP_PW_ITEM
-    IDLE -->|"存在可 flushed 的条目"| SDMQ_CHK
-    SDMQ_POP_PW_ITEM --> PWU_REQ
-    PWU_REQ --> IDLE
-    IDLE -->|"收到 pw_finish_valid"| PWU_RSP
-    PWU_RSP -->|"表项有效"| FILL_SDTLB
-    FILL_SDTLB --> SLMD_RSP_PW_ITEM
-    PWU_RSP -->|"表项无效"| SLMD_RSP_PW_ITEM
-    SLMD_RSP_PW_ITEM --> SDMQ_CHK
-    SDMQ_CHK -->|"有可提前弹出的条目"| SLMD_RSP_PRE_ITEM
-    SLMD_RSP_PRE_ITEM --> SDMQ_CHK
-    SDMQ_CHK -->|"无可提前弹出的条目"| IDLE
+    IDLE -->|"存在可以 PageWalk 的条目, 且存在空闲的 PWU"| MARK_SDMQ_ITEM
+    MARK_SDMQ_ITEM --> PWU_START
+    PWU_START --> IDLE
     classDef blue fill:#e1f5fe,stroke:#0288d1,color:#01579b
     class IDLE blue
 ```
@@ -325,13 +317,13 @@ IDLE 状态向别的状态跳转情况有优先级, 优先级为:
 
 1. IDLE -> SDMQ_CHK
 2. IDLE -> PWU_RSP
-3. IDLE -> SDMQ_POP_PW_ITEM
+3. IDLE -> MARK_SDMQ_ITEM
 
-SDMQ_POP_PW_ITEM 仅维持 1 拍, 在这 1 拍弹出 SDMQ 的 1 个最老的需要做 Page Walk 的条目, 并仲裁一个空闲的 PWU
+MARK_SDMQ_ITEM 仅维持 1 拍, 在这 1 拍弹出 SDMQ 的 1 个最老的需要做 Page Walk 的条目, 并仲裁一个空闲的 PWU
 
-PWU_REQ 仅维持 1 拍, 将 pwu_start_ready 信号的值拉高, 完成与 SDPWU_SUB 子状态机的握手
+PWU_START 仅维持 1 拍, 将 pwu_start_ready 信号的值拉高, 完成与 SDPWU_SUB 子状态机的握手
 
-##### SDPWU 子状态机
+##### SDPWU_SUB
 
 SDPWU 子状态机由 SDPWU_SUB 模块实现, 下图为 SDPWU_SUB 的主要接口.
 
@@ -542,7 +534,7 @@ flowchart LR
 | Tag | `PA_Up[34:30]` | 5 | Latch | 段/页上界 (含), 1GB 对界 |
 | Tag | `Valid` | 1 | FF | 条目有效位 |
 | Data | `EID[10:0]` | 11 | Latch | Entity 标识 |
-| Data | `TokenID[9:0]` | 10 | Latch | 查找上下文使用 |
+| Data | `TokenID[10:0]` | 11 | Latch | 查找上下文使用 |
 | Data | `TokenValue[9:0]` | 10 | Latch | 凭据校验使用 |
 | Data | `S_PFN[52:30]` | 23 | Latch | SLA 基址, 1GB 对界 |
 
@@ -557,10 +549,11 @@ flowchart LR
 2. `PA[47:35] == PA_Base[47:35]`
 3. `PA_Base[34:30] <= PA[34:30] <= PA_Up`
 
-- 128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常配置下最多命中一个 SDTLB 条目; 多命中时数据未定义, 但响应带多命中异常标志
-- Tag CAM 比较是组合逻辑; `hit_vector` 打 1 拍后再用; 请求拍 T 时刻的命中结果固定在 T+1 时刻有效
-- SDTLB 的 Data 用 `hit_vector` 选出命中的条目并输出
-- 装填当拍写入 Latch; 该拍 `camN_req_ready` 拉低, 两路查表请求被反压 (见微结构的 Latch 说明)
+128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常情况下最多命中一个 SDTLB 条目, 多命中时数据未定义 (但考虑响应带 "多命中异常" 标志, 并登记异常寄存器)
+
+SDTLB 的 Tag 类使用组合逻辑进行 CAM 寻找命中条目; `hit_vector` 打 1 拍后再用; 请求拍 T 时刻的命中结果固定在 T+1 时刻有效; SDTLB 的 Data 类字段用 `hit_vector` 选出命中的条目后输出
+
+装填当拍写入 Latch, 当拍禁止读访问条目, 即当拍 `camN_req_ready` 拉低, 两路查表请求被反压 (断言 fill 和 cam_req 不会同拍有效)
 
 命中后的 SLA 计算:
 
@@ -582,13 +575,14 @@ SDTLB 只允许硬件回填, 软件不可写入
 - 装填 SDTLB 条目时, SDTLB 条目的其他字段直接取 PTE 的对应字段
   - `EID / TokenID / TokenValue / S_PFN`
 
-只有无异常的 Page Walk 结果才会回填 SDTLB
+只有无异常的 PTE 才会回填 SDTLB
 
-当 SDTLB 有空闲条目时, 将装填数据填入到空闲的 SDTLB 条目中, 若有多条空闲条目, 则优先装填低位的空闲条目
+同一拍对同一条目同时进行置无效和装填时, **置无效优先, 本次装填丢弃**
 
-当 SDTLB 没有空闲条目时, 将装填数据填入到**伪随机**选择的 SDTLB 条目中, SDTLB 不设多级结构, 被淘汰的条目将被完全丢弃, 只能通过 Page Walk 重新装填
+装填指针:
 
-同一拍对同一条目同时进行置无效和装填时, 置无效优先, 本次装填丢弃
+1. 当 SDTLB 有空闲条目时, 则优先装填数据到 SDTLB 的空闲条目中; 若有多条空闲条目, 则优先装填最低位的空闲条目
+2. 当 SDTLB 没有空闲条目时, 将装填数据填入到**伪随机**选择的 SDTLB 条目中, SDTLB 不设多级结构, 被淘汰的条目将被完全丢弃, 如果后续存在条目需要用到这条条目, 则只能通过 Page Walk 重新装填
 
 ## 接口信号
 
@@ -599,7 +593,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
 | `camN_req_valid` | I | 1 | / |
-| `camN_req_ready` | O | 1 | 装填写 Latch 的当拍拉低, 反压查表请求 (Latch 不支持同拍读写) |
+| `camN_req_ready` | O | 1 | / |
 | `camN_req_pa` | I | `PA_WIDTH` | / |
 | `camN_req_id` | I | `REQ_ID_WIDTH` | / |
 
@@ -624,7 +618,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 | 名称 | 位域 | 说明 |
 | --- | --- | --- |
-| `camN_rsp_hit_onehot0_fail` | [0] | CAM 命中 SDTLB 的条目不唯一 |
+| `tlb_multi_hit` | [0] | CAM 命中多条 SDTLB 条目 |
 
 注: 当软件修改了 Page Table 但未对 SDTLB 做刷新, 可能会出现 SDTLB 中存在多个条目命中同一个 PA 的情况, 即 CAM 命中 SDTLB 的条目不唯一
 
@@ -641,37 +635,61 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `mq_rsp_sla` | O | `SLA_WIDTH` | / |
 | `mq_rsp_err` | O | `MQ_RSP_ERR_WIDTH` | / |
 
+注: mq: miss queue
+
 `mq_rsp_err` 位域含义:
 
 | 名称 | 位域 | 说明 |
 | --- | --- | --- |
-| `pw_ctrl_err` | [5] | Page Walk 发生控制错 |
-| `pw_ecc_err` | [4] | Page Walk 发生 ECC 错 |
-| `pw_page_fault` | [3] | 缺页异常 |
-| `pw_illegal_pte` | [2] | PTE 非法 |
-| `pw_illegal_ptbr_l2` | [1] | 二级表基地址非法 |
-| `pw_illegal_ptbr_l1` | [0] | 一级表基地址非法 |
+| `pw_ctrl_err` | [3] | page walk 发生控制错 |
+| `pw_data_ecc_err` | [2] | page walk 发生数据 ECC 多错 (multi-ecc error) |
+| `pw_oob_access` | [1] | page walk out-of-bounds access, 页表地址越界 |
+| `pw_pte_invalid` | [0] | page walk 返回的 pte 无效 |
+
+注: pw_oob_access 包含了 "1 级表地址越界" 和 "2 级表地址越界"
+
+注: pw_pte_invalid 包含了 "缺页异常" 和 "非法的 pte 数值"
 
 ### 访存接口 (Page Walk)
 
+访存接口的 "读地址通道" 和 "读数据通道分离"
+
+读地址通道:
+
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
-| `pw_mem_araddr` | O | `PA_WIDTH` | / |
-| `pw_mem_arvalid` | O | 1 | / |
-| `pw_mem_arready` | I | 1 | / |
+| `pw_mem_raddr_id` | O | `PW_ID_WIDTH` | / |
+| `pw_mem_raddr` | O | `PA_WIDTH` | / |
+| `pw_mem_raddr_valid` | O | 1 | / |
+| `pw_mem_raddr_ready` | I | 1 | / |
+
+读数据通道:
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
 | `pw_mem_rdata` | I | `PW_RDATA_WIDTH` | / |
-| `pw_mem_rvalid` | I | 1 | / |
-| `pw_mem_rready` | O | 1 | / |
+| `pw_mem_rdata_id` | I | `PW_ID_WIDTH` | / |
+| `pw_mem_rdata_valid` | I | 1 | / |
+| `pw_mem_rdata_ready` | O | 1 | / |
+| `pw_mem_rdata_err` | I | `PW_RDATA_ERR_WIDTH` | / |
+
+`pw_mem_rdata_err` 位域含义:
+
+| 名称 | 位域 | 说明 |
+| --- | --- | --- |
+| `pw_ctrl_err` | [2] | page walk 发生控制错 |
+| `pw_data_ecc_err` | [1] | page walk 发生数据 ECC 多错 (multi-ecc error) |
+| `pw_oob_access` | [0] | page walk out-of-bounds access, 页表地址越界 |
 
 ### 寄存器配置接口
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
-| `ior_wr_en` | I | 1 | 写使能 |
-| `ior_wr_addr` | I | `IOR_ADDR_WIDTH` | 写地址 |
-| `ior_wr_data` | I | `SDIOR_DATA_WIDTH` | 写数据 |
-| `ior_rd_addr` | I | `IOR_ADDR_WIDTH` | 读地址 |
-| `ior_rd_data` | O | `SDIOR_DATA_WIDTH` | 读数据 |
+| `ior_wen` | I | 1 | 写使能 |
+| `ior_waddr` | I | `IOR_ADDR_WIDTH` | 写地址 |
+| `ior_wdata` | I | `SDIOR_DATA_WIDTH` | 写数据 |
+| `ior_raddr` | I | `IOR_ADDR_WIDTH` | 读地址 |
+| `ior_rdata` | O | `SDIOR_DATA_WIDTH` | 读数据 |
 
 ### 异常统计接口
 
@@ -679,24 +697,13 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
-| `invalid_item` | O | 1 | 条目无效 |
-| `illegal_ptbr` | O | 1 | 页表地址非法 (越界) |
-| `data_ecc_err` | O | 1 | Page Walk 数据 ECC 错 |
-| `ctrl_err` | O | 1 | Page Walk 控制错 |
-| `other_err` | O | 1 | 其他错 |
+| `pw_ctrl_err` | O | 1 | page walk 发生控制错 |
+| `pw_data_ecc_err` | O | 1 | page walk 发生数据 ECC 多错 (multi-ecc error) |
+| `pw_oob_access` | O | 1 | page walk out-of-bounds access, 页表地址越界 |
+| `pw_pte_invalid` | O | 1 | page walk 返回的 pte 无效 |
+| `tlb_multi_hit` | O | 1 | CAM 命中 SDTLB 的条目不唯一 |
 
 异常寄存器为 `SDecoder_ES`, 可以通过软件读出, 也可以由软件清除 (W1C)
-
-每个异常统计信号都是某一类异常出现过的汇总位
-
-| 异常统计信号 | 统计类型 |
-| --- | --- |
-| `invalid_item` | 缺页异常 |
-| `invalid_item` | PTE 非法 |
-| `illegal_ptbr` | 一级表/二级表基地址非法 |
-| `data_ecc_err` | Page Walk 数据 ECC 错 |
-| `ctrl_err` | Page Walk 控制错 |
-| `other_err` | SDTLB 多命中 |
 
 ## 可配置的寄存器
 
@@ -706,7 +713,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 | --- | --- | --- |
 | 0 | `SDecoder_IA` | Invalid All, 软件刷新, 置无效所有 SDTLB 条目 |
 | 1 | `SDecoder_IS` | Invalid Selected, 软件刷新, 置无效指定的 SDTLB 条目 |
-| 2 | `SDecoder_PTBR_L1` | Page Table Base Register (Level 1), 一级表基地址 |
+| 2 | `SDecoder_PTBR` | Page Table Base Register, 一级表基地址 |
 | 3 | `SDecoder_ES` | Exception Summary, 异常统计寄存器 |
 | 4 | `SDecoder_Perf_CTL` | Performance Control, 性能统计控制寄存器 |
 | 5 | `SDecoder_SDTLB_AccessCnt` | SDTLB Access Count, SDTLB 访问计数寄存器 |
@@ -720,7 +727,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 #### SDecoder_IS
 
-#### SDecoder_PTBR_L1
+#### SDecoder_PTBR
 
 #### SDecoder_ES
 
