@@ -306,53 +306,44 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
   - SLA[52:30] = S_PFN[52:30]
   - SLA[29:0] = PA[29:0]
 
-#### 状态机
+#### SDPWU_CTRL
 
-##### SDPWU_CTRL
-
-SDPWU_CTRL 是 SDPWU_TOP 的顶层控制单元, 负责控制 N 个 SDPWU 的启动: 当 SDMQ 中存在可以 Page Walk 的条目, 且 SDPWU 存在空闲时, SDPWU_CTRL 从空闲的 SDPWU 中仲裁出 1 个空闲的状态机, 把待做 Page Walk 的条目分配给该 SDPWU, 同时把该条目的 SDMQ 条目号一并交给 SDPWU, 并在 SDMQ 中把该条目标记为 `page_walking`, 随后启动该 SDPWU 做 Page Walk
+SDPWU_CTRL 是 SDPWU_TOP 的控制单元, 负责控制 N 个 SDPWU 的启动: 当 SDMQ 中存在可以 Page Walk 的条目, 且 SDPWU 存在空闲时, SDPWU_CTRL 从空闲的 SDPWU 中仲裁出 1 个空闲的状态机, 把待做 Page Walk 的条目分配给该 SDPWU, 同时把该条目的 SDMQ 条目号一并交给 SDPWU, 并在 SDMQ 中把该条目标记为 `page_walking`, 随后启动该 SDPWU 做 Page Walk
 
 ```mermaid
 flowchart TD
-    MQ(["sdmq_rsp_valid<br/>sdmq_rsp_ready"])
-    MCTRL["SDMQ_CTRL"]
     SDMQ["SDMQ"]
     CTRL["SDPWU_CTRL"]
     SDPWU0(("SDPWU[0]"))
     SDPWU1(("SDPWU[1]"))
     SDPWUN(("SDPWU[N]"))
     SEL(["onehot 选择器"])
-    MCTRL <--> MQ
-    SDMQ -->|"sdmq_pop_valid"| MCTRL
     SDMQ <-->|"sdmq_item_valid<br/>sdmq_item_ready"| CTRL
-    CTRL <-.->|"pwu_start_valid[0]<br/>pwu_start_ready[0]"| SDPWU0
-    CTRL <-.->|"pwu_start_valid[1]<br/>pwu_start_ready[1]"| SDPWU1
-    CTRL <-.->|"pwu_start_valid[N]<br/>pwu_start_ready[N]"| SDPWUN
+    CTRL <-->|"pwu_start_valid[0]<br/>pwu_start_ready[0]"| SDPWU0
+    CTRL <-->|"pwu_start_valid[1]<br/>pwu_start_ready[1]"| SDPWU1
+    CTRL <-->|"pwu_start_valid[N]<br/>pwu_start_ready[N]"| SDPWUN
     SDPWU0 --> SEL
     SDPWU1 --> SEL
     SDPWUN -->|"pwu_finish_valid[N]<br/>pwu_finish_sideband[N]"| SEL
     SEL -->|"pwu_finish_valid<br/>pwu_finish_sideband"| SDMQ
     classDef gray fill:#d9d9d9,stroke:#666666,color:#000000
     classDef orange fill:#fcd5b4,stroke:#c55a11,color:#000000
-    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
-    class MCTRL,SDMQ gray
+    class SDMQ gray
     class CTRL,SDPWU0,SDPWU1,SDPWUN,SEL orange
-    class MQ iface
 ```
 
 图: SDPWU_CTRL 的连接关系
 
 注: 多个 SDPWU 同时空闲时, 仲裁策略为轮转仲裁
 
-##### SDPWU
+#### SDPWU
 
 每个 SDPWU 是一个独立的 Page Walk 子状态机, 由 SDPWU 模块实现, 下图为 SDPWU 的主要接口.
 
-SDPWU 的开始和结束采用 valid+ready 握手
+SDPWU 的开始采用 valid+ready 握手, 结束为单拍有效信号, 不需要握手
 
-- pwu_start_valid 和 pwu_finish_valid 是 SDPWU 的输出
-- pwu_start_ready 和 pwu_finish_ready 是 SDPWU 的输入
-- pwu_finish_valid 附带 sideband 数据, 其中含 SDMQ 条目号与 PTE 的合法性判定结果
+- pwu_start_valid 是 SDPWU 的输出, pwu_start_ready 是 SDPWU 的输入
+- pwu_finish_valid 和 pwu_finish_sideband 是 SDPWU 的输出, 均为单拍有效信号; sideband 中含 SDMQ 条目号与 PTE 的合法性判定结果
 
 ```mermaid
 flowchart LR
@@ -365,21 +356,16 @@ flowchart LR
         S_VALID("pwu_start_valid")
         S_READY("pwu_start_ready")
     end
-    subgraph HS_FINISH["finish 握手"]
-        direction TB
-        F_VALID("pwu_finish_valid")
-        F_READY("pwu_finish_ready")
-    end
+    F(["pwu_finish_valid<br/>pwu_finish_sideband"])
     HS_START <--> IDLE
-    FINISH <--> HS_FINISH
+    FINISH --> F
     WALK <--> TW(["访存接口"])
     classDef iface fill:#ffffff,stroke:#0288d1,color:#01579b
     classDef state fill:#ede9fe,stroke:#7c3aed,color:#3b0764
-    class S_VALID,S_READY,F_VALID,F_READY,TW iface
+    class S_VALID,S_READY,F,TW iface
     class IDLE,WALK,FINISH state
     style SUB fill:#faf5ff,stroke:#a78bfa
     style HS_START fill:#e1f5fe,stroke:#0288d1,rx:12px
-    style HS_FINISH fill:#e1f5fe,stroke:#0288d1,rx:12px
 ```
 
 图: SDPWU 的接口
@@ -398,7 +384,7 @@ flowchart TD
     SDT_L2_R --> SDT_L2_ITEM_CHK
     SDT_L2_ITEM_CHK -->|"表项 valid"| FINISH
     SDT_L2_ITEM_CHK -->|"表项 !valid"| FINISH
-    FINISH -->|"pwu_finish_valid & pwu_finish_ready"| IDLE
+    FINISH -->|"pwu_finish_valid"| IDLE
 ```
 
 图: SDPWU 状态机
@@ -414,7 +400,7 @@ flowchart TD
 - `SDT_L1_ITEM_CHK`: 根据一级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
 - `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表表项
 - `SDT_L2_ITEM_CHK`: 根据二级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
-- `FINISH`: Page Walk 结束, 拉高 `pwu_finish_valid` 并附带 sideband 数据; SDPWU_CTRL 拉高 `pwu_finish_ready` 完成握手后, 回到 `IDLE`
+- `FINISH`: Page Walk 结束, 单拍拉高 `pwu_finish_valid` 并附带 `pwu_finish_sideband`; 随后回到 `IDLE`
 
 `SDT_L1_ITEM_CHK` 状态转移表
 
