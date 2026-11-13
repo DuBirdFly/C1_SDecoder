@@ -94,7 +94,7 @@ flowchart LR
 | `PW_ID_WIDTH` | `$clog2(SDPWU_NUM)` |
 | `PW_RDATA_WIDTH` | 128 |
 | `PW_RDATA_ERR_WIDTH` | 3 |
-| `SDMQ_RSP_ERR_WIDTH` | 4 |
+| `SDMQ_RSP_ERR_WIDTH` | 5 |
 | `CAM_RSP_ERR_WIDTH` | 1 |
 
 注: 暂定 4 个 SDPWU, 即 SDPWU_NUM 的数量为 4
@@ -308,7 +308,9 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 #### SDPWU_CTRL
 
-SDPWU_CTRL 是 SDPWU_TOP 的控制单元, 负责控制 N 个 SDPWU 的启动: 当 SDMQ 中存在可以 Page Walk 的条目, 且 SDPWU 存在空闲时, SDPWU_CTRL 从空闲的 SDPWU 中仲裁出 1 个空闲的状态机, 把待做 Page Walk 的条目分配给该 SDPWU, 同时把该条目的 SDMQ 条目号一并交给 SDPWU, 并在 SDMQ 中把该条目标记为 `page_walking`, 随后启动该 SDPWU 做 Page Walk
+SDPWU_CTRL 是 SDPWU_TOP 的控制单元, 负责控制 N 个 SDPWU 的启动
+
+当 SDMQ 中存在可以 Page Walk 的最老条目, 且存在空闲的 SDPWU 时, SDPWU_CTRL 从空闲的 SDPWU 中仲裁出 1 个空闲的状态机 (轮转仲裁), 把待做 Page Walk 的条目分配给该 SDPWU, 同时把该条目的 SDMQ 条目号一并交给 SDPWU, 并在 SDMQ 中把该条目标记为 `page_walking`, 随后启动该 SDPWU 做 Page Walk
 
 ```mermaid
 flowchart TD
@@ -318,7 +320,7 @@ flowchart TD
     SDPWU1(("SDPWU[1]"))
     SDPWUN(("SDPWU[N]"))
     SEL(["onehot 选择器"])
-    SDMQ <-->|"sdmq_item_valid<br/>sdmq_item_ready"| CTRL
+    SDMQ <-->|"sdmq_pw_valid<br/>sdmq_pw_ready"| CTRL
     CTRL <-->|"pwu_start_valid[0]<br/>pwu_start_ready[0]"| SDPWU0
     CTRL <-->|"pwu_start_valid[1]<br/>pwu_start_ready[1]"| SDPWU1
     CTRL <-->|"pwu_start_valid[N]<br/>pwu_start_ready[N]"| SDPWUN
@@ -334,16 +336,28 @@ flowchart TD
 
 图: SDPWU_CTRL 的连接关系
 
-注: 多个 SDPWU 同时空闲时, 仲裁策略为轮转仲裁
+
+所有 SDPWU 复用一套访存接口, 所以断言 SDMQ 一拍最多接收 1 个 PTE. 所以用一个 onehot 选择器将 N 个 SDPWU 在 Page Walk 完成的输出合并为 1 个.
+
+```mermaid
+flowchart LR
+    RSP("访存接口<br/>(读响应)") --> ROUTER["路由"]
+    ROUTER -->|"读响应"| SDPWU0(("SDPWU[0]"))
+    ROUTER -->|"读响应"| SDPWU1(("SDPWU[1]"))
+    ROUTER -->|"读响应"| SDPWUN(("SDPWU[N]"))
+    SDPWU0 -->|"读请求"| ARB["仲裁"]
+    SDPWU1 -->|"读请求"| ARB
+    SDPWUN -->|"读请求"| ARB
+    ARB --> REQ("访存接口<br/>(读请求)")
+    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
+    class RSP,REQ iface
+```
+
+图: SDPWU 复用一套访存接口示意图
 
 #### SDPWU
 
-每个 SDPWU 是一个独立的 Page Walk 子状态机, 由 SDPWU 模块实现, 下图为 SDPWU 的主要接口.
-
-SDPWU 的开始采用 valid+ready 握手, 结束为单拍有效信号, 不需要握手
-
-- pwu_start_valid 是 SDPWU 的输出, pwu_start_ready 是 SDPWU 的输入
-- pwu_finish_valid 和 pwu_finish_sideband 是 SDPWU 的输出, 均为单拍有效信号; sideband 中含 SDMQ 条目号与 PTE 的合法性判定结果
+每个 SDPWU 是一个独立的 Page Walk 子状态机, 由 SDPWU 模块实现, 每个 SDPWU 一次只能处理一个未命中请求, 最多通过 2 次访存获取到 PTE
 
 ```mermaid
 flowchart LR
@@ -370,67 +384,70 @@ flowchart LR
 
 图: SDPWU 的接口
 
+上图 SDPWU 内的 "IDLE, Page Walk, FINISH" 是 SDPWU 内部状态机的示意. 其中, IDLE 和 FINISH 是 SDPWU 内实际存在的状态机, Page Walk 是多级访存多个状态机的示意
+
+SDPWU 的开始采用 valid+ready 握手, 结束为单拍有效信号, 不需要握手
+
+- pwu_start_valid 是 SDPWU 的输出, pwu_start_ready 是 SDPWU 的输入
+- pwu_finish_valid 和 pwu_finish_sideband 是 SDPWU 的输出, 均为单拍有效信号; sideband 中含 SDMQ 条目号与 PTE 结果的非法标志 `illegal`
+
 ```mermaid
 flowchart TD
     IDLE
     IDLE -->|"pwu_start_valid & pwu_start_ready"| SDT_L1_AR
     SDT_L1_AR --> SDT_L1_R
     SDT_L1_R --> SDT_L1_ITEM_CHK
-    SDT_L1_ITEM_CHK -->|"表项 valid & !illegal 且条目 !hit"| SDT_L2_AR
-    SDT_L1_ITEM_CHK -->|"表项 valid & !illegal 且条目 hit"| FINISH
-    SDT_L1_ITEM_CHK -->|"表项 valid & illegal"| FINISH
-    SDT_L1_ITEM_CHK -->|"表项 !valid"| FINISH
+    SDT_L1_ITEM_CHK -->|"illegal"| FINISH
+    SDT_L1_ITEM_CHK -->|"!illegal & !hit"| SDT_L2_AR
+    SDT_L1_ITEM_CHK -->|"!illegal & hit"| FINISH
     SDT_L2_AR --> SDT_L2_R
     SDT_L2_R --> SDT_L2_ITEM_CHK
-    SDT_L2_ITEM_CHK -->|"表项 valid"| FINISH
-    SDT_L2_ITEM_CHK -->|"表项 !valid"| FINISH
+    SDT_L2_ITEM_CHK -->|"illegal"| FINISH
+    SDT_L2_ITEM_CHK -->|"!illegal"| FINISH
     FINISH -->|"pwu_finish_valid"| IDLE
 ```
 
 图: SDPWU 状态机
 
-注: flushed 即软件通过 IOR 对 SDecoder 进行置无效 (刷新) 操作
-注: 目前 `SDT_L1_ITEM_CHK` 判断非法表项的情况是段的 1GB 上界超出一级表表项的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`
-注: `SDT_L2_ITEM_CHK` 不判断二级表 PTE 合法性
+`illegal` 是 PTE 结果的统一非法标志, 下表描述了可能出现的非法情况, 这些情况都会作为独立的 sideband 信号在 Page Walk 完成时一并输出
+
+表: PTE illegal 说明表
+
+| 非法情况 | 说明 |
+| --- | --- |
+| pw_ctrl_err | page walk 发生控制错 |
+| pw_data_ecc_err | page walk 发生数据 ECC 多错 (multi-ecc error) |
+| pw_oob_access | page walk out-of-bounds access, 页表地址越界 |
+| pw_pte_malformed | page walk 返回的 PTE 字段取值非法 |
+| pw_pte_page_fault | 缺页异常, PTE 未建立 (Valid = 0) |
+
+注: 目前 `SDT_L1_ITEM_CHK` 判断 `pw_pte_malformed` 的情况是段的 1GB 上界超出一级表表项的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`
+
+注: `SDT_L2_ITEM_CHK` 不判断 `pw_pte_malformed` 的情况
 
 状态说明:
 
-- `IDLE`: 空闲, 拉高 `pwu_start_valid` 向 SDPWU_CTRL 申请新的未命中请求; SDPWU_CTRL 拉高 `pwu_start_ready` 完成握手后, 进入 Page Walk
+- `IDLE`: 空闲, 拉高 `pwu_start_valid` 向 SDPWU_CTRL 申请新的未命中请求; 在 SDPWU_CTRL 拉高 `pwu_start_ready` 完成握手后, 进入 Page Walk
 - `SDT_L1_AR`/`SDT_L1_R`: 访问一级表, 读一级表表项
-- `SDT_L1_ITEM_CHK`: 根据一级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
+- `SDT_L1_ITEM_CHK`: 根据一级表表项判定 `illegal` 与段式命中 (详细状态转移关系见后面的状态转移表)
 - `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表表项
-- `SDT_L2_ITEM_CHK`: 根据二级表表项判定命中状态 (详细状态转移关系见后面的状态转移表)
+- `SDT_L2_ITEM_CHK`: 根据二级表表项判定 `illegal` 与页式命中 (详细状态转移关系见后面的状态转移表)
 - `FINISH`: Page Walk 结束, 单拍拉高 `pwu_finish_valid` 并附带 `pwu_finish_sideband`; 随后回到 `IDLE`
 
 `SDT_L1_ITEM_CHK` 状态转移表
 
-| valid | Type | illegal | hit | 行为 |
-| --- | --- | --- | --- | --- |
-| 0 | X | X | X | 缺页异常, Page Walk 结束 |
-| 1 | X | 0 | 0 | 该 32GB 区间不存在段式映射或段式映射未命中, 前往访问二级表 |
-| 1 | X | 1 | X | 非法异常, Page Walk 结束 |
-| 1 | 1 | 0 | 1 | 段式映射命中, Page Walk 结束 |
+| illegal | Type | hit | 行为 |
+| --- | --- | --- | --- |
+| 1 | X | X | 非法 PTE 结果, Page Walk 结束 |
+| 0 | X | 0 | 该 32GB 区间不存在段式映射或段式映射未命中, 前往访问二级表 |
+| 0 | 1 | 1 | 段式映射命中, Page Walk 结束 |
 
 `SDT_L2_ITEM_CHK` 状态转移表
 
-| valid | 行为 |
+| illegal | 行为 |
 | --- | --- |
-| 0 | 缺页异常, Page Walk 结束 |
-| 1 | 二级表 (页表) 命中, Page Walk 结束 |
-
-```mermaid
-flowchart LR
-    RSP("访存接口<br/>(读响应)") --> ROUTER["路由"]
-    ROUTER -->|"读响应"| SUB0(("SDPWU[0]"))
-    ROUTER -->|"读响应"| SUB1(("SDPWU[1]"))
-    SUB0 -->|"读请求"| ARB["仲裁"]
-    SUB1 -->|"读请求"| ARB
-    ARB --> REQ("访存接口<br/>(读请求)")
-    classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
-    class RSP,REQ iface
-```
-
-图: SDPWU 复用一套访存接口示意图
+| 1 | 非法 PTE 结果, Page Walk 结束 |
+| 0 | 二级表 (页表) 命中, Page Walk 结束 |
 
 ### SDMQ
 
@@ -537,7 +554,7 @@ flowchart LR
 | 写入 | 只允许硬件装填 |
 | 清除 | 由刷新接口置无效 |
 
-注: SDTLB 条目除 `Valid` 用 FF 外, 其余字段都用 Latch. Latch 被同拍读写时行为未知, 因此装填与查表不能同拍进行: 装填当拍写入 Latch, 该拍由 SDTLB 拉低 `camN_req_ready` 反压所有查表请求.
+注: SDTLB 条目除 `Valid` 用 FF 外, 其余字段都用 Latch. Latch 被同拍读写时行为未知, 因此装填与查表不能同拍进行: 装填当拍写入 Latch, 该拍由 SDTLB 拉低所有请求端 ready 信号, 反压所有查表请求.
 
 注: 置无效与装填同拍发生时, 置无效优先, 本次装填丢弃 (`Valid` 不被置起)
 
@@ -656,14 +673,15 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 | 名称 | 位域 | 说明 |
 | --- | --- | --- |
-| `pw_ctrl_err` | [3] | page walk 发生控制错 |
-| `pw_data_ecc_err` | [2] | page walk 发生数据 ECC 多错 (multi-ecc error) |
-| `pw_oob_access` | [1] | page walk out-of-bounds access, 页表地址越界 |
-| `pw_pte_invalid` | [0] | page walk 返回的 pte 无效 |
+| `pw_ctrl_err` | [4] | page walk 发生控制错 |
+| `pw_data_ecc_err` | [3] | page walk 发生数据 ECC 多错 (multi-ecc error) |
+| `pw_oob_access` | [2] | page walk out-of-bounds access, 页表地址越界 |
+| `pw_pte_malformed` | [1] | page walk 返回的 PTE 字段取值非法 |
+| `pw_pte_page_fault` | [0] | 缺页异常, PTE 未建立 (Valid = 0) |
 
 注: pw_oob_access 包含了 "1 级表地址越界" 和 "2 级表地址越界"
 
-注: pw_pte_invalid 包含了 "缺页异常" 和 "非法的 pte 数值"
+注: `pw_pte_page_fault` 指缺页异常, 即 PTE 未建立 (Valid = 0); `pw_pte_malformed` 指 PTE 字段取值非法
 
 ### 访存接口 (Page Walk)
 
@@ -715,7 +733,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `pw_ctrl_err` | O | 1 | page walk 发生控制错 |
 | `pw_data_ecc_err` | O | 1 | page walk 发生数据 ECC 多错 (multi-ecc error) |
 | `pw_oob_access` | O | 1 | page walk out-of-bounds access, 页表地址越界 |
-| `pw_pte_invalid` | O | 1 | page walk 返回的 pte 无效 |
+| `pw_pte_malformed` | O | 1 | page walk 返回的 PTE 字段取值非法 |
+| `pw_pte_page_fault` | O | 1 | 缺页异常, PTE 未建立 (Valid = 0) |
 | `tlb_multi_hit` | O | 1 | CAM 命中 SDTLB 的条目不唯一 |
 
 异常寄存器为 `SDecoder_ES`, 可以通过软件读出, 也可以由软件清除 (W1C)
