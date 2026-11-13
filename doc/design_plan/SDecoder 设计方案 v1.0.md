@@ -135,7 +135,7 @@ flowchart LR
 
 - **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 且会额外附带一些其他标识位; SDMQ 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄关系和标识位信息, 把 SDMQ 的条目从老到年轻输出给 SDPWU_TOP 做 Page Walk; SDMQ 可以用 Page Walk 返回的合法的表项回填 SDTLB; SDMQ 可以被 SDIOR 置无效; SDMQ 允许所有命中 PTE 的条目提前响应
 
-- **SDPWU_TOP**: Page Walk 访存单元, 内含 SDPWU_CTRL 和 N 个 SDPWU (子状态机); 从 SDMQ 取最年老的未命中请求, 在访存接口上发起 Page Walk 访存, 最多可以做两级 Page Walk; 每个 SDPWU 一次处理一个未命中请求; N 个 SDPWU 受 SDPWU_CTRL 控制, 分时复用 SDPWU_TOP 的访存接口和 SDMQ 的条目接口 (同一时刻每组接口最多只被 1 个 SDPWU 占用). SDPWU 在内部判定表项的合法性, 把表项连同合法性判定结果交给 SDMQ, 并由 SDMQ 回填 SDTLB; SLMD_CALC_SDMQ 负责拼装 SLMD 或返回异常响应
+- **SDPWU_TOP**: Page Walk 访存单元, 内含 SDPWU_CTRL 和 N 个 SDPWU (子状态机); 从 SDMQ 取最老的未命中请求, 在访存接口上发起 Page Walk 访存, 最多可以做两级 Page Walk; 每个 SDPWU 一次处理一个未命中请求; N 个 SDPWU 受 SDPWU_CTRL 控制, 分时复用 SDPWU_TOP 的访存接口和 SDMQ 的条目接口 (同一时刻每组接口最多只被 1 个 SDPWU 占用). SDPWU 在内部判定表项的合法性, 把表项连同合法性判定结果交给 SDMQ, 并由 SDMQ 回填 SDTLB; SLMD_CALC_SDMQ 负责拼装 SLMD 或返回异常响应
 
 - **SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, 未命中队列响应 (SDMQ 条目弹出); 3 个实例相互独立, 每个实例只驱动对应的响应接口
 
@@ -186,18 +186,18 @@ flowchart LR
 2. 未命中: cam0 和 cam1 的未命中都写入同一个 SDMQ, 支持同拍写入 2 个请求, 只要 SDMQ 还有足够的空间就可以接收请求
    1. 由于 2 路共用 SDMQ, 且 2 路 cam 请求机会均等, 所以 SDMQ 将满时同时反压 2 路 cam 请求
 3. Page Walk: SDPWU_TOP 从 SDMQ 取请求, 并分发给空闲的 SDPWU 做 Page Walk
-   1. SDMQ 按年龄从老到年轻取请求, 仲裁到空闲的 SDPWU 后, 把该条目标记为 page_walking
+   1. SDMQ 按年龄从老到年轻取请求, 仲裁到空闲的 SDPWU 后, 把该条目标记为 page_walk_start
    2. 每个 SDPWU 一次只能处理一个未命中请求, 最多通过 2 次访存获取到 PTE
    3. SDPWU 完成 Page Walk 后, 在 SDPWU 内部判定表项合法性, 并将 PTE 连同合法性判定结果交给 SDMQ
 4. SDMQ 接收 PTE
    1. 所有 SDPWU 复用一套访存接口, 所以断言 SDMQ 一拍最多接收 1 个 PTE
-   2. 接收 PTE 结果时 CAM 所有 SDMQ 条目, 将命中条目都标记 pte_hit, 且附带用于拼装 SLMD 的信息
-   3. 接收 PTE 结果时, 按 sideband 中的 SDMQ 条目号, 将对应条目的 page_walking 标记撤销
+   2. 接收 PTE 时 CAM 所有 SDMQ 条目, 将命中条目都标记 pte_hit, 且附带用于拼装 SLMD 的信息
+   3. 接收 PTE 时, 按 sideband 中的 SDMQ 条目号, 撤销对应条目的 page_walk_start 并置起 page_walk_finish
 5. 装填 SDTLB
-   1. SDMQ 接收 PTE 时, 如果 PTE 对应的标记为 page_walking 的条目被标记为 pte_hit (说明该 PTE 覆盖它的 PA), 则用该 PTE 装填 SDTLB; 否则不装填
+   1. SDMQ 接收 PTE 时, 如果 PTE 对应的标记为 page_walk_start 的条目被标记为 pte_hit (说明该 PTE 覆盖它的 PA), 则用该 PTE 装填 SDTLB; 否则不装填
 6. 响应 SLMD
-   1. 按照年龄顺序, 依次响应 "valid & !page_walking & (pte_hit | flushed)" 的条目
-   2. SLMD 响应的 "valid & ready" 握手完成后, 将对应的 SDMQ 条目的 valid 撤销
+   1. SLMD_CALC_SDMQ 通过 `sdmq_pop_valid` / `sdmq_pop_ready` 从 SDMQ 取走可响应的最老条目, 握手后 SDMQ 在下一拍把该条目的 valid 置为 0
+   2. SLMD_CALC_SDMQ 在握手当拍拼装 SLMD, 用 FF 寄存后, 再在响应接口上完成 valid / ready 握手
 
 ## 模块详细设计
 
@@ -310,7 +310,7 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 SDPWU_CTRL 是 SDPWU_TOP 的控制单元, 负责控制 N 个 SDPWU 的启动
 
-当 SDMQ 中存在可以 Page Walk 的最老条目, 且存在空闲的 SDPWU 时, SDPWU_CTRL 从空闲的 SDPWU 中仲裁出 1 个空闲的状态机 (轮转仲裁), 把待做 Page Walk 的条目分配给该 SDPWU, 同时把该条目的 SDMQ 条目号一并交给 SDPWU, 并在 SDMQ 中把该条目标记为 `page_walking`, 随后启动该 SDPWU 做 Page Walk
+当 SDMQ 中存在可以 Page Walk 的最老条目, 且存在空闲的 SDPWU 时, SDPWU_CTRL 从空闲的 SDPWU 中仲裁出 1 个空闲的状态机 (轮转仲裁), 把待做 Page Walk 的条目分配给该 SDPWU, 同时把该条目的 SDMQ 条目号一并交给 SDPWU, 并在 SDMQ 中把该条目标记为 `page_walk_start`, 随后启动该 SDPWU 做 Page Walk
 
 ```mermaid
 flowchart TD
@@ -487,7 +487,7 @@ flowchart LR
 图: SDMQ 的内部结构
 
 注: SDMQ 使用年龄矩阵进行管理
-注: 两路 CAM 未命中的请求可以同拍申请 SDMQ 条目, `age_matrix` 随之更新年龄关系
+注: 两路 CAM 未命中的请求可以同拍装填 SDMQ 条目, `age_matrix` 随之更新年龄关系
 注: 按年龄挑出最老的需要 Page Walk 的条目, 送给 SDPWU_TOP 做 Page Walk
 注: 按年龄挑出最老的可以响应输出的条目, 送给 SLMD_CALC_MQ 做 SLMD 拼装或返回异常响应
 
@@ -501,7 +501,9 @@ SDMQ 是一个深度为 `SDMQ_DEPTH` 的队列, 每个条目主要存储 SDTLB �
 | --- | --- | --- |
 | valid | 1 | 条目有效位 |
 | flushed | 1 | 条目被软件置无效位 (刷新) |
-| page_walking | 1 | 该条目已分配给 SDPWU, Page Walk 进行中 |
+| page_walk_start | 1 | 该条目已分配给 SDPWU, Page Walk 已开始 |
+| page_walk_finish | 1 | 该条目的 Page Walk 已结束 |
+| page_walk_err | `SDMQ_RSP_ERR_WIDTH` | Page Walk 异常时带回的错误位, 位域同 `sdmq_rsp_err` |
 | pte_hit | 1 | PTE 结果是否被当前条目命中 |
 
 表: SDMQ 条目的字段 (数据类):
@@ -520,38 +522,80 @@ SDMQ 是一个深度为 `SDMQ_DEPTH` 的队列, 每个条目主要存储 SDTLB �
 
 年龄矩阵的大小为 `SDMQ_DEPTH × SDMQ_DEPTH`, 记录 SDMQ 中每个条目的年龄关系, `age_matrix[i][j] = 1` 表示 SDMQ 中第 i 个条目比第 j 个条目更老
 
-申请 SDMQ 条目时, 按照请求写入条目的顺序, 设置各个条目的年龄关系, 先写入的条目比后写入的条目更老
+装填 SDMQ 条目时, 按照写入条目的顺序, 设置各个条目的年龄关系, 先写入的条目比后写入的条目更老
 
-注: 因为 SDMQ 是乱序删除其中的条目的 (后写入的条目可能先被删除), 所以不能使用传统队列的读写指针控制 MISS 请求的输出, 所以这里用年龄矩阵来记录 SDMQ 中每个条目的年龄关系, 年老的条目优先输出, 即使后写入的条目先被删除后又被申请, 该条目也是最年轻的
+注: SDMQ 乱序弹出其中的条目 (后写入的条目可能先被弹出), 所以不能使用传统队列的读写指针控制 MISS 请求的输出, 所以这里用年龄矩阵来记录 SDMQ 中每个条目的年龄关系, 较老的条目优先输出, 即使后写入的条目先被弹出后又被装填, 该条目也是最年轻的
 
-注: 如果 2 个 Miss 请求同拍申请 SDMQ 条目, 那么申请到条目号比较大的那个请求更年轻
+注: 如果 2 个 Miss 请求同拍装填 SDMQ 条目, 那么装填到条目号比较大的那个请求更年轻
 
-#### 申请条目
+#### 装填条目 (SDMQ)
 
-当 SDTLB 未命中时, 向 SDMQ 申请条目, 将该请求的 PA[46:0] 和 req_id 写入 SDMQ. 如果 SDMQ 将满, 则同时拉低两路请求接口的 ready, 不再接受任何新的请求
+当 SDTLB 未命中时, 向 SDMQ 装填条目:
 
-由于 SDTLB 有 2 个 CAM 接口, SDMQ 可以同拍接收 2 条请求的条目申请, 所以 "SDMQ 将满" 指的是 SDMQ 里还剩 0 或 1 个空闲条目; 也就是说 SDMQ 的有效深度是 `SDMQ_DEPTH-1`
+1. 将 SDMQ 条目的 valid 置为 1
+2. 将 SDMQ 条目非 valid 的控制类字段均置为 0
+3. 将该请求的 PA[46:0] 和 req_id 也一并写入 SDMQ
 
-SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**申请条目时的相关性判断. "同一时刻在途的 id 必须唯一, 响应按 id 乱序返回, 上游按 id 匹配", 所以即使 PA[46:30] 完全相同, 它们的 id 也必然不同. 因此**不能把多个请求合并成同一个 SDMQ 条目**; 但一次 Page Walk 得到的 PTE 可以服务多个 SDMQ 条目, 一次 Page Walk 可能导致多个 SDMQ 条目被弹出
+装填在本拍写入, 下一拍生效; 可断言装填当拍该条目仍处于无效状态
 
-注: 当 SDMQ 还剩 2 个空闲条目, 此时 2 个 CAM 请求接口的 ready 信号还是处于高电平. 若此时 2 个请求同时申请 SDMQ, 则 SDMQ 会被写满, 即还剩 0 个空闲条目. 2 个 CAM 请求接口的 ready 信号此时应该拉低反压上游请求, 直到 SDMQ 弹出 2 个条目后才恢复 ready 高电平
+SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**装填条目时的相关性判断. "同一时刻在途的 id 必须唯一, 响应按 id 乱序返回, 上游按 id 匹配", 所以即使 PA[46:30] 完全相同, 它们的 id 也必然不同. 因此**不能把多个请求合并成同一个 SDMQ 条目**
 
-注: 当 SDMQ 还剩 2 个空闲条目, 此时 2 个 CAM 请求接口的 ready 信号还是处于高电平. 若此时 1 个 CAM 请求接口申请 SDMQ, 则 SDMQ 还能剩下 1 个空闲条目. 为避免之后 2 个请求同时申请 SDMQ 而导致 SDMQ 溢出, 2 个 CAM 请求接口的 ready 信号此时**提前**拉低反压上游请求, 直到 SDMQ 弹出 1 个条目后才恢复 ready 高电平
+SDMQ 将满时同时拉低两路请求接口的 ready 信号, 不再接受任何新的请求; 因此断言装填有效时, 一定存在空闲的 SDMQ 条目
+
+由于 SDTLB 有 2 个 CAM 接口, SDMQ 可以同拍接收 2 条请求的条目装填, 所以 "SDMQ 将满" 指的是 SDMQ 里还剩 0 或 1 个空闲条目; 也就是说 SDMQ 的有效深度是 `SDMQ_DEPTH-1`
+
+空闲条目数量与反压上游示例:
+
+- 当 SDMQ 还剩 2 个空闲条目, 此时 2 个 CAM 请求接口的 ready 信号还是处于高电平. 若此时 2 个请求同时装填 SDMQ, 则 SDMQ 会被写满, 即还剩 0 个空闲条目. 2 个 CAM 请求接口的 ready 信号此时应该拉低反压上游请求, 直到 SDMQ 弹出 2 个条目后才恢复 ready 高电平
+- 当 SDMQ 还剩 2 个空闲条目, 此时 2 个 CAM 请求接口的 ready 信号还是处于高电平. 若此时 1 个 CAM 请求接口装填 SDMQ, 则 SDMQ 还能剩下 1 个空闲条目. 为避免之后 2 个请求同时装填 SDMQ 而导致 SDMQ 溢出, 2 个 CAM 请求接口的 ready 信号此时**提前**拉低反压上游请求, 直到 SDMQ 弹出 1 个条目后才恢复 ready 高电平
 
 注: 与 Core 内 DTB 不同, Core 内 DTBMQ (DTB_MISS_QUEUE) 如果只有 1 个空闲条目, 则将空闲条目分配给流水线 A 上的请求, 流水线 B 上的请求做 "DTBMQ 满" 的冲突处理; SDecoder 的 2 个 CAM 请求接口是机会均等的, 应该不会出现优先把空闲条目分配给某一路请求的情况, 所以 SDMQ 将满但未满时提前拉低 ready
 
 #### 置无效条目
 
+在置无效请求的当拍, 对 SDMQ 的条目进行置无效. 置无效不修改 SDMQ 条目的 valid 字段, 而是修改 SDMQ 条目的 flushed 字段
+
+置无效操作的优先级: 装填 > 弹出 > 置无效
+
+1. "装填" 只作用于无效条目, 装填不受同拍置无效影响. 装填条目的下一拍, 该条目的 valid 置为 1, 被装填条目的其余控制类字段均置为 0
+2. "弹出" 只作用于有效条目, 弹出不受同拍置无效影响. 弹出当拍 SDMQ 送出的条目仍为有效条目, 下一拍 SDMQ 把该条目的 valid 置为 0
+3. "置无效" 只把已存在的有效条目标记为 flushed
+
+注: 事实上 "装填" 和 "弹出" 断言不会同拍有效, 因为断言装填只作用于无效条目, 断言弹出只作用于有效条目, 所以断言对同一条目, 不存在同拍同时进行装填和弹出的情况, 但代码里保留 "装填 > 弹出" 的优先级关系
+
+注: SDMQ 条目只有 PA 信息, 没有段的概念, 而 `SDecoder_IS` 的置无效粒度是段, 两者存在语义上的分歧. 目前按 `PA[47:30]` 完全一致来实现, 即同一个 1GB 页内的所有 SDMQ 条目会一起被置无效 (待确认)
+
+#### 弹出条目
+
+从 SDMQ 中所有满足 `valid & !page_walk_start & (pte_hit | flushed | page_walk_finish)` 的条目里, 挑选最老的条目弹出
+
+弹出指 SDMQ 与 SLMD_CALC_SDMQ 之间的 `sdmq_pop_valid` / `sdmq_pop_ready` 握手
+
+SDMQ 与 SLMD_CALC_SDMQ 握手当拍, SLMD_CALC_SDMQ 用 SDMQ 送出的条目组合拼装出 SLMD, 并用 FF 寄存该 SLMD; 这样响应接口上 valid 为 1 期间荷载可以保持不变
+
+弹出条目的响应形式:
+
+1. `pte_hit = 1`: 返回正常的 SLMD
+2. `page_walk_finish = 1 且 pte_hit = 0`: 返回异常响应, `sdmq_rsp_err` 取该条目的 `page_walk_err`
+3. `flushed = 1`: 返回无效响应, 置起 `sdmq_rsp_flushed`; 此时不需要 `sdmq_rsp_err`
+4. 一条条目同时满足多个条件时, 优先级为 `pte_hit` > `flushed` > `page_walk_finish`
+
+#### 发起 Page Walk
 
 
-#### 删除条目
+#### Page Walk 结束
 
+SDMQ 收到 `pwu_finish_valid` 后:
 
-#### 取条目做 Page Walk
+1. 用 `pwu_finish_sideband` 中的 SDMQ 条目号找到发起本次 Page Walk 的条目, 撤销它的 `page_walk_start`, 并置起 `page_walk_finish`
+2. 如果 PTE 合法: 用 PTE 覆盖的映射范围与 SDMQ 中剩余条目做 CAM 比较, 命中的条目标记 `pte_hit`, 并写入拼装 SLMD 需要的数据 (`pte_hit_pa_base` / `pte_hit_eid` / `pte_hit_token_id` / `pte_hit_token_value` / `pte_hit_s_pfn`); 发起本次 Page Walk 的条目自身也必然命中
+3. 如果 PTE 非法: 不标记 `pte_hit`, 把 `pwu_finish_sideband` 中的错误位写进发起条目的 `page_walk_err`
+
+注: 一次 Page Walk 得到的 PTE 可以服务多个 SDMQ 条目, 一次 Page Walk 可能把多个 SDMQ 条目标记为 `pte_hit`
 
 #### 装填 SDTLB
 
-避免重复装填: XXXXXXXXXXXXXXX
+<!-- 避免重复装填 -->
 
 ### SDTLB
 
@@ -627,7 +671,7 @@ SLA[52:30] = S_PFN[52:30] + (PA[34:30] - PA_Base[34:30])
 SLA[29:0]  = PA[29:0]
 ```
 
-#### 装填条目
+#### 装填条目 (SDTLB)
 
 SDTLB 只允许硬件回填, 软件不可写入
 
@@ -699,6 +743,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `sdmq_rsp_token_value` | O | `TOKEN_VALUE_WIDTH` | / |
 | `sdmq_rsp_sla` | O | `SLA_WIDTH` | / |
 | `sdmq_rsp_err` | O | `SDMQ_RSP_ERR_WIDTH` | / |
+| `sdmq_rsp_flushed` | O | 1 | 条目被软件置无效 (刷新), 本次返回无效响应 |
 
 `sdmq_rsp_err` 位域含义:
 
