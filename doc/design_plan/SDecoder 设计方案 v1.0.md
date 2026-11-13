@@ -192,7 +192,7 @@ flowchart LR
 4. SDMQ 接收 PTE
    1. 所有 SDPWU 复用一套访存接口, 所以断言 SDMQ 一拍最多接收 1 个 PTE
    2. 接收 PTE 时 CAM 所有 SDMQ 条目, 将命中条目都标记 pte_hit, 且附带用于拼装 SLMD 的信息
-   3. 接收 PTE 时, 按 sideband 中的 SDMQ 条目号, 撤销对应条目的 page_walk_start 并置起 page_walk_finish
+   3. 接收 PTE 时, 按 sideband 中的 SDMQ 条目号, 置起对应条目的 page_walk_finish
 5. 装填 SDTLB
    1. SDMQ 接收 PTE 时, 如果 PTE 对应的标记为 page_walk_start 的条目被标记为 pte_hit (说明该 PTE 覆盖它的 PA), 则用该 PTE 装填 SDTLB; 否则不装填
 6. 响应 SLMD
@@ -501,7 +501,7 @@ SDMQ 是一个深度为 `SDMQ_DEPTH` 的队列, 每个条目主要存储 SDTLB �
 | --- | --- | --- |
 | valid | 1 | 条目有效位 |
 | flushed | 1 | 条目被软件置无效位 (刷新) |
-| page_walk_start | 1 | 该条目已分配给 SDPWU, Page Walk 已开始 |
+| page_walk_start | 1 | 该条目已分配给 SDPWU 开始过 Page Walk |
 | page_walk_finish | 1 | 该条目的 Page Walk 已结束 |
 | page_walk_err | `SDMQ_RSP_ERR_WIDTH` | Page Walk 异常时带回的错误位, 位域同 `sdmq_rsp_err` |
 | pte_hit | 1 | PTE 结果是否被当前条目命中 |
@@ -567,7 +567,20 @@ SDMQ 将满时同时拉低两路请求接口的 ready 信号, 不再接受任何
 
 #### 弹出条目
 
-从 SDMQ 中所有满足 `valid & !page_walk_start & (pte_hit | flushed | page_walk_finish)` 的条目里, 挑选最老的条目弹出
+从 SDMQ 中挑选最老的条目弹出, 候选条目需同时满足:
+
+- `valid = 1`
+- `page_walk_busy = 0`, 即该条目没有在途的 Page Walk
+- 满足以下任一
+  - `pte_hit = 1` (已命中 PTE)
+  - `flushed = 1` (被软件置无效)
+  - `page_walk_finish = 1` (Page Walk 已结束)
+
+等价表达式: `valid & !page_walk_busy & (pte_hit | flushed | page_walk_finish)`
+
+注: `page_walk_busy = page_walk_start & !page_walk_finish`, 当 `page_walk_busy` 为 1 时, 即使 `pte_hit` 或 `flushed` 也不参与弹出
+
+注: 可能因为 Page Walk 出错的原因, 条目内容是 pte_hit = 0, flushed = 0, page_walk_finish = 1
 
 弹出指 SDMQ 与 SLMD_CALC_SDMQ 之间的 `sdmq_pop_valid` / `sdmq_pop_ready` 握手
 
@@ -587,7 +600,7 @@ SDMQ 与 SLMD_CALC_SDMQ 握手当拍, SLMD_CALC_SDMQ 用 SDMQ 送出的条目组
 
 SDMQ 收到 `pwu_finish_valid` 后:
 
-1. 用 `pwu_finish_sideband` 中的 SDMQ 条目号找到发起本次 Page Walk 的条目, 撤销它的 `page_walk_start`, 并置起 `page_walk_finish`
+1. 用 `pwu_finish_sideband` 中的 SDMQ 条目号找到发起本次 Page Walk 的条目, 置起它的 `page_walk_finish`
 2. 如果 PTE 合法: 用 PTE 覆盖的映射范围与 SDMQ 中剩余条目做 CAM 比较, 命中的条目标记 `pte_hit`, 并写入拼装 SLMD 需要的数据 (`pte_hit_pa_base` / `pte_hit_eid` / `pte_hit_token_id` / `pte_hit_token_value` / `pte_hit_s_pfn`); 发起本次 Page Walk 的条目自身也必然命中
 3. 如果 PTE 非法: 不标记 `pte_hit`, 把 `pwu_finish_sideband` 中的错误位写进发起条目的 `page_walk_err`
 
