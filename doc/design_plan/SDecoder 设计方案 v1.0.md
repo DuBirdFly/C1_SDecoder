@@ -118,7 +118,7 @@ flowchart LR
     SDPWU@{ shape: dbl-circ, label: "SDPWU_TOP<br/>(含 SDPWU_CTRL 与 N 个 SDPWU)" }
     SDPWU <-->|"读表项"| TW(["Page Walk 访存接口"])
     SDMQ -->|"回填"| TLB
-    SDMQ -->|"PA, id, 附带信息"| CALC2["SLMD_CALC_MQ"]
+    SDMQ -->|"PA, id, 附带信息"| CALC2["SLMD_CALC_SDMQ"]
     CALC0 -->|"SLMD"| RSP0(["cam0 响应接口"])
     CALC1 -->|"SLMD"| RSP1(["cam1 响应接口"])
     CALC2 -->|"SLMD"| MQRSP(["未命中队列响应接口"])
@@ -127,7 +127,7 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,MQRSP,CFG iface
 ```
 
-2 路独立的输入请求进入同一个 SDTLB 做 CAM 查表: 命中时由对应的 SLMD_CALC_CAM 计算出 SLMD, 从该路的响应接口返回 (命中通路); 未命中时写入 SDMQ, 交由 SDPWU_TOP 做 Page Walk, Page Walk 得到的合法表项由 SDMQ 回填 SDTLB, 同时经 SLMD_CALC_MQ 计算出 SLMD, 并从未命中队列响应接口返回 (未命中通路)
+2 路独立的输入请求进入同一个 SDTLB 做 CAM 查表: 命中时由对应的 SLMD_CALC_CAM 计算出 SLMD, 从该路的响应接口返回 (命中通路); 未命中时写入 SDMQ, 交由 SDPWU_TOP 做 Page Walk, Page Walk 得到的合法表项由 SDMQ 回填 SDTLB, 同时经 SLMD_CALC_SDMQ 计算出 SLMD, 并从未命中队列响应接口返回 (未命中通路)
 
 各模块的职责如下:
 
@@ -135,7 +135,7 @@ flowchart LR
 
 - **SDMQ**: 共 `SDMQ_DEPTH` 个条目的未命中缓冲队列, 条目里主要存放 SDTLB 未命中的 PA 和请求源的 ID, 且会额外附带一些其他标识位; SDMQ 最多可以同拍接收 2 个 SDTLB 未命中请求; SDMQ 由年龄矩阵管理, 按年龄关系和标识位信息, 把 SDMQ 的条目从老到年轻输出给 SDPWU_TOP 做 Page Walk; SDMQ 可以用 Page Walk 返回的合法的表项回填 SDTLB; SDMQ 可以被 SDIOR 置无效; SDMQ 允许所有命中 PTE 的条目提前响应
 
-- **SDPWU_TOP**: Page Walk 访存单元, 内含 SDPWU_CTRL 和 N 个 SDPWU (子状态机); 从 SDMQ 取最年老的未命中请求, 在访存接口上发起 Page Walk 访存, 最多可以做两级 Page Walk; 每个 SDPWU 一次处理一个未命中请求; N 个 SDPWU 受 SDPWU_CTRL 控制, 分时复用 SDPWU_TOP 的访存接口和 SDMQ 的条目接口 (同一时刻每组接口最多只被 1 个 SDPWU 占用). SDPWU 在内部判定表项的合法性, 把表项连同合法性判定结果交给 SDMQ, 并由 SDMQ 回填 SDTLB; SLMD_CALC_MQ 负责拼装 SLMD 或返回异常响应
+- **SDPWU_TOP**: Page Walk 访存单元, 内含 SDPWU_CTRL 和 N 个 SDPWU (子状态机); 从 SDMQ 取最年老的未命中请求, 在访存接口上发起 Page Walk 访存, 最多可以做两级 Page Walk; 每个 SDPWU 一次处理一个未命中请求; N 个 SDPWU 受 SDPWU_CTRL 控制, 分时复用 SDPWU_TOP 的访存接口和 SDMQ 的条目接口 (同一时刻每组接口最多只被 1 个 SDPWU 占用). SDPWU 在内部判定表项的合法性, 把表项连同合法性判定结果交给 SDMQ, 并由 SDMQ 回填 SDTLB; SLMD_CALC_SDMQ 负责拼装 SLMD 或返回异常响应
 
 - **SLMD_CALC**: 计算 SLMD 的模块, 分为 3 个实例, 分别对应 cam0 命中, cam1 命中, 未命中队列响应 (SDMQ 条目弹出); 3 个实例相互独立, 每个实例只驱动对应的响应接口
 
@@ -455,42 +455,66 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    IF0("cam0 未命中申请接口") --> ALLOC["申请条目"]
-    IF1("cam1 未命中申请接口") --> ALLOC
-    ALLOC --> ITEM["SDMQ"]
-    ALLOC --> AGE["age_matrix"]
-    INV("软件置无效接口") --> ITEM
-    ITEM --> SEL["年龄选择"]
-    AGE --> SEL
-    SEL -->|"最老条目"| OUT["SDPWU_TOP"]
-    OUT -->|"扫描重复命中"| ITEM
-    ITEM -->|"弹出重复命中"| OUT
+    SDIOR["SDIOR"]
+    SDTLB["SDTLB"]
+    AGE["Age Matrix"]
+    SEL_POP["Age Selector"]
+    SEL_PW["Age Selector"]
+    CALC["SLMD_CALC_SDMQ"]
+    RSP(["sdmq_rsp_valid<br/>sdmq_rsp_ready"])
+    CTRL["SDPWU_CTRL"]
+    SDPWUN(("SDPWU[N]"))
+    CALC <--> RSP
+    AGE --> SEL_POP
+    SEL_POP -->|"sdmq_pop_valid"| CALC
+    CALC -->|"sdmq_pop_ready"| AGE
+    SDIOR -->|"软件置无效"| AGE
+    SDTLB -->|"cam0 未命中"| AGE
+    SDTLB -->|"cam1 未命中"| AGE
+    AGE -->|"装填 SDTLB"| SDTLB
+    AGE --> SEL_PW
+    SEL_PW -->|"sdmq_pw_valid"| CTRL
+    CTRL -->|"sdmq_pw_ready"| AGE
+    SDPWUN -->|"pwu_finish_valid"| AGE
+    classDef gray fill:#d9d9d9,stroke:#666666,color:#000000
+    classDef orange fill:#fcd5b4,stroke:#c55a11,color:#000000
     classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
-    class IF0,IF1,INV iface
+    class SDIOR,SDTLB,CALC,CTRL gray
+    class AGE,SEL_POP,SEL_PW orange
+    class RSP iface
 ```
 
 图: SDMQ 的内部结构
 
 注: SDMQ 使用年龄矩阵进行管理
 注: 两路 CAM 未命中的请求可以同拍申请 SDMQ 条目, `age_matrix` 随之更新年龄关系
-注: 按年龄挑出最老的条目, 送给 SDPWU_TOP 做 Page Walk
-注: Page Walk 完成后, 用合法的 PTE 扫描 SDMQ 中重复命中的条目 (当前条目已弹出, 不参与), 并把它们弹出交给 SLMD_CALC_MQ 做 SLMD 拼装或返回异常响应
+注: 按年龄挑出最老的需要 Page Walk 的条目, 送给 SDPWU_TOP 做 Page Walk
+注: 按年龄挑出最老的可以响应输出的条目, 送给 SLMD_CALC_MQ 做 SLMD 拼装或返回异常响应
 
 #### 条目内容
 
 SDMQ 是一个深度为 `SDMQ_DEPTH` 的队列, 每个条目主要存储 SDTLB 未命中的 PA 以及附属的一些相关信息
 
-SDMQ 条目的字段:
+表: SDMQ 条目的字段 (控制类):
 
 | 字段 | 位宽 | 说明 |
 | --- | --- | --- |
 | valid | 1 | 条目有效位 |
 | flushed | 1 | 条目被软件置无效位 (刷新) |
-| pa[46:0] | 47 | 未命中请求的 PA |
-| req_id | `REQ_ID_WIDTH` | 未命中请求的 req_id |
 | page_walking | 1 | 该条目已分配给 SDPWU, Page Walk 进行中 |
 | pte_hit | 1 | PTE 结果是否被当前条目命中 |
-| hit_pa_base | 18 | PTE 结果命中时得到的 pa_base |
+
+表: SDMQ 条目的字段 (数据类):
+
+| 字段 | 位宽 | 说明 |
+| --- | --- | --- |
+| req_pa[46:0] | 47 | 未命中请求的 PA |
+| req_id | `REQ_ID_WIDTH` | 未命中请求的 req_id |
+| pte_hit_pa_base | 18 | 用于拼装 SLMD |
+| pte_hit_eid | 11 | 用于拼装 SLMD |
+| pte_hit_token_id | 11 | 用于拼装 SLMD |
+| pte_hit_token_value | 10 | 用于拼装 SLMD |
+| pte_hit_s_pfn | 23 | 用于拼装 SLMD |
 
 #### 年龄矩阵
 
@@ -516,9 +540,14 @@ SDMQ 可以悬挂多个请求, 但这些 Miss 请求**不做**申请条目时的
 
 注: 与 Core 内 DTB 不同, Core 内 DTBMQ (DTB_MISS_QUEUE) 如果只有 1 个空闲条目, 则将空闲条目分配给流水线 A 上的请求, 流水线 B 上的请求做 "DTBMQ 满" 的冲突处理; SDecoder 的 2 个 CAM 请求接口是机会均等的, 应该不会出现优先把空闲条目分配给某一路请求的情况, 所以 SDMQ 将满但未满时提前拉低 ready
 
+#### 置无效条目
+
+
+
 #### 删除条目
 
-Page Walk 完成后, 用本次 PTE 覆盖的映射范围与 SDMQ 中剩余条目做 CAM 比较; 如果条目 "命中同段/页" 或 "被软件置无效 (刷新)", 则把这些条目按年龄从老到年轻的顺序依次弹出 SDMQ, 之后交给 SLMD_CALC_MQ 做 SLMD 拼装或返回异常响应
+
+#### 取条目做 Page Walk
 
 #### 装填 SDTLB
 
@@ -583,11 +612,13 @@ flowchart LR
 2. `PA[47:35] == PA_Base[47:35]`
 3. `PA_Base[34:30] <= PA[34:30] <= PA_Up`
 
-128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常情况下最多命中一个 SDTLB 条目, 多命中时数据未定义 (但考虑响应带 "多命中异常" 标志, 并登记异常寄存器)
+128 个 Tag 并行比较, 得到 onehot0 的 `hit_vector`; 正常情况下最多命中一个 SDTLB 条目, 多命中时数据未定义 
+
+注: 目前考虑响应带上 "多命中异常" 标志, 并登记异常寄存器
 
 SDTLB 的 Tag 类使用组合逻辑进行 CAM 寻找命中条目; `hit_vector` 打 1 拍后再用; 请求拍 T 时刻的命中结果固定在 T+1 时刻有效; SDTLB 的 Data 类字段用 `hit_vector` 选出命中的条目后输出
 
-装填当拍写入 Latch, 当拍禁止读访问条目, 即当拍 `camN_req_ready` 拉低, 两路查表请求被反压 (断言 fill 和 cam_req 不会同拍有效)
+装填当拍写入 Latch, 这一拍禁止读访问条目, 即拉低请求接口的 ready 信号, 两路查表请求均被反压 (断言 fill 时请求接口不能握手)
 
 命中后的 SLA 计算:
 
@@ -656,7 +687,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 注: 当软件修改了 Page Table 但未对 SDTLB 做刷新, 可能会出现 SDTLB 中存在多个条目命中同一个 PA 的情况, 即 CAM 命中 SDTLB 的条目不唯一
 
-### 响应接口 (未命中队列)
+### 响应接口 (SDMQ)
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -754,24 +785,3 @@ SDTLB 只允许硬件回填, 软件不可写入
 | 6 | `SDecoder_SDTLB_HitCnt` | SDTLB Hit Count, SDTLB 命中计数寄存器 |
 | 7 | `SDecoder_SDT_L1_AccessCnt` | SDTLB Level 1 Access Count, 一级表访问计数寄存器 |
 | 8 | `SDecoder_SDT_L2_AccessCnt` | SDTLB Level 2 Access Count, 二级表访问计数寄存器 |
-
-### 寄存器详细说明
-
-#### SDecoder_IA
-
-#### SDecoder_IS
-
-#### SDecoder_PTBR
-
-#### SDecoder_ES
-
-#### SDecoder_Perf_CTL
-
-#### SDecoder_SDTLB_AccessCnt
-
-#### SDecoder_SDTLB_HitCnt
-
-#### SDecoder_SDT_L1_AccessCnt
-
-#### SDecoder_SDT_L2_AccessCnt
-
