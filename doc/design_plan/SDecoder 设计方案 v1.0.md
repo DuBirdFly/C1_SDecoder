@@ -324,8 +324,8 @@ flowchart TD
     CTRL <-->|"pwu_start_valid[0]<br/>pwu_start_ready[0]"| SDPWU0
     CTRL <-->|"pwu_start_valid[1]<br/>pwu_start_ready[1]"| SDPWU1
     CTRL <-->|"pwu_start_valid[N]<br/>pwu_start_ready[N]"| SDPWUN
-    SDPWU0 --> SEL
-    SDPWU1 --> SEL
+    SDPWU0 -->|"pwu_finish_valid[0]<br/>pwu_finish_sideband[0]"| SEL
+    SDPWU1 -->|"pwu_finish_valid[1]<br/>pwu_finish_sideband[1]"| SEL
     SDPWUN -->|"pwu_finish_valid[N]<br/>pwu_finish_sideband[N]"| SEL
     SEL -->|"pwu_finish_valid<br/>pwu_finish_sideband"| SDMQ
     classDef gray fill:#d9d9d9,stroke:#666666,color:#000000
@@ -595,6 +595,23 @@ SDMQ 与 SLMD_CALC_SDMQ 握手当拍, SLMD_CALC_SDMQ 用 SDMQ 送出的条目组
 
 #### 发起 Page Walk
 
+从 SDMQ 中挑选最老的条目发起 Page Walk, 候选条目需同时满足:
+
+- `valid = 1`
+- `page_walk_busy = 0`, 即该条目没有在途的 Page Walk
+- `pte_hit = 0`, 即该条目还没有被 PTE 命中
+- `flushed = 0`, 即该条目没有被软件置无效
+- `page_walk_finish = 0`, 即该条目还没有做过 Page Walk
+
+等价表达式: `valid & !page_walk_busy & !pte_hit & !flushed & !page_walk_finish`
+
+发起指 SDMQ 与 SDPWU_CTRL 之间的 `sdmq_pw_valid` / `sdmq_pw_ready` 握手: SDMQ 用 Age Selector 从候选条目里选出最老的一个, 由 SDPWU_CTRL 仲裁一个空闲的 SDPWU 后发起 Page Walk
+
+SDMQ 与 SDPWU_CTRL 握手当拍, SDMQ 送出选中的条目; 握手完成后 SDMQ 在下一拍把该条目的 `page_walk_start` 置为 1, 并把该条目的条目号一并交给 SDPWU_CTRL (由 SDPWU_CTRL 转交给 SDPWU, Page Walk 结束时再随 `pwu_finish_sideband` 带回)
+
+注: `sdmq_pw_valid` 拉高后到握手完成前, SDMQ 选中的条目不能变化; 没有空闲 SDPWU 时 SDPWU_CTRL 不拉高 `sdmq_pw_ready`, SDMQ 保持当前候选
+
+注: 发起 Page Walk 与弹出条目的候选条件互斥: 前者要求 `!pte_hit & !flushed & !page_walk_finish`, 后者要求 `pte_hit | flushed | page_walk_finish`, 所以同一个条目不会同时被发起 Page Walk 和弹出
 
 #### Page Walk 结束
 
