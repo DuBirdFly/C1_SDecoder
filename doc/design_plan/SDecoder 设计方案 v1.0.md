@@ -89,7 +89,7 @@ flowchart LR
 | `SDTLB_ENTRIES` | 128 |
 | `SDMQ_DEPTH` | 8 |
 | `SDIOR_DATA_WIDTH` | 64 |
-| `IOR_ADDR_WIDTH` | 2 |
+| `IOR_ADDR_WIDTH` | 4 |
 | `SDPWU_NUM` | 4 |
 | `PW_ID_WIDTH` | `$clog2(SDPWU_NUM)` |
 | `PW_RDATA_WIDTH` | 128 |
@@ -98,6 +98,7 @@ flowchart LR
 | `CAM_RSP_ERR_WIDTH` | 1 |
 
 注: 暂定 4 个 SDPWU, 即 SDPWU_NUM 的数量为 4
+注: PA_MEM_WIDTH = PA_WIDTH - 1 = 47, 表示 Mem 空间实际使用的 PA 位数 (PA[47] 恒为 0)
 
 ## SDecoder 微结构
 
@@ -252,6 +253,7 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 注: 段表下界为 SEG_BASE, 上界为 SEG_BASE + SEG_LEN
 注: 一级表是 "段页混合" 式的表. 每个 Type 为 1 的 32GB 区间内段式映射有且仅有 1 个, 但在二级表内同时还可以有 0/1/N 个页式映射; Type 为 0 时区间全部为页式映射
 注: 优先查段式映射, 不命中再去查二级表
+注: 因为段式映射命中时不再访问二级表, 因此 SLMD 的 EID / TokenID / TokenValue 直接取一级表条目自身的字段
 
 - 一级表条目地址
   - 按条目大小对界 (16B), 因此断言 IOR.SDecoder_PTBR.SDT_L1_BASE[3:0] 为 4'h0, 硬件取 {IOR.SDecoder_PTBR.SDT_L1_BASE[47:4], 4'h0}, 低 4 位忽略
@@ -295,10 +297,10 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 <br>
 
-- 二级表命中条件
-  - 一级表条目位域 Valid = 1
-  - 一级表未命中段式映射 (Type = 0, 或 PA 不在段范围内)
-  - 二级表条目位域 Valid = 1
+- 二级表命中条件 (三条须同时满足)
+  - 一级表条目 Valid = 1 (否则认为是缺页异常, 可能是因为软件忘记布表)
+  - 一级表未命中段式映射 (Type = 0, 或 PA 不在 `SEG_BASE` ~ `SEG_BASE + SEG_LEN` 表示的段范围内)
+  - 二级表条目 Valid = 1 (否则认为是缺页异常, 可能是因为软件忘记布表)
 
 <br>
 
@@ -389,7 +391,7 @@ flowchart LR
 SDPWU 的开始采用 valid+ready 握手, 结束为单拍有效信号, 不需要握手
 
 - pwu_start_valid 是 SDPWU 的输出, pwu_start_ready 是 SDPWU 的输入
-- pwu_finish_valid 和 pwu_finish_sideband 是 SDPWU 的输出, 均为单拍有效信号; sideband 中含 SDMQ 条目号与 PTE 结果的非法标志 `illegal`
+- pwu_finish_valid 和 pwu_finish_sideband 是 SDPWU 的输出, 均为单拍有效信号; sideband 中含 "SDMQ 条目号", "PTE 结果", 以及 "Page Walk 途中的错误信息"
 
 ```mermaid
 flowchart TD
@@ -751,8 +753,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 - 如果 Page Walk 命中页式映射 (二级表条目有效), 则回填到 SDTLB 条目的 Tag 字段为
   - `PA_Base = PA[47:30]`
   - `PA_Up = PA[34:30]`
-- 装填 SDTLB 条目时, SDTLB 条目的其他字段直接取 PTE 的对应字段
-  - `EID / TokenID / TokenValue / S_PFN`
+- 装填 SDTLB 条目时, SDTLB 条目的其他字段直接取 PTE 的对应字段 (`EID / TokenID / TokenValue / S_PFN`)
 
 只有无异常的 PTE 才会回填 SDTLB
 
@@ -769,7 +770,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 ## 接口信号
 
-缺典型时序图: wavedrom_render, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
+缺典型时序图 (待 RTL 定稿后回填): 用 wavedrom_render 生成, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
 
 ### 请求接口 (CAM)
 
