@@ -194,7 +194,7 @@ flowchart LR
    2. 接收 PTE 时 CAM 所有 SDMQ 条目, 将命中条目都标记 pte_hit, 且附带用于拼装 SLMD 的信息
    3. 接收 PTE 时, 按 sideband 中的 SDMQ 条目号, 置起对应条目的 page_walk_finish
 5. 装填 SDTLB
-   1. SDMQ 接收 PTE 时, 如果 PTE 对应的标记为 page_walk_start 的条目被标记为 pte_hit (说明该 PTE 覆盖它的 PA), 则用该 PTE 装填 SDTLB; 否则不装填
+   1. 如果满足装填条件 `!illegal & !pte_hit & !flushed` (见 SDMQ 一节的 "装填 SDTLB"), 则用该 PTE 装填 SDTLB; 否则不装填
 6. 响应 SLMD
    1. SLMD_CALC_SDMQ 通过 `sdmq_pop_valid` / `sdmq_pop_ready` 从 SDMQ 取走可响应的最老条目, 握手后 SDMQ 在下一拍把该条目的 valid 置为 0
    2. SLMD_CALC_SDMQ 在握手当拍拼装 SLMD, 用 FF 寄存后, 再在响应接口上完成 valid / ready 握手
@@ -625,7 +625,47 @@ SDMQ 收到 `pwu_finish_valid` 后:
 
 #### 装填 SDTLB
 
-<!-- 避免重复装填 -->
+SDMQ 收到 `pwu_finish_valid` 的当拍, 如果本次 PTE 合法, 则可以用这次 Page Walk 的结果装填 SDTLB
+
+发起本次 Page Walk 的条目由 `pwu_finish_sideband` 里的 SDMQ 条目号确定; 从发起 Page Walk 到本次 Page Walk 结束, 该条目各字段的取值如下
+
+表: Page Walk 完成的当拍发起条目的字段取值
+
+| 字段 | 取值 | 说明 |
+| --- | --- | --- |
+| valid | 1 | Page Walk 在途期间不能弹出该条目 |
+| page_walk_start | 1 | 发起时置 1, 只有重新装填该条目才清 |
+| page_walk_finish | 0 | Page Walk 结束, 本拍为 0, 下一拍才置 1 |
+| page_walk_err | 0 | 必须保证 Page Walk 返回的是合法结果 |
+| flushed | 0/1 | Page Walk 期间软件可能做置无效操作 |
+| pte_hit | 0/1 | 期间别的 Page Walk 的 PTE 可能覆盖到这个 PA |
+
+装填 SDTLB 条件:
+
+- 本次 PTE 合法, 没有 `illegal`
+- `pte_hit = 0`
+- `flushed = 0`
+
+等价表达式: `!illegal & !pte_hit & !flushed`
+
+表: 发起条目的 pte_hit / flushed 组合
+
+| pte_hit | flushed | 装填 SDTLB | 该条目的响应 |
+| --- | --- | --- | --- |
+| 0 | 0 | 用本次 PTE 装填 | 正常 SLMD |
+| 1 | 0 | 不装填 (已被别的 PTE 覆盖并装填过) | 正常 SLMD, 用先写入的 `pte_hit_*` 拼装 |
+| 0 | 1 | 不装填 | `sdmq_rsp_flushed` |
+| 1 | 1 | 不装填 | `sdmq_rsp_flushed` (优先级 `pte_hit` > `flushed`) |
+
+注: [TODO] pte_hit = 1, flushed = 1, 这种情况下, 该条目的响应的优先级需要被评审 !!!
+
+注: `pte_hit = 1` 时不装填是为了避免重复装填: 同一个 PA 范围可能被多次 Page Walk 覆盖 (例如 2 个 Miss 请求的 PA 落在同一个段内, 但各自发起了一次 Page Walk), 先完成的那次已经装填过 SDTLB, 后完成的那次不再装填
+
+注: `flushed = 1` 时不装填是因为置无效的语义是把这个范围的旧映射清掉, 而本次 Page Walk 可能早于置无效就读到了 PTE, 此时装填会把软件刚清掉的旧映射又写回 SDTLB; 需要该映射的后续请求重新发起一次 Page Walk
+
+注: 装填判据用的 `pte_hit` 是判定时刻之前的值, 不含本拍新标记的结果
+
+注: 装填的具体内容见 SDTLB 一节的 "装填条目 (SDTLB)"
 
 ### SDTLB
 
@@ -722,6 +762,10 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 1. 当 SDTLB 有空闲条目时, 则优先装填数据到 SDTLB 的空闲条目中; 若有多条空闲条目, 则优先装填最低位的空闲条目
 2. 当 SDTLB 没有空闲条目时, 将装填数据填入到**伪随机**选择的 SDTLB 条目中, SDTLB 不设多级结构, 被淘汰的条目将被完全丢弃, 如果后续存在条目需要用到这条条目, 则只能通过 Page Walk 重新装填
+
+##### 伪随机指针
+
+早期开发阶段先用 "乱转 $onehot() 指针" 代替
 
 ## 接口信号
 
