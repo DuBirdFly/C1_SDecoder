@@ -79,8 +79,8 @@ import sdecoder_pkg::*;
     SDTLB_DATA_ITEM_t cam1_hit_data_r;
 
     // 写 Latch 当拍反压两路查表: Latch 不支持同拍读写
-    assign cam0_req_ready = rst_n && !fill_en;
-    assign cam1_req_ready = rst_n && !fill_en;
+    assign cam0_req_ready = !fill_en;
+    assign cam1_req_ready = !fill_en;
 
     // 比较使能取 "accept": 只有真正握手的那一拍才产生命中, 被反压的拍按 0 打拍
     wire cam0_en = cam0_req_valid && cam0_req_ready;
