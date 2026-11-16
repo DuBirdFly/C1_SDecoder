@@ -52,17 +52,19 @@ class SdecoderPageTableModel extends uvm_component;
         l1_item_seg.type_bit = 1'b1;
         l1_item_seg.l2_base  = 45'h600;
         l1_item_seg.eid      = 11'h300;
-        l1_item_seg.token_id = 10'h300;
-        l1_item_seg.s_pfn    = 18'h10000;
+        l1_item_seg.token_id    = 11'h300;
+        l1_item_seg.token_value = 10'h3a0;
+        l1_item_seg.s_pfn       = 23'h10000;
         l1_item_seg.seg_base = 5'd4;
         l1_item_seg.seg_len  = 5'd4;
 
         for (int i = 0; i < 2; i++) begin
             l2_item[i] = '0;
             l2_item[i].valid    = 1'b1;
-            l2_item[i].eid      = 11'h100 + 11'(i);
-            l2_item[i].token_id = 10'h200 + 10'(i);
-            l2_item[i].s_pfn    = 18'h1 + 18'(i);
+            l2_item[i].eid         = 11'h100 + 11'(i);
+            l2_item[i].token_id    = 11'h200 + 11'(i);
+            l2_item[i].token_value = 10'h2a0 + 10'(i);
+            l2_item[i].s_pfn       = 23'h1 + 23'(i);
         end
     endfunction
 

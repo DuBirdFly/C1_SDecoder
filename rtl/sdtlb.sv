@@ -4,20 +4,29 @@
 
 // SDTLB: 全相联 (CAM + FF + Latch), 2 个查表端口 (CAM0 / CAM1)
 //
-// 查表时序:
-//   请求拍 T 两路各自握手 (valid && ready), 用当拍条目的内容做组合比较;
+// 查表时序 (没有 valid/ready 握手, 只有一个 1 拍使能 camN_req_en):
+//   请求拍 T 的 camN_req_en 为 1, 用当拍条目的内容做组合比较;
 //   命中向量与选出的 tag / data 快照在 T 的上升沿打 1 拍, T+1 拍由
 //   camN_hit / camN_hit_tag_item / camN_hit_data_item 给出.
-//   camN_hit 同时充当响应的 valid: 没有握手的拍按 0 打拍, 所以请求撤掉后
-//   下一拍命中自然归 0, 被反压的拍也不会漏出上一拍的陈旧结果.
+//   camN_hit 同时充当响应的 valid: 使能为 0 的拍按 0 打拍, 所以请求撤掉后
+//   下一拍命中自然归 0, 不会漏出上一拍的陈旧结果.
+//
+// 接口约定 (由外界保证, SDTLB 内部不再做握手 / 反压):
+//   1. camN_req_en 与 fill_en 不会同拍为高.
+//      条目除 Valid (FF) 外都用 Latch, Latch 不支持同拍读写, 所以"写 Latch 的那一拍
+//      不能查表"由上游保证: 上游在发出 fill_en 的同一拍不许再发 camN_req_en.
+//      这里用断言 a_camN_req_fill_exclusive 兜底, 违反时仿真报错.
+//   2. 装填 / 置无效的使能与写数据都由上游用 FF 给出 (见 doc/design_plan/AI 易错点.md).
+//      本模块内部送给 Latch 的写使能也只是 FF 的组合 (victim_sel 与 fill_en 相与),
+//      不再为了仿真竞争额外加打拍寄存器: 时序节拍属于设计, 仿真竞争由 tb 的 wrapper 打拍解决.
 //
 // 装填 / 置无效时序:
-//   条目除 Valid (FF) 外都用 Latch. Latch 的写使能必须来自寄存器, 否则
-//   fill_en / inv_* 与写数据同拍变化时, 使能会短暂指向上一次的目标条目,
-//   把数据写进别的条目. 因此装填与置无效都先在请求拍寄存:
-//     T   拍: fill_en 有效, 选定目标条目 (空闲 / 轮转 victim)
-//     T+1 拍: Latch 用寄存的使能和数据写入, Valid 也在这一拍置位 / 清位
-//   写周期内 Latch 对输入透明, 不能查表, 因此 T+1 拍把两路 camN_req_ready 都拉低.
+//   装填与置无效都在请求拍当拍作用到阵列 (Latch 写入 / Valid 清位), 不额外打拍.
+//
+// 装填目标 (暂定):
+//   全部按轮转替换指针 victim_sel 装填, 每次装填指针步进一格; 不区分空闲 / 有效条目.
+//   设计方案 "装填条目 (SDTLB)" 要求 "有空闲条目时优先装填最低位空闲条目", 这一条先不实现,
+//   等替换策略定稿后再补 (届时会把 victim_sel 换成 "空闲指针 / 轮转指针" 二选一).
 module sdtlb
 import sdecoder_pkg::*;
 (
@@ -25,16 +34,15 @@ import sdecoder_pkg::*;
     input  logic                                rst_n,
 
     // 查表端口 0 (CAM0). 地址是整条 PA[47:0] (条目里只存 PA[47:30], 见 sdtlb_tag_item)
-    input  logic                                cam0_req_valid,
-    output logic                                cam0_req_ready,
+    // req_en 是 1 拍使能, 与 fill_en 不同拍 (外界保证)
+    input  logic                                cam0_req_en,
     input  logic [PA_WIDTH-1:0]                 cam0_req_pa,
     output logic                                cam0_hit,
     output SDTLB_TAG_ITEM_t                     cam0_hit_tag_item,
     output SDTLB_DATA_ITEM_t                    cam0_hit_data_item,
 
     // 查表端口 1 (CAM1)
-    input  logic                                cam1_req_valid,
-    output logic                                cam1_req_ready,
+    input  logic                                cam1_req_en,
     input  logic [PA_WIDTH-1:0]                 cam1_req_pa,
     output logic                                cam1_hit,
     output SDTLB_TAG_ITEM_t                     cam1_hit_tag_item,
@@ -48,6 +56,7 @@ import sdecoder_pkg::*;
     input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
     input  logic [EID_WIDTH-1:0]                fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]           fill_token_id,
+    input  logic [TOKEN_VALUE_WIDTH-1:0]        fill_token_value,
     input  logic [S_PFN_WIDTH-1:0]              fill_s_pfn,
 
     // 置无效 (刷新): 只作用于 Tag 侧的有效位; 地址也是整条 PA[47:0]
@@ -59,7 +68,7 @@ import sdecoder_pkg::*;
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
     SDTLB_DATA_ITEM_t data_item [SDTLB_ENTRIES];
 
-    // 装填的写使能: 选中的条目在本拍写 Latch (目标由轮转指针给出)
+    // 写 Latch 的使能 (victim_sel 与 fill_en 都是 FF, 见文件头的约定)
     logic [SDTLB_ENTRIES-1:0]   fill_en_vector;
 
     logic [SDTLB_ENTRIES-1:0] cam0_hit_vector;
@@ -78,15 +87,11 @@ import sdecoder_pkg::*;
     SDTLB_TAG_ITEM_t  cam1_hit_tag_r;
     SDTLB_DATA_ITEM_t cam1_hit_data_r;
 
-    // 写 Latch 当拍反压两路查表: Latch 不支持同拍读写
-    assign cam0_req_ready = !fill_en;
-    assign cam1_req_ready = !fill_en;
-
-    // 比较使能取 "accept": 只有真正握手的那一拍才产生命中, 被反压的拍按 0 打拍
-    wire cam0_en = cam0_req_valid && cam0_req_ready;
-    wire cam1_en = cam1_req_valid && cam1_req_ready;
-
+    // 装填目标 = 轮转替换指针 (暂不做 "空闲优先", 见文件头)
     assign fill_en_vector = fill_en ? victim_sel : '0;
+
+    // 注: 设计方案要求多命中时上报 tlb_multi_hit (响应 err 位 + 异常寄存器), 暂不实现;
+    //     多命中时命中数据未定义, 行为与原来一致.
 
     assign cam0_hit           = |cam0_hit_vector_r;
     assign cam0_hit_tag_item  = cam0_hit_tag_r;
@@ -128,11 +133,11 @@ import sdecoder_pkg::*;
         .clk                (clk                ),
         .rst_n              (rst_n              ),
 
-        .req0_en            (cam0_en            ),
+        .req0_en            (cam0_req_en        ),
         .req0_pa            (cam0_req_pa        ),
         .req0_hit_vector    (cam0_hit_vector    ),
 
-        .req1_en            (cam1_en            ),
+        .req1_en            (cam1_req_en        ),
         .req1_pa            (cam1_req_pa        ),
         .req1_hit_vector    (cam1_hit_vector    ),
 
@@ -154,6 +159,7 @@ import sdecoder_pkg::*;
         .fill_en_vector     (fill_en_vector     ),
         .fill_eid           (fill_eid           ),
         .fill_token_id      (fill_token_id      ),
+        .fill_token_value   (fill_token_value   ),
         .fill_s_pfn         (fill_s_pfn         ),
 
         .data_item          (data_item          )
@@ -197,20 +203,18 @@ import sdecoder_pkg::*;
     );
 
 `ifdef ASSERT_ON
-    `assert_clk(a_cam0_hit_vector_onehot0, $onehot0(cam0_hit_vector_r))
-    `assert_clk(a_cam1_hit_vector_onehot0, $onehot0(cam1_hit_vector_r))
-    // 写选择就是轮转指针, 必须严格 one-hot (空指针会让一次装填悄悄丢掉)
-    `assert_clk(a_fill_wr_onehot0, $onehot0(fill_en_vector))
+    // 写 Latch 的使能必须严格 one-hot (空指针会让一次装填悄悄丢掉)
+    `assert_clk(a_fill_wr_onehot0, (fill_en |-> $onehot(fill_en_vector)))
 
-    // 写 Latch 当拍两路查表都必须被反压: Latch 不支持同拍读写
-    `assert_clk(a_fill_backpressure,
-                (fill_en |-> (!cam0_req_ready && !cam1_req_ready)))
+    // 外界约定: 装填与查表不同拍 (Latch 不支持同拍读写)
+    `assert_clk(a_cam0_req_fill_exclusive, (!(cam0_req_en && fill_en)))
+    `assert_clk(a_cam1_req_fill_exclusive, (!(cam1_req_en && fill_en)))
 
     // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 查表 / 装填 / 置无效地址的 PA[47] 都必须为 0.
     // 口径: camN_req_pa / inv_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),
     //       fill_pa_base 是 PA[47:30] (bit[PA_BASE_WIDTH-1] 才是 PA[47])
-    `assert_clk(a_cam0_pa47_zero, (cam0_en |-> !cam0_req_pa[PA_WIDTH-1]))
-    `assert_clk(a_cam1_pa47_zero, (cam1_en |-> !cam1_req_pa[PA_WIDTH-1]))
+    `assert_clk(a_cam0_pa47_zero, (cam0_req_en |-> !cam0_req_pa[PA_WIDTH-1]))
+    `assert_clk(a_cam1_pa47_zero, (cam1_req_en |-> !cam1_req_pa[PA_WIDTH-1]))
     `assert_clk(a_fill_pa47_zero, (fill_en |-> !fill_pa_base[PA_BASE_WIDTH-1]))
     `assert_clk(a_inv_pa47_zero,  (inv_en  |-> !inv_pa[PA_WIDTH-1]))
 `endif

@@ -59,7 +59,7 @@ class SdecoderSmokeSeq extends uvm_sequence#(SdecoderItem);
 
     task body();
         // 一级表基地址
-        send_cfg(ADDR_SDT_L1_BASE, 64'h0000_0000_0000_1000);
+        send_cfg(ADDR_SDECODER_PTBR, 64'h0000_0000_0000_1000);
 
         // A miss / hit
         send_req(PA_A, 8'h11);

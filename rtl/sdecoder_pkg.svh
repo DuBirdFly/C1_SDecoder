@@ -18,52 +18,58 @@ package sdecoder_pkg;
     } SDTLB_TAG_ITEM_t;
 
     localparam EID_WIDTH = 11;
-    localparam TOKEN_ID_WIDTH = 10;
-    localparam S_PFN_WIDTH = 18;
+    localparam TOKEN_ID_WIDTH = 11;
+    localparam TOKEN_VALUE_WIDTH = 10;
+    localparam S_PFN_WIDTH = 23;    // S_PFN[52:30]
 
     typedef struct packed {
-        logic [EID_WIDTH-1:0]       eid;
-        logic [TOKEN_ID_WIDTH-1:0]  token_id;
-        logic [S_PFN_WIDTH-1:0]     s_pfn;
+        logic [EID_WIDTH-1:0]           eid;
+        logic [TOKEN_ID_WIDTH-1:0]      token_id;
+        logic [TOKEN_VALUE_WIDTH-1:0]   token_value;
+        logic [S_PFN_WIDTH-1:0]         s_pfn;
     } SDTLB_DATA_ITEM_t;
 
     localparam SDTLB_TAG_ITEM_WIDTH = $bits(SDTLB_TAG_ITEM_t);
     localparam SDTLB_DATA_ITEM_WIDTH = $bits(SDTLB_DATA_ITEM_t);
 
     localparam REQ_ID_WIDTH = 8;
-    localparam SLA_WIDTH = 48;
+    localparam SLA_WIDTH = 53;
+    localparam CAM_RSP_ERR_WIDTH = 1;
 
-    // 响应包: id + fcode + eid + token_id + sla
+    // 响应包: id + eid + token_id + token_value + sla + err (见设计方案 "响应接口 (CAM)")
     typedef struct packed {
-        logic [REQ_ID_WIDTH-1:0]    id;
-        logic [2:0]                 fcode;
-        logic [EID_WIDTH-1:0]       eid;
-        logic [TOKEN_ID_WIDTH-1:0]  token_id;
-        logic [SLA_WIDTH-1:0]       sla;
+        logic [REQ_ID_WIDTH-1:0]        id;
+        logic [EID_WIDTH-1:0]           eid;
+        logic [TOKEN_ID_WIDTH-1:0]      token_id;
+        logic [TOKEN_VALUE_WIDTH-1:0]   token_value;
+        logic [SLA_WIDTH-1:0]           sla;
+        logic [CAM_RSP_ERR_WIDTH-1:0]   err;
     } SDT_RSP_t;
 
     // SDT_L1 条目 (16B), 位域见设计方案 一级表条目格式
     typedef struct packed {
-        logic [31:0]                rsvd;
-        logic [L2_BASE_WIDTH-1:0]   l2_base;        // L2_BASE[47:3]
-        logic [EID_WIDTH-1:0]       eid;
-        logic [TOKEN_ID_WIDTH-1:0]  token_id;
-        logic [S_PFN_WIDTH-1:0]     s_pfn;
-        logic [4:0]                 seg_len;
-        logic [4:0]                 seg_base;
+        logic [15:0]                    rsvd;
+        logic [L2_BASE_WIDTH-1:0]       l2_base;        // L2_BASE[47:3]
+        logic [EID_WIDTH-1:0]           eid;
+        logic [TOKEN_ID_WIDTH-1:0]      token_id;
+        logic [TOKEN_VALUE_WIDTH-1:0]   token_value;
+        logic [S_PFN_WIDTH-1:0]         s_pfn;
+        logic [4:0]                     seg_len;
+        logic [4:0]                     seg_base;
         // 0: 该 32GB 区间均为页表
         // 1: 该 32GB 区间有且仅有 1 个段表 (+N个页表)
-        logic                       type_bit;
-        logic                       valid;
+        logic                           type_bit;
+        logic                           valid;
     } SDT_L1_ITEM_t;
 
     // SDT_L2 条目 (8B), 位域见设计方案 二级表条目格式
     typedef struct packed {
-        logic [23:0]                rsvd;
-        logic [EID_WIDTH-1:0]       eid;
-        logic [TOKEN_ID_WIDTH-1:0]  token_id;
-        logic [S_PFN_WIDTH-1:0]     s_pfn;
-        logic                       valid;
+        logic [7:0]                     rsvd;
+        logic [EID_WIDTH-1:0]           eid;
+        logic [TOKEN_ID_WIDTH-1:0]      token_id;
+        logic [TOKEN_VALUE_WIDTH-1:0]   token_value;
+        logic [S_PFN_WIDTH-1:0]         s_pfn;
+        logic                           valid;
     } SDT_L2_ITEM_t;
 
     localparam SDTLB_ENTRIES = 128;
@@ -73,13 +79,14 @@ package sdecoder_pkg;
     // 字节偏移), 见设计方案 IOR 列表 / 接口手册 寄存器列表
     // 寄存器字宽 64: 地址类寄存器把整条 PA 填在低 PA_WIDTH 位 (即 PA[47:0]); W1P 触发位在字里
     // 的位置各不相同 (IA 是 bit 0, IS 是 bit 63), 其余位保留
-    localparam SDIOR_ADDR_WIDTH = 2;
+    // 地址按设计方案的序号排: 0 IA, 1 IS, 2 PTBR; 其余寄存器暂未实现 (ES / Perf / 计数器)
+    localparam SDIOR_ADDR_WIDTH = 4;
     localparam SDIOR_DATA_WIDTH = 64;
     localparam SDIOR_IA_W1P_BIT = 0;    // SDecoder_IA: 这一位写 1 才产生 inv_all 脉冲
     localparam SDIOR_IS_W1P_BIT = 63;   // SDecoder_IS: 这一位写 1 才产生 inv_en 脉冲
-    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IA = 2'd0;   // W1P: 置无效全部条目
-    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IS = 2'd1;   // W1P: 置无效指定 PA 的条目
-    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDT_L1_BASE = 2'd2;   // RW: 一级表基地址
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IA = 4'd0;   // W1P: 置无效全部条目
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IS = 4'd1;   // W1P: 置无效指定 PA 的条目
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_PTBR = 4'd2;   // RW: 一级表基地址
 
 
     localparam SDMQ_DEPTH = 16;

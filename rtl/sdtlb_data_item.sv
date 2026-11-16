@@ -16,26 +16,29 @@ import sdecoder_pkg::*;
     input  logic                        fill_en,
     input  logic [EID_WIDTH-1:0]        fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]   fill_token_id,
+    input  logic [TOKEN_VALUE_WIDTH-1:0] fill_token_value,
     input  logic [S_PFN_WIDTH-1:0]      fill_s_pfn,
 
     // 本条目内容静默输出
     output SDTLB_DATA_ITEM_t            data_item
 );
 
-    logic [EID_WIDTH-1:0]      eid_q;
-    logic [TOKEN_ID_WIDTH-1:0] token_id_q;
-    logic [S_PFN_WIDTH-1:0]    s_pfn_q;
+    logic [EID_WIDTH-1:0]           eid_q;
+    logic [TOKEN_ID_WIDTH-1:0]      token_id_q;
+    logic [TOKEN_VALUE_WIDTH-1:0]   token_value_q;
+    logic [S_PFN_WIDTH-1:0]         s_pfn_q;
 
     // 只由装填写: 置无效只清 Tag 段的 Valid, 不碰 Data 段, 所以这里没有清位分支
     always_latch begin
         if (fill_en) begin
-            eid_q      <= fill_eid;
-            token_id_q <= fill_token_id;
-            s_pfn_q    <= fill_s_pfn;
+            eid_q         <= fill_eid;
+            token_id_q    <= fill_token_id;
+            token_value_q <= fill_token_value;
+            s_pfn_q       <= fill_s_pfn;
         end
     end
 
-    assign data_item = '{eid: eid_q, token_id: token_id_q, s_pfn: s_pfn_q};
+    assign data_item = '{eid: eid_q, token_id: token_id_q, token_value: token_value_q, s_pfn: s_pfn_q};
 
 endmodule
 

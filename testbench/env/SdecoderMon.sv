@@ -50,10 +50,10 @@ class SdecoderMon extends uvm_monitor;
             seen[vif.mon.rsp_id] = 1'b1;
         end
 
-        if (vif.mon.rsp_fcode !== 3'b000) begin
+        if (vif.mon.rsp_err !== 1'b0) begin
             err_count++;
-            `uvm_error("RSP_FCODE",
-                       $sformatf("id=0x%0h fcode=%0b", vif.mon.rsp_id, vif.mon.rsp_fcode))
+            `uvm_error("RSP_ERR",
+                       $sformatf("id=0x%0h err=%0b", vif.mon.rsp_id, vif.mon.rsp_err))
         end
 
         case (vif.mon.rsp_id)
@@ -63,9 +63,13 @@ class SdecoderMon extends uvm_monitor;
                     err_count++;
                     `uvm_error("RSP_EID", $sformatf("A id=0x%0h eid=0x%0h", vif.mon.rsp_id, vif.mon.rsp_eid))
                 end
-                if (vif.mon.rsp_token_id !== 10'h200) begin
+                if (vif.mon.rsp_token_id !== 11'h200) begin
                     err_count++;
                     `uvm_error("RSP_TOKEN", $sformatf("A id=0x%0h token=0x%0h", vif.mon.rsp_id, vif.mon.rsp_token_id))
+                end
+                if (vif.mon.rsp_token_value !== 10'h2a0) begin
+                    err_count++;
+                    `uvm_error("RSP_TOKEN_VALUE", $sformatf("A id=0x%0h token_value=0x%0h", vif.mon.rsp_id, vif.mon.rsp_token_value))
                 end
                 if (vif.mon.rsp_sla !== 48'h0000_4000_1234) begin
                     err_count++;
@@ -77,9 +81,13 @@ class SdecoderMon extends uvm_monitor;
                     err_count++;
                     `uvm_error("RSP_EID", $sformatf("B id=0x%0h eid=0x%0h", vif.mon.rsp_id, vif.mon.rsp_eid))
                 end
-                if (vif.mon.rsp_token_id !== 10'h201) begin
+                if (vif.mon.rsp_token_id !== 11'h201) begin
                     err_count++;
                     `uvm_error("RSP_TOKEN", $sformatf("B id=0x%0h token=0x%0h", vif.mon.rsp_id, vif.mon.rsp_token_id))
+                end
+                if (vif.mon.rsp_token_value !== 10'h2a1) begin
+                    err_count++;
+                    `uvm_error("RSP_TOKEN_VALUE", $sformatf("B id=0x%0h token_value=0x%0h", vif.mon.rsp_id, vif.mon.rsp_token_value))
                 end
                 if (vif.mon.rsp_sla !== 48'h0000_8000_5678) begin
                     err_count++;
@@ -91,9 +99,13 @@ class SdecoderMon extends uvm_monitor;
                     err_count++;
                     `uvm_error("RSP_EID", $sformatf("S id=0x%0h eid=0x%0h", vif.mon.rsp_id, vif.mon.rsp_eid))
                 end
-                if (vif.mon.rsp_token_id !== 10'h300) begin
+                if (vif.mon.rsp_token_id !== 11'h300) begin
                     err_count++;
                     `uvm_error("RSP_TOKEN", $sformatf("S id=0x%0h token=0x%0h", vif.mon.rsp_id, vif.mon.rsp_token_id))
+                end
+                if (vif.mon.rsp_token_value !== 10'h3a0) begin
+                    err_count++;
+                    `uvm_error("RSP_TOKEN_VALUE", $sformatf("S id=0x%0h token_value=0x%0h", vif.mon.rsp_id, vif.mon.rsp_token_value))
                 end
                 if (vif.mon.rsp_sla !== 48'h4000_8000_0111) begin
                     err_count++;

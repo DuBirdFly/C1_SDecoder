@@ -88,11 +88,11 @@ module tb_sdtlb;
         logic [PA_UP_WIDTH-1:0]                            idx,
         logic [PA_WIDTH-PA_BASE_WIDTH-1:0]                 offset = '0
     );
-        sdtlb_if.drv.cam0_req_valid <= 1'b1;
-        sdtlb_if.drv.cam0_req_pa    <= {high, idx, offset};
-        // 请求拍: 握手的那一沿 (写 Latch 当拍 ready 为低, 要一直保持 valid 直到被接收)
-        do @(sdtlb_if.drv); while (!sdtlb_if.drv.cam0_req_ready);
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
+        sdtlb_if.drv.cam0_req_en <= 1'b1;
+        sdtlb_if.drv.cam0_req_pa <= {high, idx, offset};
+        // 请求拍: 使能只打 1 拍 (与 fill_en 不同拍由本 tb 保证)
+        @(sdtlb_if.drv);
+        sdtlb_if.drv.cam0_req_en <= 1'b0;
         @(sdtlb_if.drv);                    // 输入寄存器拍 (wrapper 的所有 input 打 1 拍)
         @(sdtlb_if.drv);                    // 响应拍 (DUT 自己再打 1 拍)
         sample_rsp();
@@ -104,13 +104,15 @@ module tb_sdtlb;
         input logic [PA_UP_WIDTH-1:0]               up,
         input logic [EID_WIDTH-1:0]                 eid,
         input logic [TOKEN_ID_WIDTH-1:0]            tok,
+        input logic [TOKEN_VALUE_WIDTH-1:0]         tokv,
         input logic [S_PFN_WIDTH-1:0]               pfn
     );
-        sdtlb_if.drv.fill_pa_base  <= base;
-        sdtlb_if.drv.fill_pa_up    <= up;
-        sdtlb_if.drv.fill_eid      <= eid;
-        sdtlb_if.drv.fill_token_id <= tok;
-        sdtlb_if.drv.fill_s_pfn    <= pfn;
+        sdtlb_if.drv.fill_pa_base     <= base;
+        sdtlb_if.drv.fill_pa_up       <= up;
+        sdtlb_if.drv.fill_eid         <= eid;
+        sdtlb_if.drv.fill_token_id    <= tok;
+        sdtlb_if.drv.fill_token_value <= tokv;
+        sdtlb_if.drv.fill_s_pfn       <= pfn;
         sdtlb_if.drv.fill_en      <= 1'b1;
         @(sdtlb_if.drv);
         sdtlb_if.drv.fill_en      <= 1'b0;
@@ -122,6 +124,7 @@ module tb_sdtlb;
         sdtlb_if.drv.inv_pa <= {pa, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);
         sdtlb_if.drv.inv_en <= 1'b0;
+        repeat (2) @(sdtlb_if.drv);             // 等置无效生效
     endtask
 
     // 置无效全部条目, 拉高一拍
@@ -129,19 +132,21 @@ module tb_sdtlb;
         sdtlb_if.drv.inv_all <= 1'b1;
         @(sdtlb_if.drv);
         sdtlb_if.drv.inv_all <= 1'b0;
+        repeat (2) @(sdtlb_if.drv);             // 等置无效生效
     endtask
 
     initial begin
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
+        sdtlb_if.drv.cam0_req_en <= 1'b0;
         sdtlb_if.drv.cam0_req_pa    <= '0;
-        sdtlb_if.drv.cam1_req_valid <= 1'b0;
+        sdtlb_if.drv.cam1_req_en <= 1'b0;
         sdtlb_if.drv.cam1_req_pa    <= '0;
         sdtlb_if.drv.fill_en      <= 1'b0;
         sdtlb_if.drv.fill_pa_base  <= '0;
         sdtlb_if.drv.fill_pa_up    <= '0;
         sdtlb_if.drv.fill_eid      <= '0;
-        sdtlb_if.drv.fill_token_id <= '0;
-        sdtlb_if.drv.fill_s_pfn    <= '0;
+        sdtlb_if.drv.fill_token_id    <= '0;
+        sdtlb_if.drv.fill_token_value <= '0;
+        sdtlb_if.drv.fill_s_pfn       <= '0;
         sdtlb_if.drv.inv_all     <= 1'b0;
         sdtlb_if.drv.inv_en      <= 1'b0;
         sdtlb_if.drv.inv_pa      <= '0;
@@ -165,6 +170,7 @@ module tb_sdtlb;
             .up(5'h1f),
             .eid('1),
             .tok('1),
+            .tokv(10'h155),
             .pfn(18'h33333)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -176,8 +182,8 @@ module tb_sdtlb;
             (rsp_tag.pa_base == {12'hfff, 5'h1f}) &&
             (rsp_tag.pa_up == 5'h1f) &&
             (rsp_tag.valid == 1'b1));
-        chk("page: Data struct (eid/token_id)",
-            (rsp_data.eid == '1) && (rsp_data.token_id == '1));
+        chk("page: Data struct (eid/token_id/token_value)",
+            (rsp_data.eid == '1) && (rsp_data.token_id == '1) && (rsp_data.token_value == 10'h155));
         chk("page: Data struct (s_pfn)",
             (rsp_data.s_pfn == 18'h33333));
         repeat (10) @(sdtlb_if.drv);
@@ -185,13 +191,13 @@ module tb_sdtlb;
         // ====================================================================
         // 打 1 拍: wrapper 先把输入打 1 拍, DUT 再把命中打 1 拍, 所以请求拍看不到
         // 本次响应, 响应要到请求拍之后第 2 拍才有效
-        sdtlb_if.drv.cam0_req_valid <= 1'b1;
+        sdtlb_if.drv.cam0_req_en <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'hfff, 5'h1f, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);                                // 请求拍
         sample_rsp();
         chk("latency: 请求当拍无命中", rsp_hit == 1'b0);
         chk("latency: 请求当拍读出全 0", (rsp_tag == '0) && (rsp_data == '0));
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
+        sdtlb_if.drv.cam0_req_en <= 1'b0;
         @(sdtlb_if.drv);                                // 输入寄存器拍
         sample_rsp();
         chk("latency: 输入打拍拍仍无命中", rsp_hit == 1'b0);
@@ -215,6 +221,7 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h055),
             .tok(10'h0aa),
+            .tokv(10'h0cb),
             .pfn(18'h0cccc)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -225,6 +232,7 @@ module tb_sdtlb;
         chk("fill#2: Data 内容 (不串扰)",
             (rsp_data.eid == 11'h055) &&
             (rsp_data.token_id == 10'h0aa) &&
+            (rsp_data.token_value == 10'h0cb) &&
             (rsp_data.s_pfn == 18'h0cccc));
         repeat (10) @(sdtlb_if.drv);
 
@@ -241,6 +249,7 @@ module tb_sdtlb;
             .up(5'd8),
             .eid(11'h123),
             .tok(10'h2aa),
+            .tokv(10'h2ab),
             .pfn(18'h15555)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -290,7 +299,7 @@ module tb_sdtlb;
         // ====================================================================
         // 流水线: valid 可以拍拍有效 (本拍给地址, 下一拍换新地址且 valid 保持);
         // wrapper 再打 1 拍后, 响应相对外部请求逐拍滞后 2 拍, 且不会串到别的地址上
-        sdtlb_if.drv.cam0_req_valid <= 1'b1;
+        sdtlb_if.drv.cam0_req_en <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'hfff, 5'h1f, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};   // A: 命中
         @(sdtlb_if.drv);                                // 请求拍 A (wrapper 采样)
         sdtlb_if.drv.cam0_req_pa    <= {12'h001, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};    // B: 命中
@@ -301,7 +310,7 @@ module tb_sdtlb;
         chk("pipeline: 第 3 拍出 A 的响应",
             (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'hfff, 5'h1f}) &&
             (rsp_data.s_pfn == 18'h33333));
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
+        sdtlb_if.drv.cam0_req_en <= 1'b0;
         @(sdtlb_if.drv);                                // 响应拍 B
         sample_rsp();
         chk("pipeline: 第 4 拍出 B 的响应",
@@ -334,6 +343,7 @@ module tb_sdtlb;
             .up(5'd20),
             .eid(11'h0f0),
             .tok(10'h0f0),
+            .tokv(10'h0f1),
             .pfn(18'h0f0f0)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -372,6 +382,7 @@ module tb_sdtlb;
             .up(5'd20),
             .eid(11'h0e0),
             .tok(10'h0e0),
+            .tokv(10'h0e1),
             .pfn(18'h0e0e0)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -388,6 +399,7 @@ module tb_sdtlb;
             .up(5'd1),
             .eid(11'h0b0),
             .tok(10'h0b0),
+            .tokv(10'h0b1),
             .pfn(18'h0b0b0)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -410,6 +422,7 @@ module tb_sdtlb;
             .up(5'd1),
             .eid(11'h0a0),
             .tok(10'h0a0),
+            .tokv(10'h0a1),
             .pfn(18'h0a0a0)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -423,9 +436,10 @@ module tb_sdtlb;
         // 同拍: 全置无效优先于装填 (inv_all 对每个条目都成立, 与轮转指针当前指到谁无关)
         sdtlb_if.drv.fill_pa_base  <= {12'h020, 5'd3};
         sdtlb_if.drv.fill_pa_up    <= 5'd3;
-        sdtlb_if.drv.fill_eid      <= 11'h0c0;
-        sdtlb_if.drv.fill_token_id <= 10'h0c0;
-        sdtlb_if.drv.fill_s_pfn    <= 18'h0c0c0;
+        sdtlb_if.drv.fill_eid         <= 11'h0c0;
+        sdtlb_if.drv.fill_token_id    <= 10'h0c0;
+        sdtlb_if.drv.fill_token_value <= 10'h0c1;
+        sdtlb_if.drv.fill_s_pfn       <= 18'h0c0c0;
         sdtlb_if.drv.fill_en      <= 1'b1;
         sdtlb_if.drv.inv_all       <= 1'b1;
         @(sdtlb_if.drv);
@@ -448,6 +462,7 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h001),
             .tok(10'h001),
+            .tokv(10'h001),
             .pfn(18'h00001)
         );
         for (int i = 1; i < SDTLB_ENTRIES; i++) begin
@@ -456,14 +471,15 @@ module tb_sdtlb;
                 .up(5'(i % 32)),
                 .eid(11'(i)),
                 .tok(10'(i)),
+                .tokv(10'(i)),
                 .pfn(18'(i))
             );
         end
         repeat (50) @(sdtlb_if.drv);
 
         // 给所有 sdtlb 的条目装填上内容后, 逐条回读条目内容, 确保与写入的一致.
-        // 装填从轮转指针当前指向的条目开始, 128 次正好绕一圈, 所以装填结束后指针又回到
-        // 起点: 用 victim_sel 的 one-hot 位置反推 "条目号 -> 第几次装填" 的映射.
+        // 装填按轮转替换指针走 (暂不做空闲优先), 128 次正好绕一圈回到起点, 所以装填结束后
+        // 用 victim_sel 的 one-hot 位置反推 "条目号 -> 第几次装填" 的映射.
         begin : readback_all_entries
             int                         start_idx;
             int                         fill_idx;
@@ -472,8 +488,9 @@ module tb_sdtlb;
             logic [PA_BASE_WIDTH-1:0]   exp_base;
             logic [PA_UP_WIDTH-1:0]     exp_up;
             logic [EID_WIDTH-1:0]       exp_eid;
-            logic [TOKEN_ID_WIDTH-1:0]  exp_tok;
-            logic [S_PFN_WIDTH-1:0]     exp_pfn;
+            logic [TOKEN_ID_WIDTH-1:0]    exp_tok;
+            logic [TOKEN_VALUE_WIDTH-1:0] exp_tokv;
+            logic [S_PFN_WIDTH-1:0]       exp_pfn;
 
             start_idx = 0;
             for (int k = 0; k < SDTLB_ENTRIES; k++) begin
@@ -491,23 +508,25 @@ module tb_sdtlb;
                 exp_up   = 5'(fill_idx % 32);
                 data_val = (fill_idx == 0) ? 1 : fill_idx;
                 exp_eid  = 11'(data_val);
-                exp_tok  = 10'(data_val);
-                exp_pfn  = 18'(data_val);
+                exp_tok  = 11'(data_val);
+                exp_tokv = 10'(data_val);
+                exp_pfn  = 23'(data_val);
 
                 if (!((dut.u_sdtlb.tag_item[e].valid === 1'b1) &&
                       (dut.u_sdtlb.tag_item[e].pa_base === exp_base) &&
                       (dut.u_sdtlb.tag_item[e].pa_up === exp_up) &&
                       (dut.u_sdtlb.data_item[e].eid === exp_eid) &&
                       (dut.u_sdtlb.data_item[e].token_id === exp_tok) &&
+                      (dut.u_sdtlb.data_item[e].token_value === exp_tokv) &&
                       (dut.u_sdtlb.data_item[e].s_pfn === exp_pfn))) begin
                     mismatch++;
-                    $display("FAIL 回读 entry[%0d] (第 %0d 次装填): valid=%b tag=%h/up=%0d data=%h/%h/%h, 期望 tag=%h/up=%0d data=%h/%h/%h",
+                    $display("FAIL 回读 entry[%0d] (第 %0d 次装填): valid=%b tag=%h/up=%0d data=%h/%h/%h/%h, 期望 tag=%h/up=%0d data=%h/%h/%h/%h",
                              e, fill_idx,
                              dut.u_sdtlb.tag_item[e].valid,
                              dut.u_sdtlb.tag_item[e].pa_base, dut.u_sdtlb.tag_item[e].pa_up,
                              dut.u_sdtlb.data_item[e].eid, dut.u_sdtlb.data_item[e].token_id,
-                             dut.u_sdtlb.data_item[e].s_pfn,
-                             exp_base, exp_up, exp_eid, exp_tok, exp_pfn);
+                             dut.u_sdtlb.data_item[e].token_value, dut.u_sdtlb.data_item[e].s_pfn,
+                             exp_base, exp_up, exp_eid, exp_tok, exp_tokv, exp_pfn);
                 end
             end
 
@@ -526,6 +545,7 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h7fe),
             .tok(10'h3fe),
+            .tokv(10'h3fe),
             .pfn(18'h3fffe)
         );
         repeat (10) @(sdtlb_if.drv);
@@ -547,42 +567,38 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
-        // 装填反压查表: wrapper 把输入打 1 拍, 所以 fill 在请求拍的下一个写拍才进 DUT;
-        // 反压也在写拍出现, 查表要跨过写拍才握手, 握手后拿到的是装填后的新 data.
-        sdtlb_if.drv.fill_en        <= 1'b1;
-        sdtlb_if.drv.fill_pa_base   <= {12'h210, 5'd7};
-        sdtlb_if.drv.fill_pa_up     <= 5'd7;
-        sdtlb_if.drv.fill_eid       <= 11'h0b2;
-        sdtlb_if.drv.fill_token_id  <= 10'h0b2;
-        sdtlb_if.drv.fill_s_pfn     <= 18'h1bbbb;
-        sdtlb_if.drv.cam0_req_valid <= 1'b1;
+        // 装填与查表不同拍 (外界约定): wrapper 把输入打 1 拍, 所以 fill 在请求拍的下一个
+        // 写拍才进 DUT. 本 tb 保证装填拍不发 camN_req_en, 写拍结束后再查表, 应看到装填后的新 data.
+        sdtlb_if.drv.fill_en           <= 1'b1;
+        sdtlb_if.drv.fill_pa_base      <= {12'h210, 5'd7};
+        sdtlb_if.drv.fill_pa_up        <= 5'd7;
+        sdtlb_if.drv.fill_eid          <= 11'h0b2;
+        sdtlb_if.drv.fill_token_id     <= 10'h0b2;
+        sdtlb_if.drv.fill_token_value  <= 10'h1b2;
+        sdtlb_if.drv.fill_s_pfn        <= 18'h1bbbb;
+        @(sdtlb_if.drv);             // 装填请求拍 (写 Latch 在下一拍)
+        sdtlb_if.drv.fill_en         <= 1'b0;
+        @(sdtlb_if.drv);             // 写拍: 按约定这一拍不发查表请求
+        sdtlb_if.drv.cam0_req_en    <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'h210, 5'd7, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        sdtlb_if.drv.cam1_req_valid <= 1'b1;
+        sdtlb_if.drv.cam1_req_en    <= 1'b1;
         sdtlb_if.drv.cam1_req_pa    <= {12'h210, 5'd7, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        @(sdtlb_if.drv);             // 请求拍: fill 还没进 DUT, 两路 ready 仍为高
-        chk("请求拍: ready 尚未拉低 (wrapper 打 1 拍)",
-            (sdtlb_if.drv.cam0_req_ready == 1'b1) &&
-            (sdtlb_if.drv.cam1_req_ready == 1'b1));
-        sdtlb_if.drv.fill_en        <= 1'b0;
-        @(sdtlb_if.drv);             // 写拍: 两路查表都必须被反压
-        chk("写拍: cam0_req_ready 拉低 (反压查表)",
-            sdtlb_if.drv.cam0_req_ready == 1'b0);
-        chk("写拍: cam1_req_ready 拉低 (反压查表)",
-            sdtlb_if.drv.cam1_req_ready == 1'b0);
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
-        sdtlb_if.drv.cam1_req_valid <= 1'b0;
-        @(sdtlb_if.drv);             // 写拍之后: 这一沿握手
-        chk("写拍后: ready 恢复",
-            (sdtlb_if.drv.cam0_req_ready == 1'b1) &&
-            (sdtlb_if.drv.cam1_req_ready == 1'b1));
+        @(sdtlb_if.drv);             // 查表拍 (在写拍之后, 与 fill_en 不同拍)
+        sdtlb_if.drv.cam0_req_en    <= 1'b0;
+        sdtlb_if.drv.cam1_req_en    <= 1'b0;
+        @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
         sample_rsp();
-        chk("fill 后握手: 命中且看到新 data",
+        chk("fill 后查表: 命中且看到新 data",
             (rsp_hit == 1'b1) &&
             (rsp_tag.pa_base == {12'h210, 5'd7}) &&
             (rsp_data.eid == 11'h0b2) &&
             (rsp_data.token_id == 10'h0b2) &&
+            (rsp_data.token_value == 10'h1b2) &&
             (rsp_data.s_pfn == 18'h1bbbb));
+        chk("双端口同拍查表: cam1 也命中同一条目",
+            (sdtlb_if.drv.cam1_hit == 1'b1) &&
+            (sdtlb_if.drv.cam1_hit_tag_item.pa_base == {12'h210, 5'd7}));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -592,6 +608,7 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h301),
             .tok(10'h301),
+            .tokv(10'h301),
             .pfn(18'h10101)
         );
         fill_one(
@@ -599,18 +616,19 @@ module tb_sdtlb;
             .up(5'd0),
             .eid(11'h402),
             .tok(10'h002),
+            .tokv(10'h302),
             .pfn(18'h20202)
         );
         repeat (10) @(sdtlb_if.drv);
 
         // 两路同拍各查一个条目: 两路都命中, 且各自读到自己的内容 (不串扰)
-        sdtlb_if.drv.cam0_req_valid <= 1'b1;
+        sdtlb_if.drv.cam0_req_en <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'h300, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        sdtlb_if.drv.cam1_req_valid <= 1'b1;
+        sdtlb_if.drv.cam1_req_en <= 1'b1;
         sdtlb_if.drv.cam1_req_pa    <= {12'h400, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);             // 两路同拍握手
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
-        sdtlb_if.drv.cam1_req_valid <= 1'b0;
+        sdtlb_if.drv.cam0_req_en <= 1'b0;
+        sdtlb_if.drv.cam1_req_en <= 1'b0;
         @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
         chk("双端口: cam0 命中自己的条目",
@@ -624,13 +642,13 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // 两路同拍: 一个命中一个未命中, 互不影响
-        sdtlb_if.drv.cam0_req_valid <= 1'b1;
+        sdtlb_if.drv.cam0_req_en <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'h400, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};   // 命中
-        sdtlb_if.drv.cam1_req_valid <= 1'b1;
+        sdtlb_if.drv.cam1_req_en <= 1'b1;
         sdtlb_if.drv.cam1_req_pa    <= {12'h500, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};   // 未命中
         @(sdtlb_if.drv);
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
-        sdtlb_if.drv.cam1_req_valid <= 1'b0;
+        sdtlb_if.drv.cam0_req_en <= 1'b0;
+        sdtlb_if.drv.cam1_req_en <= 1'b0;
         @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
         chk("双端口: cam0 命中 (cam1 未命中不影响它)",
@@ -644,13 +662,13 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         // 两路同拍: 地址对调, 命中结果跟着各自的端口走
-        sdtlb_if.drv.cam0_req_valid <= 1'b1;
+        sdtlb_if.drv.cam0_req_en <= 1'b1;
         sdtlb_if.drv.cam0_req_pa    <= {12'h400, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        sdtlb_if.drv.cam1_req_valid <= 1'b1;
+        sdtlb_if.drv.cam1_req_en <= 1'b1;
         sdtlb_if.drv.cam1_req_pa    <= {12'h300, 5'd0, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);
-        sdtlb_if.drv.cam0_req_valid <= 1'b0;
-        sdtlb_if.drv.cam1_req_valid <= 1'b0;
+        sdtlb_if.drv.cam0_req_en <= 1'b0;
+        sdtlb_if.drv.cam1_req_en <= 1'b0;
         @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
         chk("双端口: 地址对调后 cam0 读到 400 条目",

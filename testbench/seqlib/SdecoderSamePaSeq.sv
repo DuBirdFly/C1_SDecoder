@@ -49,8 +49,8 @@ class SdecoderSamePaSeq extends uvm_sequence#(SdecoderItem);
     endtask
 
     task body();
-        // 一级表基地址; 不配的话 SDT_L1_BASE 复位值是 0, walk 会读到错误的表
-        send_cfg(ADDR_SDT_L1_BASE, 64'h0000_0000_0000_1000);
+        // 一级表基地址; 不配的话 SDecoder_PTBR 复位值是 0, walk 会读到错误的表
+        send_cfg(ADDR_SDECODER_PTBR, 64'h0000_0000_0000_1000);
 
         // TLB 空: 4 个同 PA 请求背靠背, 4 次 walk 都应在 fill 去重后落到同一条目
         send_req(PA_A, 8'hA1);

@@ -24,7 +24,7 @@
 // Testbench top files
 ./testbench/top/crg.sv
 ./testbench/top/tb_sdtlb.sv
-./testbench/top/tb_sdtlb_err.sv
-./testbench/top/tb_sdtlb_fix.sv
+./testbench/top/tb_sdtlb_spec.sv
 ./testbench/top/tb_sdtlb_tag_item.sv
+./testbench/top/tb_sdior.sv
 ./testbench/top/tb_age_matrix.sv

@@ -101,6 +101,7 @@ import sdecoder_pkg::*;
     assign req0_hit = req0_en && valid_q && req0_match;
     assign req1_hit = req1_en && valid_q && req1_match;
 
+
 `ifdef ASSERT_ON
     // fill_wr_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]
     `assert_clk(a_fill_pa_range_valid,
