@@ -2,10 +2,11 @@
 ./testbench/utils/utils_pkg.svh
 ./testbench/utils/dump_wave_pkg.svh
 
-// include directories for package includes
-+incdir+./testbench/env
+// include directories for package includes (按 <area>/sdecoder/ 的目录组织)
++incdir+./testbench/env/sdecoder
++incdir+./testbench/seqlib/sdecoder
 +incdir+./testbench/test
-+incdir+./testbench/seqlib
++incdir+./testbench/test/sdecoder
 
 // interface files
 ./testbench/top/interface/sdtlb_if.sv
@@ -17,8 +18,8 @@
 
 // UVM files
 ./testbench/inc/uvm_header.svh
-./testbench/seqlib/sdecoder_seq_pkg.svh
-./testbench/env/sdecoder_env_pkg.svh
+./testbench/seqlib/sdecoder/sdecoder_seq_pkg.svh
+./testbench/env/sdecoder/sdecoder_env_pkg.svh
 ./testbench/test/test_pkg.svh
 
 // Testbench top files

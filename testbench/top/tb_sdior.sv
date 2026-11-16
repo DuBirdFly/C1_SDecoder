@@ -155,7 +155,7 @@ module tb_sdior;
         repeat (2) @(posedge clk);
         chk("SDecoder_IS 产生 1 拍 inv_en", en_cnt == en_snap + 1);
         chk("SDecoder_IS 的 inv_pa 是字的低位 PA[47:0]",
-            inv_pa_cap == 48'h0000_0000_4000_0000);
+            inv_pa_cap == 48'h0000_4000_0000);
         chk("SDecoder_IS 不产生 inv_all", all_cnt == all_snap);
 
         // W1P 寄存器读回 0
