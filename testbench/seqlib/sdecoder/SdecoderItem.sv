@@ -6,11 +6,20 @@ class SdecoderItem extends uvm_sequence_item;
     `uvm_object_utils(SdecoderItem)
 
     rand Sdecoder_Item_Kind_e         kind;
-    rand logic [SDIOR_ADDR_WIDTH-1:0] cfg_addr;
-    rand logic [SDIOR_DATA_WIDTH-1:0] cfg_wdata;
-    rand logic [PA_WIDTH-1:0]         pa;
-    rand logic [REQ_ID_WIDTH-1:0]     id;
-    rand bit                          rsp_ready;
+
+    // 寄存器写接口
+    rand logic [SDIOR_ADDR_WIDTH-1:0] ior_waddr;
+    rand logic [SDIOR_DATA_WIDTH-1:0] ior_wdata;
+
+    // 寄存器读接口
+    rand logic [SDIOR_ADDR_WIDTH-1:0] ior_raddr;
+    rand logic [SDIOR_DATA_WIDTH-1:0] ior_rdata;
+
+    // CAM 接口
+    rand logic [PA_WIDTH-1:0]         cam_req_pa;
+    rand logic [REQ_ID_WIDTH-1:0]     cam_req_id;
+
+    // 等待周期数
     rand int unsigned                 wait_cycles;
 
     function new(string name = "SdecoderItem");

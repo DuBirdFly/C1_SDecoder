@@ -7,10 +7,10 @@ package sdecoder_seq_pkg;
     import sdecoder_pkg::*;
 
     typedef enum {
-        SDEC_CFG_WR,
-        SDEC_REQ,
-        SDEC_RSP_READY,
-        SDEC_WAIT
+        SDIOR_WR,
+        SDIOR_RD,
+        SDTLB_CAM0_REQ,
+        SDTLB_CAM1_REQ
     } Sdecoder_Item_Kind_e;
 
     `include "SdecoderItem.sv"
