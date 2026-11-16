@@ -7,6 +7,7 @@ class SdecoderEnv extends uvm_env;
 
     SdecoderAgt agt;
     SdecoderPageTableModel page_table_model;
+    SdecoderScb scb;
 
     function new(string name = "SdecoderEnv", uvm_component parent = null);
         super.new(name, parent);
@@ -16,6 +17,7 @@ class SdecoderEnv extends uvm_env;
         super.build_phase(phase);
         agt = SdecoderAgt::type_id::create("agt", this);
         page_table_model = SdecoderPageTableModel::type_id::create("page_table_model", this);
+        scb = SdecoderScb::type_id::create("scb", this);
     endfunction
 
 endclass

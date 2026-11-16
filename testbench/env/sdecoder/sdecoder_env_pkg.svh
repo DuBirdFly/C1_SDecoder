@@ -9,6 +9,7 @@ package sdecoder_env_pkg;
     `include "SdecoderSqr.sv"
     `include "SdecoderDrv.sv"
     `include "SdecoderMon.sv"
+    `include "SdecoderScb.sv"
     `include "SdecoderAgt.sv"
     `include "SdecoderEnv.sv"
 
