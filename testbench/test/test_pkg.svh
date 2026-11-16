@@ -6,7 +6,6 @@ package test_pkg;
     import sdecoder_seq_pkg::*;
     import sdecoder_env_pkg::*;
 
-    `include "sdecoder/TestBase.sv"
-    `include "sdecoder/TestSamePa.sv"
+    `include "sdecoder/SDecoderTestBase.sv"
 
 endpackage

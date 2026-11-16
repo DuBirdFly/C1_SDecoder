@@ -8,7 +8,7 @@
 # USER CONFIG (single test case)
 # 默认顶层 (冒烟): 挑一个单元自检 tb
 TB_TOP ?= tb_sdtlb
-TESTNAME ?= TestBase
+TESTNAME ?= SDecoderTestBase
 DUMP_WAVE ?= 1
 DUMP_SVA ?= 1
 

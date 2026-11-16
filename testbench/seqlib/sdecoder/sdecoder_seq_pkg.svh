@@ -15,7 +15,6 @@ package sdecoder_seq_pkg;
 
     `include "SdecoderItem.sv"
     `include "SdecoderSmokeSeq.sv"
-    `include "SdecoderSamePaSeq.sv"
 
 endpackage
 

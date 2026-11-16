@@ -1,96 +1,31 @@
+// SDecoder 顶层接口 (占位)
+//
+// SDecoder 顶层还没实现, 旧接口 (单路 req_* / rsp_* + AXI 风格 tw_* 读表 + cfg) 已经和现在的
+// 设计方案对不上, 所以这里只留 clk / rst_n 与两个 clocking 骨架.
+//
+// TODO: 按设计方案 "接口信号" 一节补端口信号:
+//   cam0 / cam1 请求 (req_en / req_pa) 与响应 (hit / sla / eid / token_id / token_value / err)
+//   sdmq_rsp (valid / ready / id / eid / token_id / token_value / sla / err / flushed)
+//   pw_mem_raddr / pw_mem_rdata (Page Walk 访存, id / addr / data / err)
+//   ior (wen / waddr / wdata / raddr / rdata) 与异常统计输出
 interface sdecoder_if
 import sdecoder_pkg::*;
 (
-    input logic                 clk,
-    input logic                 rst_n
+    input  logic clk,
+    input  logic rst_n
 );
 
-    timeunit 1ps/1ps;
+    timeunit      1ps;
+    timeprecision 1ps;
 
-    // 代换请求
-    logic                       req_valid;
-    logic                       req_ready;
-    logic [PA_WIDTH-1:0]        req_pa;
-    logic [REQ_ID_WIDTH-1:0]    req_id;
-
-    // 代换响应
-    logic                       rsp_valid;
-    logic                       rsp_ready;
-    logic [REQ_ID_WIDTH-1:0]    rsp_id;
-    logic [EID_WIDTH-1:0]           rsp_eid;
-    logic [TOKEN_ID_WIDTH-1:0]      rsp_token_id;
-    logic [TOKEN_VALUE_WIDTH-1:0]   rsp_token_value;
-    logic [SLA_WIDTH-1:0]           rsp_sla;
-    logic [CAM_RSP_ERR_WIDTH-1:0]   rsp_err;
-
-    // Page Walk 访存: tw_araddr / tw_arvalid / tw_rready 由 DUT 驱动,
-    // tw_arready / tw_rdata / tw_rvalid 由 bench 的存储模型驱动
-    logic [PA_WIDTH-1:0]        tw_araddr;
-    logic                       tw_arvalid;
-    logic                       tw_arready;
-    logic [127:0]               tw_rdata;
-    logic                       tw_rvalid;
-    logic                       tw_rready;
-
-    // 配置与刷新
-    logic                       cfg_wr;
-    logic                       cfg_rd;
-    logic [SDIOR_ADDR_WIDTH-1:0] cfg_addr;
-    logic [SDIOR_DATA_WIDTH-1:0] cfg_wdata;
-    logic [SDIOR_DATA_WIDTH-1:0] cfg_rdata;
+    // TODO: 端口信号待补
 
     clocking drv @(posedge clk);
         default input #1 output #1;
-
-        output req_valid;
-        output req_pa;
-        output req_id;
-        output rsp_ready;
-        output cfg_wr;
-        output cfg_rd;
-        output cfg_addr;
-        output cfg_wdata;
-
-        input  req_ready;
-        input  rsp_valid;
-        input  rsp_id;
-        input  rsp_eid;
-        input  rsp_token_id;
-        input  rsp_token_value;
-        input  rsp_sla;
-        input  rsp_err;
-        input  cfg_rdata;
-        input  tw_araddr;
-        input  tw_arvalid;
-        input  tw_rready;
     endclocking
 
     clocking mon @(posedge clk);
         default input #1step;
-
-        input req_valid;
-        input req_ready;
-        input req_pa;
-        input req_id;
-        input rsp_valid;
-        input rsp_ready;
-        input rsp_id;
-        input rsp_eid;
-        input rsp_token_id;
-        input rsp_token_value;
-        input rsp_sla;
-        input rsp_err;
-        input tw_araddr;
-        input tw_arvalid;
-        input tw_arready;
-        input tw_rdata;
-        input tw_rvalid;
-        input tw_rready;
-        input cfg_wr;
-        input cfg_rd;
-        input cfg_addr;
-        input cfg_wdata;
-        input cfg_rdata;
     endclocking
 
 endinterface
