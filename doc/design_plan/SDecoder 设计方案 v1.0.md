@@ -44,6 +44,8 @@ flowchart LR
 
 ### 术语
 
+表: 术语表
+
 | 缩写 | 全称 |
 | --- | --- |
 | CAM | Content Addressable Memory |
@@ -76,6 +78,8 @@ flowchart LR
 | W1C | Write 1 to Clear |
 
 ### 参数
+
+表: 参数表
 
 | 参数 | 默认值 |
 | --- | --- |
@@ -128,6 +132,8 @@ flowchart LR
     class REQ0,REQ1,TW,RSP0,RSP1,MQRSP,CFG iface
 ```
 
+图: SDecoder 内部结构图
+
 2 路独立的输入请求进入同一个 SDTLB 做 CAM 查表: 命中时由对应的 SLMD_CALC_CAM 计算出 SLMD, 从该路的响应接口返回 (命中通路); 未命中时写入 SDMQ, 交由 SDPWU_TOP 做 Page Walk, Page Walk 得到的合法表项由 SDMQ 回填 SDTLB, 同时经 SLMD_CALC_SDMQ 计算出 SLMD, 并从未命中队列响应接口返回 (未命中通路)
 
 各模块的职责如下:
@@ -145,6 +151,8 @@ flowchart LR
 注: SDecoder 内部结构图上只画了 SDIOR 的配置接口, SDIOR 输出的置无效 (刷新) 命令同时作用于 SDTLB 与 SDMQ, SDIOR 统计的异常信息从 SDecoder 顶层输出, 详细内容见后续章节
 
 ### 接口分组
+
+表: 接口分组表
 
 | 接口信号 | 定位 | 方向 | 说明 |
 | --- | --- | --- | --- |
@@ -179,7 +187,7 @@ flowchart LR
 
 1. 响应接口数据无法被取走 (ready 为 0)
 2. SDMQ 将满, 避免队列溢出
-3. 装填 SDTLB 的当拍 (SDTLB 采用 Latch, 不支持同拍读写)
+3. 装填 SDTLB 的当拍 (SDTLB 采用 Latch, 不支持同拍读写; 该拍由 SDecoder 顶层反压请求接口的 ready 信号)
 
 ### 未命中通路
 
@@ -218,6 +226,8 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 
 所以对于一个 PA 请求, 其位域划分如下:
 
+表: PA 请求位域划分表
+
 | 名称 | 位域 | 说明 |
 | --- | --- | --- |
 | 地址空间标识 | [47] | 0: Mem 空间, 1: IO 空间 |
@@ -234,6 +244,8 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
 3. PA 查表的索引是"基地址 + 索引 × 条目宽度", 一级表本身基地址 IOR.SDecoder_PTBR.SDT_L1_BASE 由软件填写 IO 寄存器, 二级表基地址 PTE.SDT_L2_BASE 由一级表条目提供
 
 #### 一级表条目
+
+表: 一级表条目表
 
 | 位域 | 位宽 | 名称 | 说明 |
 | --- | --- | --- | --- |
@@ -279,6 +291,8 @@ SDecoder 只处理 Mem 空间, 因此断言 PA[47] 恒为 0, 实际有用的是 
   - S_PFN[52:30] + (PA[34:30] - SEG_BASE[34:30]) 溢出
 
 #### 二级表条目
+
+表: 二级表条目表
 
 | 位域 | 位宽 | 名称 | 说明 |
 | --- | --- | --- | --- |
@@ -336,7 +350,7 @@ flowchart TD
     class CTRL,SDPWU0,SDPWU1,SDPWUN,SEL orange
 ```
 
-图: SDPWU_CTRL 的连接关系
+图: SDPWU_CTRL 与 SDPWU 的连接关系
 
 
 所有 SDPWU 复用一套访存接口, 所以断言 SDMQ 一拍最多接收 1 个 PTE. 所以用一个 onehot 选择器将 N 个 SDPWU 在 Page Walk 完成的输出合并为 1 个.
@@ -396,20 +410,29 @@ SDPWU 的开始采用 valid+ready 握手, 结束为单拍有效信号, 不需要
 ```mermaid
 flowchart TD
     IDLE
-    IDLE -->|"pwu_start_valid & pwu_start_ready"| SDT_L1_AR
-    SDT_L1_AR --> SDT_L1_R
-    SDT_L1_R --> SDT_L1_ITEM_CHK
+    IDLE -->|"pwu_start_valid & pwu_start_ready"| SDT_L1_RD_ADDR
+    SDT_L1_RD_ADDR --> SDT_L1_RD_DATA
+    SDT_L1_RD_DATA --> SDT_L1_ITEM_CHK
     SDT_L1_ITEM_CHK -->|"illegal"| FINISH
-    SDT_L1_ITEM_CHK -->|"!illegal & !hit"| SDT_L2_AR
+    SDT_L1_ITEM_CHK -->|"!illegal & !hit"| SDT_L2_RD_ADDR
     SDT_L1_ITEM_CHK -->|"!illegal & hit"| FINISH
-    SDT_L2_AR --> SDT_L2_R
-    SDT_L2_R --> SDT_L2_ITEM_CHK
+    SDT_L2_RD_ADDR --> SDT_L2_RD_DATA
+    SDT_L2_RD_DATA --> SDT_L2_ITEM_CHK
     SDT_L2_ITEM_CHK -->|"illegal"| FINISH
     SDT_L2_ITEM_CHK -->|"!illegal"| FINISH
     FINISH -->|"pwu_finish_valid"| IDLE
 ```
 
 图: SDPWU 状态机
+
+状态说明:
+
+- `IDLE`: 空闲, 拉高 `pwu_start_valid` 向 SDPWU_CTRL 申请新的未命中请求; 在 SDPWU_CTRL 拉高 `pwu_start_ready` 完成握手后, 进入 Page Walk
+- `SDT_L1_RD_ADDR`/`SDT_L1_RD_DATA`: 访问一级表, 读一级表表项
+- `SDT_L1_ITEM_CHK`: 根据一级表表项判定 `illegal` 与段式命中 (详细状态转移关系见后面的状态转移表)
+- `SDT_L2_RD_ADDR`/`SDT_L2_RD_DATA`: 访问二级表, 读二级表表项
+- `SDT_L2_ITEM_CHK`: 根据二级表表项判定 `illegal` 与页式命中 (详细状态转移关系见后面的状态转移表)
+- `FINISH`: Page Walk 结束, 单拍拉高 `pwu_finish_valid` 并附带 `pwu_finish_sideband`; 随后回到 `IDLE`
 
 `illegal` 是 PTE 结果的统一非法标志, 下表描述了可能出现的非法情况, 这些情况都会作为独立的 sideband 信号在 Page Walk 完成时一并输出
 
@@ -425,18 +448,9 @@ flowchart TD
 
 注: 目前 `SDT_L1_ITEM_CHK` 判断 `pw_pte_malformed` 的情况是段的 1GB 上界超出一级表表项的 32GB 区间, 即 `SEG_BASE + SEG_LEN > 31`
 
-注: `SDT_L2_ITEM_CHK` 不判断 `pw_pte_malformed` 的情况
+注: `SDT_L2_ITEM_CHK` 不判断 PTE 是否存在字段取值非法的情况 (`pw_pte_malformed`)
 
-状态说明:
-
-- `IDLE`: 空闲, 拉高 `pwu_start_valid` 向 SDPWU_CTRL 申请新的未命中请求; 在 SDPWU_CTRL 拉高 `pwu_start_ready` 完成握手后, 进入 Page Walk
-- `SDT_L1_AR`/`SDT_L1_R`: 访问一级表, 读一级表表项
-- `SDT_L1_ITEM_CHK`: 根据一级表表项判定 `illegal` 与段式命中 (详细状态转移关系见后面的状态转移表)
-- `SDT_L2_AR`/`SDT_L2_R`: 访问二级表, 读二级表表项
-- `SDT_L2_ITEM_CHK`: 根据二级表表项判定 `illegal` 与页式命中 (详细状态转移关系见后面的状态转移表)
-- `FINISH`: Page Walk 结束, 单拍拉高 `pwu_finish_valid` 并附带 `pwu_finish_sideband`; 随后回到 `IDLE`
-
-`SDT_L1_ITEM_CHK` 状态转移表
+表: `SDT_L1_ITEM_CHK` 状态转移表
 
 | illegal | Type | hit | 行为 |
 | --- | --- | --- | --- |
@@ -444,7 +458,7 @@ flowchart TD
 | 0 | X | 0 | 该 32GB 区间不存在段式映射或段式映射未命中, 前往访问二级表 |
 | 0 | 1 | 1 | 段式映射命中, Page Walk 结束 |
 
-`SDT_L2_ITEM_CHK` 状态转移表
+表: `SDT_L2_ITEM_CHK` 状态转移表
 
 | illegal | 行为 |
 | --- | --- |
@@ -530,7 +544,7 @@ SDMQ 是一个深度为 `SDMQ_DEPTH` 的队列, 每个条目主要存储 SDTLB �
 
 注: 如果 2 个 Miss 请求同拍装填 SDMQ 条目, 那么装填到条目号比较大的那个请求更年轻
 
-#### 装填条目 (SDMQ)
+#### 装填条目
 
 当 SDTLB 未命中时, 向 SDMQ 装填条目:
 
@@ -582,16 +596,16 @@ SDMQ 将满时同时拉低两路请求接口的 ready 信号, 不再接受任何
 
 注: `page_walk_busy = page_walk_start & !page_walk_finish`, 当 `page_walk_busy` 为 1 时, 即使 `pte_hit` 或 `flushed` 也不参与弹出
 
-注: 可能因为 Page Walk 出错的原因, 条目内容是 pte_hit = 0, flushed = 0, page_walk_finish = 1
+注: 可能因为 Page Walk 出错的原因, 条目内容是 "pte_hit = 0, flushed = 0, page_walk_finish = 1"
 
-弹出指 SDMQ 与 SLMD_CALC_SDMQ 之间的 `sdmq_pop_valid` / `sdmq_pop_ready` 握手
+弹出指 SDMQ 与 SLMD_CALC_SDMQ 之间使用 `sdmq_pop_valid` / `sdmq_pop_ready` 握手
 
 SDMQ 与 SLMD_CALC_SDMQ 握手当拍, SLMD_CALC_SDMQ 用 SDMQ 送出的条目组合拼装出 SLMD, 并用 FF 寄存该 SLMD; 这样响应接口上 valid 为 1 期间荷载可以保持不变
 
 弹出条目的响应形式:
 
 1. `pte_hit = 1`: 返回正常的 SLMD
-2. `page_walk_finish = 1 且 pte_hit = 0`: 返回异常响应, `sdmq_rsp_err` 取该条目的 `page_walk_err`
+2. `page_walk_finish = 1 且 pte_hit = 0`: 返回异常响应, `sdmq_rsp_err` 应附带该条目的 `page_walk_err`
 3. `flushed = 1`: 返回无效响应, 置起 `sdmq_rsp_flushed`; 此时不需要 `sdmq_rsp_err`
 4. 一条条目同时满足多个条件时, 优先级为 `pte_hit` > `flushed` > `page_walk_finish`
 
@@ -681,7 +695,7 @@ flowchart LR
     TAG --> HIT["hit_vector<br/>(onehot0)"]
     HIT --> DATA["SDTLB_DATA"]
     DATA --> OUT["命中条目的 Data"]
-    FILL(["Page Walk 回填"]) --> TAG
+    FILL(["SDMQ 回填"]) --> TAG
     FILL --> DATA
     INV(["软件置无效"]) --> TAG
     classDef iface fill:#e1f5fe,stroke:#0288d1,color:#01579b
@@ -689,6 +703,8 @@ flowchart LR
 ```
 
 图: SDTLB 的内部结构
+
+表: SDTLB 的功能概述
 
 | 功能 | 说明 |
 | --- | --- |
@@ -699,13 +715,15 @@ flowchart LR
 | 写入 | 只允许硬件装填 |
 | 清除 | 由刷新接口置无效 |
 
-注: SDTLB 条目除 `Valid` 用 FF 外, 其余字段都用 Latch. Latch 被同拍读写时行为未知, 因此装填与查表不能同拍进行: 装填当拍写入 Latch, 该拍由 SDTLB 拉低所有请求端 ready 信号, 反压所有查表请求.
+注: SDTLB 条目除 `Valid` 用 FF 外, 其余字段都用 Latch. Latch 被同拍读写时行为未知, 因此装填与查表不能同拍进行: 装填当拍写入 Latch, 该拍由 SDecoder 顶层反压请求接口的 ready 信号, 保证上游不在装填当拍发起查表请求 (即 `camN_req_valid` 与 `fill_en` 不同拍), SDTLB 内部用排他断言作为违例哨兵
 
 注: 置无效与装填同拍发生时, 置无效优先, 本次装填丢弃 (`Valid` 不被置起)
 
 注: 虽然 Page Table 是 "一级表段式代换 (范围 1GB 到 32GB), 二级表页式代换 (固定 1GB)", 但是 SDTLB 段式和页式统一按 "段" 处理, 把 1GB 页看作长度为 1 的段, 页和段都用 `PA_Base` / `PA_Up` 的范围表示, 不设额外的粒度位
 
 #### 条目内容
+
+表: SDTLB 条目的字段
 
 | 字段组 | 字段 | 位宽 | 存储 | 说明 |
 | --- | --- | --- | --- | --- |
@@ -734,8 +752,6 @@ flowchart LR
 
 SDTLB 的 Tag 类使用组合逻辑进行 CAM 寻找命中条目; `hit_vector` 打 1 拍后再用; 请求拍 T 时刻的命中结果固定在 T+1 时刻有效; SDTLB 的 Data 类字段用 `hit_vector` 选出命中的条目后输出
 
-装填当拍写入 Latch, 这一拍禁止读访问条目, 即拉低请求接口的 ready 信号, 两路查表请求均被反压 (断言 fill 时请求接口不能握手)
-
 命中后的 SLA 计算:
 
 ```text
@@ -743,7 +759,7 @@ SLA[52:30] = S_PFN[52:30] + (PA[34:30] - PA_Base[34:30])
 SLA[29:0]  = PA[29:0]
 ```
 
-#### 装填条目 (SDTLB)
+#### 装填条目
 
 SDTLB 只允许硬件回填, 软件不可写入
 
@@ -766,13 +782,15 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 ##### 伪随机指针
 
-早期开发阶段先用 "乱转 $onehot() 指针" 代替
+早期开发阶段先用 "轮转 $onehot() 指针" 代替
 
 ## 接口信号
 
-缺典型时序图 (待 RTL 定稿后回填): 用 wavedrom_render 生成, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里
+*缺典型时序图 (待 RTL 定稿后回填): 用 wavedrom_render 生成, 不贴在 markdown 正文里, 生成 svg 转 visio-vsdx 后粘贴到 word 里*
 
 ### 请求接口 (CAM)
+
+表: 请求接口信号 (CAM)
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -784,6 +802,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 注 1: 共有 2 组请求接口 (CAM), N 可取 [0, 1], 分别对应 SDTLB 的两组输入接口 (cam0 / cam1)
 
 ### 响应接口 (CAM)
+
+表: 响应接口信号 (CAM)
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -798,7 +818,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 注 1: 共有 2 组响应接口 (CAM), N 可取 [0, 1], 分别对应 SDTLB 两组输入接口 (cam0 / cam1) 的响应
 
-`camN_rsp_err` 位域含义:
+表: `camN_rsp_err` 位域含义
 
 | 名称 | 位域 | 说明 |
 | --- | --- | --- |
@@ -807,6 +827,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 注: 当软件修改了 Page Table 但未对 SDTLB 做刷新, 可能会出现 SDTLB 中存在多个条目命中同一个 PA 的情况, 即 CAM 命中 SDTLB 的条目不唯一
 
 ### 响应接口 (SDMQ)
+
+表: 响应接口信号 (SDMQ)
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -820,7 +842,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `sdmq_rsp_err` | O | `SDMQ_RSP_ERR_WIDTH` | / |
 | `sdmq_rsp_flushed` | O | 1 | 条目被软件置无效 (刷新), 本次返回无效响应 |
 
-`sdmq_rsp_err` 位域含义:
+表: `sdmq_rsp_err` 位域含义
 
 | 名称 | 位域 | 说明 |
 | --- | --- | --- |
@@ -838,7 +860,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 访存接口的 "读地址通道" 和 "读数据通道分离"
 
-读地址通道:
+表: 访存接口 (读地址通道)
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -847,7 +869,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `pw_mem_raddr_valid` | O | 1 | / |
 | `pw_mem_raddr_ready` | I | 1 | / |
 
-读数据通道:
+表: 访存接口 (读数据通道)
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -857,7 +879,7 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `pw_mem_rdata_ready` | O | 1 | / |
 | `pw_mem_rdata_err` | I | `PW_RDATA_ERR_WIDTH` | / |
 
-`pw_mem_rdata_err` 位域含义:
+表: `pw_mem_rdata_err` 位域含义
 
 | 名称 | 位域 | 说明 |
 | --- | --- | --- |
@@ -866,6 +888,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 | `pw_oob_access` | [0] | page walk out-of-bounds access, 页表地址越界 |
 
 ### 寄存器配置接口
+
+表: 寄存器配置接口信号
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -878,6 +902,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 ### 异常统计接口
 
 异常统计信号不是寄存器配置接口的一部分, 但异常统计寄存器位于 SDIOR 内, 异常发生的下一拍, SDIOR 的异常统计寄存器对应位被置 1, 并直通到 SDecoder 顶层输出
+
+表: 异常统计接口
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
@@ -893,6 +919,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 ## 可配置的寄存器
 
 ### 寄存器列表
+
+表: 寄存器列表
 
 | 序号 | 名字 | 说明 |
 | --- | --- | --- |
