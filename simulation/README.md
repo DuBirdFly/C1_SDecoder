@@ -26,7 +26,7 @@ make -C simulation_agent all
 
 | 变量 | 默认 | 作用 |
 | --- | --- | --- |
-| `TB_TOP` | `tb_sdtlb` | 仿真的顶层. 单元自检用 `tb_sdtlb` / `tb_sdtlb_tag_item` / `tb_sdior` / `tb_age_matrix`; UVM 顶层是 `tb_sdior` (sdior) 与 `tb_sdecoder` (SDecoder, 顶层 RTL 未实现, 目前只跑空骨架) |
+| `TB_TOP` | `tb_sdtlb` | 仿真的顶层. 单元自检用 `tb_sdtlb_tag_item` / `tb_age_matrix`; UVM 顶层是 `tb_sdtlb` (SDTLB) / `tb_sdior` (sdior) / `tb_sdecoder` (SDecoder, 顶层 RTL 未实现, 目前只跑空骨架) |
 | `TESTNAME` | `SDecoderTestBase` (tb_sdior 为 `SdiorTestBase`) | UVM 的 `+UVM_TESTNAME`;单元自检 tb 用不到, 只参与运行目录命名 |
 | `DUMP_WAVE` | `1` | 1 = 出 FSDB 波形 (目前 tb 体量小, 默认出);0 = 不出 |
 

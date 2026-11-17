@@ -11,6 +11,8 @@ TB_TOP ?= tb_sdtlb
 # 每个 tb 的默认 UVM 用例名 (单元自检 tb 用不到 +UVM_TESTNAME)
 ifeq ($(TB_TOP),tb_sdior)
 TESTNAME ?= SdiorTestBase
+else ifeq ($(TB_TOP),tb_sdtlb)
+TESTNAME ?= SdtlbTestBase
 else
 TESTNAME ?= SDecoderTestBase
 endif

@@ -6,10 +6,13 @@
 +incdir+./testbench/env/sdecoder
 +incdir+./testbench/seqlib/sdecoder
 +incdir+./testbench/env/sdior
++incdir+./testbench/env/sdtlb
 +incdir+./testbench/ral/sdior
 +incdir+./testbench/seqlib/sdior
++incdir+./testbench/seqlib/sdtlb
 +incdir+./testbench/test
 +incdir+./testbench/test/sdecoder
++incdir+./testbench/test/sdtlb
 
 // interface files
 ./testbench/top/interface/sdtlb_if.sv
@@ -25,9 +28,11 @@
 ./testbench/inc/uvm_header.svh
 ./testbench/seqlib/sdecoder/sdecoder_seq_pkg.svh
 ./testbench/seqlib/sdior/sdior_seq_pkg.svh
+./testbench/seqlib/sdtlb/sdtlb_seq_pkg.svh
 ./testbench/env/sdecoder/sdecoder_env_pkg.svh
 ./testbench/ral/sdior/sdior_ral_pkg.svh
 ./testbench/env/sdior/sdior_env_pkg.svh
+./testbench/env/sdtlb/sdtlb_env_pkg.svh
 ./testbench/test/test_pkg.svh
 
 // Testbench top files
