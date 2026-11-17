@@ -121,7 +121,7 @@ module tb_sdtlb;
     // 按地址置无效, 拉高一拍; pa 是 PA[47:30], 低 30 位补 0
     task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] pa);
         sdtlb_if.drv.inv_sel <= 1'b1;
-        sdtlb_if.drv.inv_sel_pa <= {pa, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        sdtlb_if.drv.inv_sel_pa <= pa;
         @(sdtlb_if.drv);
         sdtlb_if.drv.inv_sel <= 1'b0;
         repeat (2) @(sdtlb_if.drv);             // 等置无效生效

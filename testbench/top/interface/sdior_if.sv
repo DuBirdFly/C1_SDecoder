@@ -30,7 +30,7 @@ import sdecoder_pkg::*;
     logic [PA_WIDTH-1:0]            sdecoder_ptbr;
     logic                           inv_all;
     logic                           inv_sel;
-    logic [PA_WIDTH-1:0]            inv_sel_pa;
+    logic [PA_BASE_WIDTH-1:0]       inv_sel_pa;
 
     // 驱动用
     clocking drv @(posedge clk);

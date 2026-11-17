@@ -4,7 +4,7 @@
 // sdior 的 scoreboard (RAL 版)
 //   期望值不再由 scb 自己维护, 全部取自 RAL 的 mirror:
 //     SDIOR_RD : 读回值必须等于对应寄存器的 mirror 值 (IA 是 volatile, 按设计读回恒 0)
-//     SDIOR_INV: inv_sel 那一拍的 inv_sel_pa 必须等于 IS.INV_SEL_PA 的 mirror 拼出的 PA
+//     SDIOR_INV: inv_sel 那一拍的 inv_sel_pa 必须等于 IS.INV_SEL_PA 的 mirror
 //     SDIOR_WR : 只计数; mirror 由 uvm_reg_predictor 根据总线事务更新
 //   check_phase: 打印访问次数并汇总比对错误
 class SdiorScb extends uvm_scoreboard;
@@ -48,8 +48,14 @@ class SdiorScb extends uvm_scoreboard;
                     `uvm_error("SCB_ADDR", $sformatf("读地址 0x%0h 在 RAL 里找不到对应寄存器", tr.addr))
                 end
                 else begin
-                    // IA 是 volatile (写即触发, 读回恒 0); 其余寄存器比 mirror
-                    exp = (rg == reg_model.IA) ? 64'h0 : rg.get_mirrored_value();
+                    // IA 是 volatile (写即触发, 读回恒 0); 其余寄存器和 mirror 比对
+                    if (rg == reg_model.IA) begin
+                        exp = 64'h0;
+                    end
+                    else begin
+                        exp = rg.get_mirrored_value();
+                    end
+
                     if (tr.rdata !== exp) begin
                         err_cnt++;
                         `uvm_error(
@@ -66,9 +72,8 @@ class SdiorScb extends uvm_scoreboard;
                 end
                 if (tr.inv_sel) begin
                     inv_sel_cnt++;
-                    // 期望值 = IS.INV_SEL_PA 的 mirror 拼回整条 PA
-                    exp = {reg_model.IS.get_field_by_name("INV_SEL_PA").get_mirrored_value(),
-                           {(PA_WIDTH - PA_BASE_WIDTH) {1'b0}}};
+                    // 期望值 = IS.INV_SEL_PA 的 mirror (inv_sel_pa 就是 PA[47:30])
+                    exp = reg_model.IS.get_field_by_name("INV_SEL_PA").get_mirrored_value();
                     if (tr.inv_sel_pa !== exp) begin
                         err_cnt++;
                         `uvm_error(

@@ -38,7 +38,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新) 请求
     logic                               inv_all;
     logic                               inv_sel;
-    logic [PA_WIDTH-1:0]                inv_sel_pa;
+    logic [PA_BASE_WIDTH-1:0]           inv_sel_pa;
 
     // driver: 驱动 DUT 输入, 回读 DUT 输出
     clocking drv @(posedge clk);

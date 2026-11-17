@@ -36,7 +36,7 @@ module tb_sdtlb_tag_item;
     // 置无效
     logic                       inv_all;
     logic                       inv_sel;
-    logic [PA_WIDTH-1:0]        inv_sel_pa;
+    logic [PA_BASE_WIDTH-1:0]   inv_sel_pa;
 
     SDTLB_TAG_ITEM_t            tag_item;
 
@@ -131,7 +131,7 @@ module tb_sdtlb_tag_item;
     // 按地址置无效, 拉高一拍
     task automatic do_inv(input logic [PA_BASE_WIDTH-1:0] base);
         wait_cycle();
-        inv_sel_pa <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        inv_sel_pa <= base;
         inv_sel <= 1'b1;
         wait_cycle();                   // 这一沿清 Valid
         inv_sel <= 1'b0;
@@ -147,7 +147,7 @@ module tb_sdtlb_tag_item;
         fill_wr_pa_base <= base;
         fill_wr_pa_up   <= up;
         fill_wr_en      <= 1'b1;
-        inv_sel_pa          <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        inv_sel_pa          <= base;
         inv_sel          <= 1'b1;
         wait_cycle();                   // 同一沿: inv 清位与 fill 置位撞车
         valid_after = tag_item.valid;

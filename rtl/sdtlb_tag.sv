@@ -29,7 +29,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新) 请求
     input  logic                                inv_all,
     input  logic                                inv_sel,
-    input  logic [PA_WIDTH-1:0]                 inv_sel_pa,
+    input  logic [PA_BASE_WIDTH-1:0]            inv_sel_pa,
 
     output SDTLB_TAG_ITEM_t                     tag_item [SDTLB_ENTRIES]
 );

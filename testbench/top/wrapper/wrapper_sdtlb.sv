@@ -31,7 +31,7 @@ import sdecoder_pkg::*;
 
     logic                       inv_all_r;
     logic                       inv_sel_r;
-    logic [PA_WIDTH-1:0]        inv_sel_pa_r;
+    logic [PA_BASE_WIDTH-1:0]   inv_sel_pa_r;
 
     always_ff @(posedge sdtlb_if.clk or negedge sdtlb_if.rst_n) begin
         if (!sdtlb_if.rst_n) begin

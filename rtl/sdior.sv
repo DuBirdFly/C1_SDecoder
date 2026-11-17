@@ -37,7 +37,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新): 给 sdtlb, inv_all / inv_sel 各只有 1 拍
     output logic                            inv_all,
     output logic                            inv_sel,
-    output logic [PA_WIDTH-1:0]             inv_sel_pa
+    output logic [PA_BASE_WIDTH-1:0]        inv_sel_pa
 );
 
     wire wr_ia   = ior_en && ior_write && (ior_waddr == ADDR_SDECODER_IA);
@@ -59,9 +59,9 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 脉冲当拍把本次写入的 PA 送给 sdtlb (寄存器在下一拍才更新)
+    // 脉冲当拍把本次写入的 PA[47:30] 送给 sdtlb (寄存器在下一拍才更新)
     assign inv_sel    = wr_is;
-    assign inv_sel_pa = {ior_wdata[PA_BASE_WIDTH-1:0], {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+    assign inv_sel_pa = ior_wdata[PA_BASE_WIDTH-1:0];
 
     // SDecoder_PTBR (RW): 字段 SDT_L1_BASE[47:4] 在寄存器字的 [47:4], 低 4 位恒 0
     always_ff @(posedge clk or negedge rst_n) begin

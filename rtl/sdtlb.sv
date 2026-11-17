@@ -49,7 +49,7 @@ import sdecoder_pkg::*;
     output SDTLB_DATA_ITEM_t                    cam1_hit_data_item,
 
     // 装填: sdptw 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目, 请求拍有效.
-    // 注意这里与 camN_req_pa / inv_sel_pa 口径不同: 装填来自 sdptw, 它本来就算在 PA[47:30] 上,
+    // 注意这里与 camN_req_pa 口径不同: 装填来自 sdptw, 它本来就算在 PA[47:30] 上,
     // 所以 fill_pa_base 就保持 PA[47:30] (18 位), 不必先补齐到整条 PA 再切回来
     input  logic                                fill_en,
     input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
@@ -62,7 +62,7 @@ import sdecoder_pkg::*;
     // 置无效 (刷新): 只作用于 Tag 侧的有效位; 地址也是整条 PA[47:0]
     input  logic                                inv_all,
     input  logic                                inv_sel,
-    input  logic [PA_WIDTH-1:0]                 inv_sel_pa
+    input  logic [PA_BASE_WIDTH-1:0]            inv_sel_pa
 );
 
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
@@ -211,12 +211,12 @@ import sdecoder_pkg::*;
     `assert_clk(a_cam1_req_fill_exclusive, (!(cam1_req_en && fill_en)))
 
     // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 查表 / 装填 / 置无效地址的 PA[47] 都必须为 0.
-    // 口径: camN_req_pa / inv_sel_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),
+    // 口径: camN_req_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),
     //       fill_pa_base 是 PA[47:30] (bit[PA_BASE_WIDTH-1] 才是 PA[47])
     `assert_clk(a_cam0_pa47_zero, (cam0_req_en |-> !cam0_req_pa[PA_WIDTH-1]))
     `assert_clk(a_cam1_pa47_zero, (cam1_req_en |-> !cam1_req_pa[PA_WIDTH-1]))
     `assert_clk(a_fill_pa47_zero, (fill_en |-> !fill_pa_base[PA_BASE_WIDTH-1]))
-    `assert_clk(a_inv_sel_pa47_zero,  (inv_sel  |-> !inv_sel_pa[PA_WIDTH-1]))
+    `assert_clk(a_inv_sel_pa47_zero,  (inv_sel  |-> !inv_sel_pa[PA_BASE_WIDTH-1]))
 `endif
 
 endmodule

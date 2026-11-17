@@ -29,7 +29,7 @@ class SdiorItem extends uvm_sequence_item;
     // 置无效
     logic                               inv_all;
     logic                               inv_sel;
-    logic [PA_WIDTH-1:0]                inv_sel_pa;
+    logic [PA_BASE_WIDTH-1:0]           inv_sel_pa;
 
     // 等待
     rand int unsigned                   wait_cycles;
