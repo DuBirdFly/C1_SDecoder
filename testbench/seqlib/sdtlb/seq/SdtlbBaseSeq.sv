@@ -30,73 +30,94 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         return {high, idx};
     endfunction
 
+    // ----------------------------------------------------------------
+    // 通用用法: 先 new_item(), 再用 set_* 配置本次要发的端口 (可任意组合),
+    // 最后 send() 提交. 单类型 / 常用双类型另有下面的短封装, 但新增组合不需要新 task.
+    // ----------------------------------------------------------------
+
     // 新建一个 item, 所有使能默认 0
     protected function SdtlbItem new_item();
         SdtlbItem tr;
         tr = SdtlbItem::type_id::create("tr");
-        tr.cam0_req_en   = 1'b0;
-        tr.cam1_req_en   = 1'b0;
-        tr.fill_en       = 1'b0;
-        tr.inv_en        = 1'b0;
+        tr.cam0_req_en    = 1'b0;
+        tr.cam1_req_en    = 1'b0;
+        tr.fill_en        = 1'b0;
+        tr.inv_en         = 1'b0;
         tr.wait_cycles_en = 1'b0;
-        tr.wait_cycles   = 0;
+        tr.wait_cycles    = 0;
         return tr;
     endfunction
 
-    // 单端口查表请求: cam_num = 0 走 cam0, cam_num = 1 走 cam1
-    task cam_req_single(input bit cam_num, input logic [PA_WIDTH-1:0] pa);
-        SdtlbItem tr;
-        tr = new_item();
-        start_item(tr);
-        if (cam_num) begin
-            tr.cam1_req_en = 1'b1;
-            tr.cam1_req_pa = pa;
-        end
-        else begin
-            tr.cam0_req_en = 1'b1;
-            tr.cam0_req_pa = pa;
-        end
-        finish_item(tr);
-    endtask
-
-    // 两端口同拍查表
-    task cam_req_both(input logic [PA_WIDTH-1:0] pa0, input logic [PA_WIDTH-1:0] pa1);
-        SdtlbItem tr;
-        tr = new_item();
-        start_item(tr);
+    function void set_cam0(SdtlbItem tr, input logic [PA_WIDTH-1:0] pa);
         tr.cam0_req_en = 1'b1;
-        tr.cam0_req_pa = pa0;
+        tr.cam0_req_pa = pa;
+    endfunction
+
+    function void set_cam1(SdtlbItem tr, input logic [PA_WIDTH-1:0] pa);
         tr.cam1_req_en = 1'b1;
-        tr.cam1_req_pa = pa1;
+        tr.cam1_req_pa = pa;
+    endfunction
+
+    function void set_fill(
+        SdtlbItem tr,
+        input logic [PA_BASE_WIDTH-1:0]              base,
+        input logic [PA_UP_WIDTH-1:0]                up,
+        input logic [EID_WIDTH-1:0]                  eid,
+        input logic [TOKEN_ID_WIDTH-1:0]             tok,
+        input logic [TOKEN_VALUE_WIDTH-1:0]          tokv,
+        input logic [S_PFN_WIDTH-1:0]                pfn
+    );
+        tr.fill_en          = 1'b1;
+        tr.fill_pa_base     = base;
+        tr.fill_pa_up       = up;
+        tr.fill_eid         = eid;
+        tr.fill_token_id    = tok;
+        tr.fill_token_value = tokv;
+        tr.fill_s_pfn       = pfn;
+    endfunction
+
+    function void set_inv_sel(SdtlbItem tr, input logic [PA_BASE_WIDTH-1:0] inv_pa);
+        tr.inv_en     = 1'b1;
+        tr.inv_sel    = 1'b1;
+        tr.inv_sel_pa = inv_pa;
+    endfunction
+
+    function void set_inv_all(SdtlbItem tr);
+        tr.inv_en  = 1'b1;
+        tr.inv_all = 1'b1;
+    endfunction
+
+    function void set_wait(SdtlbItem tr, input int unsigned n);
+        tr.wait_cycles_en = 1'b1;
+        tr.wait_cycles    = n;
+    endfunction
+
+    // 提交 item (start_item / finish_item)
+    task send(SdtlbItem tr);
+        start_item(tr);
         finish_item(tr);
     endtask
 
-    // 同一拍: 查表请求 + 按地址置无效 (请求的命中按置无效之前的状态算)
-    task req0_and_inv_sel(
-        input logic [PA_WIDTH-1:0]      pa,
-        input logic [PA_BASE_WIDTH-1:0] inv_pa
+    // ----------------------------------------------------------------
+    // 常用组合的短封装 (内部与 set_* + send 等价)
+    // ----------------------------------------------------------------
+
+    // 查表请求: 两个端口各自带使能, 可以只发一个端口, 也可以同拍发两个
+    task cam_req(
+        input bit                  cam0_en = 1'b0,
+        input logic [PA_WIDTH-1:0] cam0_pa = '0,
+        input bit                  cam1_en = 1'b0,
+        input logic [PA_WIDTH-1:0] cam1_pa = '0
     );
         SdtlbItem tr;
         tr = new_item();
-        start_item(tr);
-        tr.cam0_req_en = 1'b1;
-        tr.cam0_req_pa = pa;
-        tr.inv_en      = 1'b1;
-        tr.inv_sel     = 1'b1;
-        tr.inv_sel_pa  = inv_pa;
-        finish_item(tr);
-    endtask
-
-    // 同一拍: 查表请求 + 置无效全部
-    task req0_and_inv_all(input logic [PA_WIDTH-1:0] pa);
-        SdtlbItem tr;
-        tr = new_item();
-        start_item(tr);
-        tr.cam0_req_en = 1'b1;
-        tr.cam0_req_pa = pa;
-        tr.inv_en      = 1'b1;
-        tr.inv_all     = 1'b1;
-        finish_item(tr);
+        if (cam0_en) begin
+            set_cam0(tr, cam0_pa);
+        end
+        if (cam1_en) begin
+            set_cam1(tr, cam1_pa);
+        end
+        send(tr);
     endtask
 
     task fill(
@@ -109,93 +130,29 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
     );
         SdtlbItem tr;
         tr = new_item();
-        start_item(tr);
-        tr.fill_en          = 1'b1;
-        tr.fill_pa_base     = base;
-        tr.fill_pa_up       = up;
-        tr.fill_eid         = eid;
-        tr.fill_token_id    = tok;
-        tr.fill_token_value = tokv;
-        tr.fill_s_pfn       = pfn;
-        finish_item(tr);
-    endtask
-
-    // 同一拍: 装填 + 置无效全部 (验证置无效优先)
-    task fill_and_inv_all(
-        input logic [PA_BASE_WIDTH-1:0]              base,
-        input logic [PA_UP_WIDTH-1:0]                up,
-        input logic [EID_WIDTH-1:0]                  eid,
-        input logic [TOKEN_ID_WIDTH-1:0]             tok,
-        input logic [TOKEN_VALUE_WIDTH-1:0]          tokv,
-        input logic [S_PFN_WIDTH-1:0]                pfn
-    );
-        SdtlbItem tr;
-        tr = new_item();
-        start_item(tr);
-        tr.fill_en          = 1'b1;
-        tr.fill_pa_base     = base;
-        tr.fill_pa_up       = up;
-        tr.fill_eid         = eid;
-        tr.fill_token_id    = tok;
-        tr.fill_token_value = tokv;
-        tr.fill_s_pfn       = pfn;
-        tr.inv_en           = 1'b1;
-        tr.inv_all          = 1'b1;
-        finish_item(tr);
-    endtask
-
-    // 同一拍: 装填 + 按地址置无效 (验证置无效优先)
-    task fill_and_inv_sel(
-        input logic [PA_BASE_WIDTH-1:0]              base,
-        input logic [PA_UP_WIDTH-1:0]                up,
-        input logic [EID_WIDTH-1:0]                  eid,
-        input logic [TOKEN_ID_WIDTH-1:0]             tok,
-        input logic [TOKEN_VALUE_WIDTH-1:0]          tokv,
-        input logic [S_PFN_WIDTH-1:0]                pfn,
-        input logic [PA_BASE_WIDTH-1:0]              inv_pa
-    );
-        SdtlbItem tr;
-        tr = new_item();
-        start_item(tr);
-        tr.fill_en          = 1'b1;
-        tr.fill_pa_base     = base;
-        tr.fill_pa_up       = up;
-        tr.fill_eid         = eid;
-        tr.fill_token_id    = tok;
-        tr.fill_token_value = tokv;
-        tr.fill_s_pfn       = pfn;
-        tr.inv_en           = 1'b1;
-        tr.inv_sel          = 1'b1;
-        tr.inv_sel_pa       = inv_pa;
-        finish_item(tr);
+        set_fill(tr, base, up, eid, tok, tokv, pfn);
+        send(tr);
     endtask
 
     task inv_sel(input logic [PA_BASE_WIDTH-1:0] pa);
         SdtlbItem tr;
         tr = new_item();
-        start_item(tr);
-        tr.inv_en     = 1'b1;
-        tr.inv_sel    = 1'b1;
-        tr.inv_sel_pa = pa;
-        finish_item(tr);
+        set_inv_sel(tr, pa);
+        send(tr);
     endtask
 
     task inv_all();
         SdtlbItem tr;
         tr = new_item();
-        start_item(tr);
-        tr.inv_en  = 1'b1;
-        tr.inv_all = 1'b1;
-        finish_item(tr);
+        set_inv_all(tr);
+        send(tr);
     endtask
 
     task wait_cycles(input int unsigned n);
         SdtlbItem tr;
         tr = new_item();
-        start_item(tr);
-        tr.wait_cycles_en = 1'b1;
-        tr.wait_cycles    = n;
-        finish_item(tr);
+        set_wait(tr, n);
+        send(tr);
     endtask
 
 endclass
