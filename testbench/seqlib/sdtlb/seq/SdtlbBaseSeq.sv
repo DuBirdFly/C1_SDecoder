@@ -54,6 +54,38 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         finish_item(tr);
     endtask
 
+    // 同一拍: 查表请求 + 按地址置无效 (请求的命中按置无效之前的状态算)
+    task req0_and_inv_sel(
+        input logic [PA_WIDTH-1:0]      pa,
+        input logic [PA_BASE_WIDTH-1:0] inv_pa
+    );
+        SdtlbItem tr;
+        tr = SdtlbItem::type_id::create("tr");
+        start_item(tr);
+        tr.kind        = SDTLB_REQ;
+        tr.cam0_req_en = 1'b1;
+        tr.cam0_req_pa = pa;
+        tr.cam1_req_en = 1'b0;
+        tr.cam1_req_pa = '0;
+        tr.inv_sel     = 1'b1;
+        tr.inv_sel_pa  = inv_pa;
+        finish_item(tr);
+    endtask
+
+    // 同一拍: 查表请求 + 置无效全部
+    task req0_and_inv_all(input logic [PA_WIDTH-1:0] pa);
+        SdtlbItem tr;
+        tr = SdtlbItem::type_id::create("tr");
+        start_item(tr);
+        tr.kind        = SDTLB_REQ;
+        tr.cam0_req_en = 1'b1;
+        tr.cam0_req_pa = pa;
+        tr.cam1_req_en = 1'b0;
+        tr.cam1_req_pa = '0;
+        tr.inv_all     = 1'b1;
+        finish_item(tr);
+    endtask
+
     // 两端口同拍查表
     task req2(input logic [PA_WIDTH-1:0] pa0, input logic [PA_WIDTH-1:0] pa1);
         SdtlbItem tr;
@@ -110,6 +142,32 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         tr.fill_token_value = tokv;
         tr.fill_s_pfn       = pfn;
         tr.inv_all          = 1'b1;
+        finish_item(tr);
+    endtask
+
+    // 同一拍: 装填 + 按地址置无效 (验证置无效优先)
+    task fill_and_inv_sel(
+        input logic [PA_BASE_WIDTH-1:0]              base,
+        input logic [PA_UP_WIDTH-1:0]                up,
+        input logic [EID_WIDTH-1:0]                  eid,
+        input logic [TOKEN_ID_WIDTH-1:0]             tok,
+        input logic [TOKEN_VALUE_WIDTH-1:0]          tokv,
+        input logic [S_PFN_WIDTH-1:0]                pfn,
+        input logic [PA_BASE_WIDTH-1:0]              inv_pa
+    );
+        SdtlbItem tr;
+        tr = SdtlbItem::type_id::create("tr");
+        start_item(tr);
+        tr.kind             = SDTLB_FILL;
+        tr.fill_en          = 1'b1;
+        tr.fill_pa_base     = base;
+        tr.fill_pa_up       = up;
+        tr.fill_eid         = eid;
+        tr.fill_token_id    = tok;
+        tr.fill_token_value = tokv;
+        tr.fill_s_pfn       = pfn;
+        tr.inv_sel          = 1'b1;
+        tr.inv_sel_pa       = inv_pa;
         finish_item(tr);
     endtask
 

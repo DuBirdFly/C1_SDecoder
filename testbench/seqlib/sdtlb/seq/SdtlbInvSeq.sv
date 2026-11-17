@@ -73,6 +73,47 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
         req0(.pa(gen_pa(.high(12'h010), .idx(5'd20))));
         wait_cycles(.n(4));
 
+        // 同拍 查表 + inv_sel: 请求按置无效之前的状态算 (命中), 之后同一地址不再命中
+        req0_and_inv_sel(
+            .pa     (gen_pa(.high(12'h020), .idx(5'd6))),
+            .inv_pa (gen_pa_base(.high(12'h020), .idx(5'd6)))
+        );
+        wait_cycles(.n(4));
+        req0(.pa(gen_pa(.high(12'h020), .idx(5'd6))));
+        wait_cycles(.n(4));
+
+        // 同拍 查表 + inv_all: 请求同样看到置无效之前的状态
+        req0_and_inv_all(.pa(gen_pa(.high(12'h010), .idx(5'd20))));
+        wait_cycles(.n(4));
+        req0(.pa(gen_pa(.high(12'h010), .idx(5'd20))));
+        wait_cycles(.n(4));
+
+        // 同拍 fill + inv_sel: 置无效优先, 这次装填的地址不应命中, 别的条目不受影响
+        //   先填一条 0x050 的条目 (占 1 号条目), 再用同拍 fill + inv_sel 去填/清 0x051
+        fill(
+            .base   (gen_pa_base(.high(12'h050), .idx(5'd4))),
+            .up     (5'd4),
+            .eid    (11'h0e0),
+            .tok    (11'h0e1),
+            .tokv   (10'h0e2),
+            .pfn    (18'h0e0e0)
+        );
+        wait_cycles(.n(2));
+        fill_and_inv_sel(
+            .base   (gen_pa_base(.high(12'h051), .idx(5'd4))),
+            .up     (5'd4),
+            .eid    (11'h0f0),
+            .tok    (11'h0f1),
+            .tokv   (10'h0f2),
+            .pfn    (18'h0f0f0),
+            .inv_pa (gen_pa_base(.high(12'h051), .idx(5'd4)))
+        );
+        wait_cycles(.n(4));
+        req0(.pa(gen_pa(.high(12'h051), .idx(5'd4))));
+        wait_cycles(.n(2));
+        req0(.pa(gen_pa(.high(12'h050), .idx(5'd4))));
+        wait_cycles(.n(4));
+
         // 同拍 fill + inv_all: 置无效优先, 这次装填的地址不应命中
         fill_and_inv_all(
             .base   (gen_pa_base(.high(12'h040), .idx(5'd7))),

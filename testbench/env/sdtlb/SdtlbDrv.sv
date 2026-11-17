@@ -71,7 +71,11 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
     endtask
 
     // 查表: 两端口可以同拍, 使能只打 1 拍
+    // 同拍 inv_all / inv_sel 与查表一起打: 请求看到的是置无效之前的状态 (hit 由旧 valid 决定)
     task drive_req(SdtlbItem tr);
+        vif.drv.inv_all          <= tr.inv_all;
+        vif.drv.inv_sel          <= tr.inv_sel;
+        vif.drv.inv_sel_pa       <= tr.inv_sel_pa;
         vif.drv.cam0_req_en <= tr.cam0_req_en;
         vif.drv.cam0_req_pa <= tr.cam0_req_pa;
         vif.drv.cam1_req_en <= tr.cam1_req_en;
@@ -79,6 +83,8 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
         @(vif.drv);
         vif.drv.cam0_req_en <= 1'b0;
         vif.drv.cam1_req_en <= 1'b0;
+        vif.drv.inv_all     <= 1'b0;
+        vif.drv.inv_sel     <= 1'b0;
     endtask
 
     // 同拍 inv_all / inv_sel 与 fill 一起打, 用来验证"置无效优先"
