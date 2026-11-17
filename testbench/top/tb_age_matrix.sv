@@ -13,10 +13,6 @@ module tb_age_matrix;
     logic [ITEM_DEPTH-1:0] valid_shadow = '0;
 
     crg u_crg (
-        .pclk    (         ),
-        .presetn (         ),
-        .aclk    (         ),
-        .aresetn (         ),
         .clk     (clk      ),
         .rst_n   (         )
     );
