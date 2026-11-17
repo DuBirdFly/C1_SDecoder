@@ -12,7 +12,7 @@ module tb_sdtlb;
 
     // 时钟与复位由 crg 生成
     crg #(
-        .CLK_FREQ ( 100 )
+        .CLK_FREQ ( 2_500 )
     ) u_crg (
         .clk     (clk      ),
         .rst_n   (rst_n    )

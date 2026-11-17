@@ -44,7 +44,7 @@ module tb_sdtlb_tag_item;
     int unsigned errors = 0;
 
     crg #(
-        .CLK_FREQ ( 100 )
+        .CLK_FREQ ( 2_500 )
     ) u_crg (
         .clk     (clk      ),
         .rst_n   (rst_n    )
