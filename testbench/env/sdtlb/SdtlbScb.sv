@@ -2,6 +2,8 @@
 `define _SDTLB_SCB_SV_
 
 // SDTLB 的 scoreboard: 维护 128 条目的参考模型, 逐拍比对查表响应
+//   一个 item 描述一拍 (可能同时有查表 / 装填 / 置无效), 处理顺序与 RTL 一致:
+//     查表 -> 装填 -> 置无效 (请求看到的是装填 / 置无效之前的状态)
 //   模型语义与 RTL 一致:
 //     - 装填: 写到当前替换指针指向的条目, 指针每装填一次步进 (复位指向 0 号)
 //     - 命中: valid && 高位 (PA[47:35]) 相等 && pa_base[4:0] <= PA[34:30] <= pa_up
@@ -122,54 +124,54 @@ class SdtlbScb extends uvm_scoreboard;
     function void write(SdtlbItem tr);
         entry_t e;
 
-        case (tr.kind)
-            SDTLB_REQ: begin
-                req_cnt++;
-                check_port("cam0", tr.cam0_req_en, tr.cam0_req_pa,
-                           tr.cam0_hit, tr.cam0_tag, tr.cam0_data);
-                check_port("cam1", tr.cam1_req_en, tr.cam1_req_pa,
-                           tr.cam1_hit, tr.cam1_tag, tr.cam1_data);
-            end
+        // 1) 查表: 先按当前模型算期望 (装填 / 置无效还没生效)
+        check_port("cam0", tr.cam0_req_en, tr.cam0_req_pa,
+                   tr.cam0_hit, tr.cam0_tag, tr.cam0_data);
+        check_port("cam1", tr.cam1_req_en, tr.cam1_req_pa,
+                   tr.cam1_hit, tr.cam1_tag, tr.cam1_data);
+        if (tr.cam0_req_en || tr.cam1_req_en) begin
+            req_cnt++;
+        end
 
-            SDTLB_FILL: begin
-                fill_cnt++;
-                e.valid       = 1'b1;
-                e.pa_base     = tr.fill_pa_base;
-                e.pa_up       = tr.fill_pa_up;
-                e.eid         = tr.fill_eid;
-                e.token_id    = tr.fill_token_id;
-                e.token_value = tr.fill_token_value;
-                e.s_pfn       = tr.fill_s_pfn;
-                mdl[victim]   = e;
-                victim        = (victim + 1) % SDTLB_ENTRIES;
-            end
+        // 2) 装填: 写到当前替换指针指向的条目, 指针步进
+        if (tr.fill_en) begin
+            fill_cnt++;
+            e.valid       = 1'b1;
+            e.pa_base     = tr.fill_pa_base;
+            e.pa_up       = tr.fill_pa_up;
+            e.eid         = tr.fill_eid;
+            e.token_id    = tr.fill_token_id;
+            e.token_value = tr.fill_token_value;
+            e.s_pfn       = tr.fill_s_pfn;
+            mdl[victim]   = e;
+            victim        = (victim + 1) % SDTLB_ENTRIES;
+        end
 
-            SDTLB_INV: begin
-                inv_cnt++;
-                if (!tr.inv_en) begin
-                    err_cnt++;
-                    `uvm_error("SCB_INV", "置无效脉冲没有带 inv_en")
+        // 3) 置无效: inv_en 当拍才生效, 且只允许 inv_all / inv_sel 之一
+        if (tr.inv_all || tr.inv_sel) begin
+            inv_cnt++;
+            if (!tr.inv_en) begin
+                err_cnt++;
+                `uvm_error("SCB_INV", "置无效脉冲没有带 inv_en")
+            end
+            if (tr.inv_all && tr.inv_sel) begin
+                err_cnt++;
+                `uvm_error("SCB_INV", "inv_all 与 inv_sel 同拍为 1")
+            end
+            if (tr.inv_all) begin
+                foreach (mdl[i]) begin
+                    mdl[i].valid = 1'b0;
                 end
-                if (tr.inv_all) begin
-                    foreach (mdl[i]) begin
+            end
+            if (tr.inv_sel) begin
+                foreach (mdl[i]) begin
+                    // 同 RTL: inv_match 不看 valid, 无效条目也会被"清"一次
+                    if (in_range_base(tr.inv_sel_pa, mdl[i])) begin
                         mdl[i].valid = 1'b0;
                     end
                 end
-                if (tr.inv_sel) begin
-                    foreach (mdl[i]) begin
-                        // 同 RTL: inv_match 不看 valid, 无效条目也会被"清"一次
-                        if (in_range_base(tr.inv_sel_pa, mdl[i])) begin
-                            mdl[i].valid = 1'b0;
-                        end
-                    end
-                end
             end
-
-            default: begin
-                err_cnt++;
-                `uvm_error("SCB_KIND", $sformatf("unexpected item kind: %s", tr.kind.name()))
-            end
-        endcase
+        end
     endfunction
 
     function void check_phase(uvm_phase phase);

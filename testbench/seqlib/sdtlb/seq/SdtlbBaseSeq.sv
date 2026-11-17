@@ -2,6 +2,8 @@
 `define _SDTLB_BASE_SEQ_SV_
 
 // SDTLB 序列基类: 提供 req / fill / inv / wait 的封装, 以及地址拼装的小工具
+//   事务不再用 kind 区分, 而是由各端口使能描述: 一个 item 可以同时开多个使能
+//   (如查表 + 置无效同拍), 由 driver 用 fork-join 并行驱动
 class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
 
     `uvm_object_utils(SdtlbBaseSeq)
@@ -28,29 +30,48 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         return {high, idx};
     endfunction
 
+    // 新建一个 item, 所有使能默认 0
+    protected function SdtlbItem new_item();
+        SdtlbItem tr;
+        tr = SdtlbItem::type_id::create("tr");
+        tr.cam0_req_en   = 1'b0;
+        tr.cam1_req_en   = 1'b0;
+        tr.fill_en       = 1'b0;
+        tr.inv_en        = 1'b0;
+        tr.wait_cycles_en = 1'b0;
+        tr.wait_cycles   = 0;
+        return tr;
+    endfunction
+
     // 单端口 (cam0) 查表请求
     task req0(input logic [PA_WIDTH-1:0] pa);
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind        = SDTLB_REQ;
         tr.cam0_req_en = 1'b1;
         tr.cam0_req_pa = pa;
-        tr.cam1_req_en = 1'b0;
-        tr.cam1_req_pa = '0;
         finish_item(tr);
     endtask
 
     // 单端口 (cam1) 查表请求
     task req1(input logic [PA_WIDTH-1:0] pa);
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind        = SDTLB_REQ;
-        tr.cam0_req_en = 1'b0;
-        tr.cam0_req_pa = '0;
         tr.cam1_req_en = 1'b1;
         tr.cam1_req_pa = pa;
+        finish_item(tr);
+    endtask
+
+    // 两端口同拍查表
+    task req2(input logic [PA_WIDTH-1:0] pa0, input logic [PA_WIDTH-1:0] pa1);
+        SdtlbItem tr;
+        tr = new_item();
+        start_item(tr);
+        tr.cam0_req_en = 1'b1;
+        tr.cam0_req_pa = pa0;
+        tr.cam1_req_en = 1'b1;
+        tr.cam1_req_pa = pa1;
         finish_item(tr);
     endtask
 
@@ -60,13 +81,11 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         input logic [PA_BASE_WIDTH-1:0] inv_pa
     );
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind        = SDTLB_REQ;
         tr.cam0_req_en = 1'b1;
         tr.cam0_req_pa = pa;
-        tr.cam1_req_en = 1'b0;
-        tr.cam1_req_pa = '0;
+        tr.inv_en      = 1'b1;
         tr.inv_sel     = 1'b1;
         tr.inv_sel_pa  = inv_pa;
         finish_item(tr);
@@ -75,27 +94,12 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
     // 同一拍: 查表请求 + 置无效全部
     task req0_and_inv_all(input logic [PA_WIDTH-1:0] pa);
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind        = SDTLB_REQ;
         tr.cam0_req_en = 1'b1;
         tr.cam0_req_pa = pa;
-        tr.cam1_req_en = 1'b0;
-        tr.cam1_req_pa = '0;
+        tr.inv_en      = 1'b1;
         tr.inv_all     = 1'b1;
-        finish_item(tr);
-    endtask
-
-    // 两端口同拍查表
-    task req2(input logic [PA_WIDTH-1:0] pa0, input logic [PA_WIDTH-1:0] pa1);
-        SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
-        start_item(tr);
-        tr.kind        = SDTLB_REQ;
-        tr.cam0_req_en = 1'b1;
-        tr.cam0_req_pa = pa0;
-        tr.cam1_req_en = 1'b1;
-        tr.cam1_req_pa = pa1;
         finish_item(tr);
     endtask
 
@@ -108,9 +112,8 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         input logic [S_PFN_WIDTH-1:0]                pfn
     );
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind             = SDTLB_FILL;
         tr.fill_en          = 1'b1;
         tr.fill_pa_base     = base;
         tr.fill_pa_up       = up;
@@ -131,9 +134,8 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         input logic [S_PFN_WIDTH-1:0]                pfn
     );
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind             = SDTLB_FILL;
         tr.fill_en          = 1'b1;
         tr.fill_pa_base     = base;
         tr.fill_pa_up       = up;
@@ -141,6 +143,7 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         tr.fill_token_id    = tok;
         tr.fill_token_value = tokv;
         tr.fill_s_pfn       = pfn;
+        tr.inv_en           = 1'b1;
         tr.inv_all          = 1'b1;
         finish_item(tr);
     endtask
@@ -156,9 +159,8 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         input logic [PA_BASE_WIDTH-1:0]              inv_pa
     );
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind             = SDTLB_FILL;
         tr.fill_en          = 1'b1;
         tr.fill_pa_base     = base;
         tr.fill_pa_up       = up;
@@ -166,6 +168,7 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         tr.fill_token_id    = tok;
         tr.fill_token_value = tokv;
         tr.fill_s_pfn       = pfn;
+        tr.inv_en           = 1'b1;
         tr.inv_sel          = 1'b1;
         tr.inv_sel_pa       = inv_pa;
         finish_item(tr);
@@ -173,9 +176,9 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
 
     task inv_sel(input logic [PA_BASE_WIDTH-1:0] pa);
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind       = SDTLB_INV;
+        tr.inv_en     = 1'b1;
         tr.inv_sel    = 1'b1;
         tr.inv_sel_pa = pa;
         finish_item(tr);
@@ -183,19 +186,19 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
 
     task inv_all();
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind    = SDTLB_INV;
+        tr.inv_en  = 1'b1;
         tr.inv_all = 1'b1;
         finish_item(tr);
     endtask
 
     task wait_cycles(input int unsigned n);
         SdtlbItem tr;
-        tr = SdtlbItem::type_id::create("tr");
+        tr = new_item();
         start_item(tr);
-        tr.kind        = SDTLB_WAIT;
-        tr.wait_cycles = n;
+        tr.wait_cycles_en = 1'b1;
+        tr.wait_cycles    = n;
         finish_item(tr);
     endtask
 
