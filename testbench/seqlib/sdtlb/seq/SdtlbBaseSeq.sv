@@ -10,9 +10,9 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         super.new(name);
     endfunction
 
-    // 拼查表地址: {段高位 PA[47:35], 段内页号 PA[34:30], 页内偏移 PA[29:0]}
+    // gen_pa: 拼查表地址 {段高位 PA[47:35], 段内页号 PA[34:30], 页内偏移 PA[29:0]}
     // 只打 PA[47] = 0 的地址 (SDecoder 只处理 Mem 空间)
-    function automatic logic [PA_WIDTH-1:0] pa_of(
+    function automatic logic [PA_WIDTH-1:0] gen_pa(
         input logic [PA_BASE_WIDTH-PA_UP_WIDTH-1:0]  high,
         input logic [PA_UP_WIDTH-1:0]                idx,
         input logic [PA_WIDTH-PA_BASE_WIDTH-1:0]     offset = '0
@@ -20,8 +20,8 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         return {high, idx, offset};
     endfunction
 
-    // 装填用: 段基地址 PA[47:30] = {高位, 页号}
-    function automatic logic [PA_BASE_WIDTH-1:0] base_of(
+    // gen_pa_base: 装填用的段基地址 PA[47:30] = {高位, 页号}
+    function automatic logic [PA_BASE_WIDTH-1:0] gen_pa_base(
         input logic [PA_BASE_WIDTH-PA_UP_WIDTH-1:0]  high,
         input logic [PA_UP_WIDTH-1:0]                idx
     );
@@ -38,6 +38,19 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         tr.cam0_req_pa = pa;
         tr.cam1_req_en = 1'b0;
         tr.cam1_req_pa = '0;
+        finish_item(tr);
+    endtask
+
+    // 单端口 (cam1) 查表请求
+    task req1(input logic [PA_WIDTH-1:0] pa);
+        SdtlbItem tr;
+        tr = SdtlbItem::type_id::create("tr");
+        start_item(tr);
+        tr.kind        = SDTLB_REQ;
+        tr.cam0_req_en = 1'b0;
+        tr.cam0_req_pa = '0;
+        tr.cam1_req_en = 1'b1;
+        tr.cam1_req_pa = pa;
         finish_item(tr);
     endtask
 

@@ -6,7 +6,7 @@ import sdecoder_pkg::*;
     input  logic                    rst_n
 );
 
-    timeunit 1ns;
+    timeunit 1ps;
     timeprecision 1ps;
 
     // 查表端口 0 (CAM0): 请求地址是整条 PA[47:0].

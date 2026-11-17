@@ -16,12 +16,14 @@
 
 // interface files
 ./testbench/top/interface/sdtlb_if.sv
+./testbench/top/interface/sdtlb_if_probe.sv
 ./testbench/top/interface/sdior_if.sv
 ./testbench/top/interface/sdecoder_if.sv
 ./testbench/top/interface/age_matrix_if.sv
 
 // Testbench wrapper files
 ./testbench/top/wrapper/wrapper_sdtlb.sv
+./testbench/top/interface/sdtlb_if_probe_bind.sv
 ./testbench/top/wrapper/wrapper_sdior.sv
 
 // UVM files

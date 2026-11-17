@@ -50,6 +50,10 @@ module tb_sdtlb;
 
     initial begin
         uvm_config_db#(virtual sdtlb_if)::set(null, "*", "vif", sdtlb_if);
+        // monitor 看的是 bind 到 sdtlb 模块上的探针 (DUT 引脚), 不是 wrapper 之前的接口
+        uvm_config_db#(virtual sdtlb_if_probe)::set(
+            null, "*", "mon_vif", tb_sdtlb.dut.u_sdtlb.u_sdtlb_if_probe_bind
+        );
         run_test();
     end
 

@@ -11,22 +11,44 @@ class SdtlbDualSeq extends SdtlbBaseSeq;
     endfunction
 
     task body();
-        fill(base_of(12'h030, 5'd0), 5'd0, 11'h011, 11'h012, 10'h013, 18'h30303);
-        wait_cycles(2);
-        fill(base_of(12'h031, 5'd0), 5'd0, 11'h021, 11'h022, 10'h023, 18'h04040);
-        wait_cycles(4);
+        fill(
+            .base   (gen_pa_base(.high(12'h030), .idx(5'd0))),
+            .up     (5'd0),
+            .eid    (11'h011),
+            .tok    (11'h012),
+            .tokv   (10'h013),
+            .pfn    (18'h30303)
+        );
+        wait_cycles(.n(2));
+        fill(
+            .base   (gen_pa_base(.high(12'h031), .idx(5'd0))),
+            .up     (5'd0),
+            .eid    (11'h021),
+            .tok    (11'h022),
+            .tokv   (10'h023),
+            .pfn    (18'h04040)
+        );
+        wait_cycles(.n(4));
 
         // 两端口同拍命中各自的条目
-        req2(pa_of(12'h030, 5'd0), pa_of(12'h031, 5'd0));
-        wait_cycles(4);
+        req2(.pa0(gen_pa(.high(12'h030), .idx(5'd0))), .pa1(gen_pa(.high(12'h031), .idx(5'd0))));
+        wait_cycles(.n(4));
 
         // 地址对调, 仍应各自命中
-        req2(pa_of(12'h031, 5'd0), pa_of(12'h030, 5'd0));
-        wait_cycles(4);
+        req2(.pa0(gen_pa(.high(12'h031), .idx(5'd0))), .pa1(gen_pa(.high(12'h030), .idx(5'd0))));
+        wait_cycles(.n(4));
 
         // 一端命中一端未命中
-        req2(pa_of(12'h030, 5'd0), pa_of(12'h032, 5'd0));
-        wait_cycles(4);
+        req2(.pa0(gen_pa(.high(12'h030), .idx(5'd0))), .pa1(gen_pa(.high(12'h032), .idx(5'd0))));
+        wait_cycles(.n(4));
+
+        // 只有 cam1 发请求: 命中
+        req1(.pa(gen_pa(.high(12'h031), .idx(5'd0))));
+        wait_cycles(.n(4));
+
+        // 只有 cam1 发请求: 未命中 (cam0 没请求, 响应必须是全 0)
+        req1(.pa(gen_pa(.high(12'h033), .idx(5'd0))));
+        wait_cycles(.n(4));
     endtask
 
 endclass
