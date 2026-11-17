@@ -19,7 +19,7 @@ import sdecoder_pkg::*;
     input  logic [TOKEN_VALUE_WIDTH-1:0] fill_token_value,
     input  logic [S_PFN_WIDTH-1:0]      fill_s_pfn,
 
-    // 本条目内容静默输出
+    // 本条目内容透传输出
     output SDTLB_DATA_ITEM_t            data_item
 );
 

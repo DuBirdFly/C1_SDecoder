@@ -34,7 +34,7 @@ import sdecoder_pkg::*;
     input  logic                        inv_sel,
     input  logic [PA_BASE_WIDTH-1:0]    inv_sel_pa,
 
-    // 本条目内容静默输出 (valid 来自 FF, 其余字段来自 Latch)
+    // 本条目内容透传输出
     output SDTLB_TAG_ITEM_t             tag_item
 );
 
