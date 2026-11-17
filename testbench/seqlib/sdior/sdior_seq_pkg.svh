@@ -14,7 +14,7 @@ package sdior_seq_pkg;
     } Sdior_Item_Kind_e;
 
     `include "SdiorItem.sv"
-    `include "SdiorSmokeSeq.sv"
+    `include "seq/SdiorSmokeSeq.sv"
 
 endpackage
 

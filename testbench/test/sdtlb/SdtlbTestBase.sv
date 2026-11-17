@@ -19,28 +19,28 @@ class SdtlbTestBase extends uvm_test;
     endfunction
 
     task run_phase(uvm_phase phase);
-        SdtlbSmokeSeq  smoke;
-        SdtlbSegSeq    seg;
-        SdtlbInvSeq    inv;
-        SdtlbDualSeq   dual;
-        SdtlbRotateSeq rotate;
+        SdtlbSmokeSeq  smokeSeq;
+        SdtlbSegSeq    segSeq;
+        SdtlbInvSeq    invSeq;
+        SdtlbDualSeq   dualSeq;
+        SdtlbRotateSeq rotateSeq;
 
         phase.raise_objection(this);
 
-        smoke  = SdtlbSmokeSeq::type_id::create("smoke");
-        smoke.start(sdtlb_env.agt.sqr);
+        smokeSeq = SdtlbSmokeSeq::type_id::create("smokeSeq");
+        smokeSeq.start(sdtlb_env.agt.sqr);
 
-        seg    = SdtlbSegSeq::type_id::create("seg");
-        seg.start(sdtlb_env.agt.sqr);
+        segSeq = SdtlbSegSeq::type_id::create("segSeq");
+        segSeq.start(sdtlb_env.agt.sqr);
 
-        inv    = SdtlbInvSeq::type_id::create("inv");
-        inv.start(sdtlb_env.agt.sqr);
+        invSeq = SdtlbInvSeq::type_id::create("invSeq");
+        invSeq.start(sdtlb_env.agt.sqr);
 
-        dual   = SdtlbDualSeq::type_id::create("dual");
-        dual.start(sdtlb_env.agt.sqr);
+        dualSeq = SdtlbDualSeq::type_id::create("dualSeq");
+        dualSeq.start(sdtlb_env.agt.sqr);
 
-        rotate = SdtlbRotateSeq::type_id::create("rotate");
-        rotate.start(sdtlb_env.agt.sqr);
+        rotateSeq = SdtlbRotateSeq::type_id::create("rotateSeq");
+        rotateSeq.start(sdtlb_env.agt.sqr);
 
         `uvm_info("TEST", "Sdtlb 序列跑完", UVM_LOW)
 

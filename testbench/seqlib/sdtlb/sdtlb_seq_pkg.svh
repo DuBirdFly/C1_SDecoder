@@ -15,12 +15,12 @@ package sdtlb_seq_pkg;
     } Sdtlb_Item_Kind_e;
 
     `include "SdtlbItem.sv"
-    `include "SdtlbBaseSeq.sv"
-    `include "SdtlbSmokeSeq.sv"
-    `include "SdtlbSegSeq.sv"
-    `include "SdtlbInvSeq.sv"
-    `include "SdtlbDualSeq.sv"
-    `include "SdtlbRotateSeq.sv"
+    `include "seq/SdtlbBaseSeq.sv"
+    `include "seq/SdtlbSmokeSeq.sv"
+    `include "seq/SdtlbSegSeq.sv"
+    `include "seq/SdtlbInvSeq.sv"
+    `include "seq/SdtlbDualSeq.sv"
+    `include "seq/SdtlbRotateSeq.sv"
 
 endpackage
 
