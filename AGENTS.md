@@ -16,11 +16,15 @@
 
 ## 写 Verilog / SystemVerilog 文件
 
-见 [`CONTRIBUTING.md`](CONTRIBUTING.md)
+见 [`doc/sv 编写规范.md`](doc/sv%20编写规范.md)
 
 注: AGENTS 应该使用 `simulation_agent` 作为仿真入口, 而不是 `simulation`
 
 注: 手搓 `vcs` 验证 SV 语法 / 语义的一次性探针, 放仓库根的 `.probe/` 下 (已 gitignore); 验证设计与 tb 仍然只用 `simulation_agent`
+
+注: 验证只跑当次改动相关的 tb, 不要全量跑 (太慢); 需要全量 / 回归时用 `-j` 之类的并行方式跑.
+
+注: UVM testbench 的编写约定另见 [`doc/uvm 编写规范.md`](doc/uvm%20编写规范.md)
 
 ## 提交
 

@@ -132,6 +132,8 @@ doc/<文档名>/
 | 破折号 | `-` 或 `--` | `——` |
 | 书名号 | 直接写名称, 或加引号 | `《》` |
 
+注: 顿号可以放宽要求, 可以写中文的顿号 `、`.
+
 ### 说明
 
 - 本规范文档自身同样遵守上述约定.
@@ -140,6 +142,8 @@ doc/<文档名>/
 
 ## 检查
 
+### markdownlint
+
 排版类问题交给 markdownlint, 规则集与命令说明见 [`doc/ubuntu_env/markdownlint.md`](ubuntu_env/markdownlint.md).
 改动后**在仓库根目录**执行:
 
@@ -147,5 +151,11 @@ doc/<文档名>/
 markdownlint-cli2 "doc/**/*.md" --config ./.config/.markdownlint.jsonc
 ```
 
-`--config` 必须带上: markdownlint-cli2 不向上级目录查找配置, 省略后会退回默认规则.
+必须带上 `--config` 命令行参数: markdownlint-cli2 不向上级目录查找配置, 省略后会退回默认规则.
 注意: 该工具只覆盖排版规则 (空行, 列表, 围栏, 行宽等), 图表形式与标点约定仍需人工评审.
+
+或用 `script/ci/check_markdown_lint.sh` 检查
+
+### check_mermaid
+
+使用 `script/ci/check_markdown_mermaid.sh`

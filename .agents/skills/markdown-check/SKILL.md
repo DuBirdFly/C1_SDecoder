@@ -21,4 +21,4 @@ script/ci/check.sh mermaid     # 图语法, 没有 mermaid 块时自动跳过
 换机器时按该目录的 `package.json` 重装.
 
 写作约定 (图表形式选择, 图片命名与引用, 半角标点) 以
-[`doc/md文件编写规范.md`](../../../doc/md文件编写规范.md) 为准.
+[`doc/md 编写规范.md`](../../../doc/md%20编写规范.md) 为准.

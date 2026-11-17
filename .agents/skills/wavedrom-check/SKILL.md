@@ -19,4 +19,4 @@ node script/ci/check-wavedrom.mjs -o /tmp/sdtlb.svg <file.json5>
 退出码 `0` 才算过, 失败项是 `FAIL <文件> -> <原因>`. 判据与写法约定 (波形 `wave` 怎么续电平,
 位域 `reg` 与波形的区别) 见 [`script/ci/check-wavedrom.mjs`](../../../script/ci/check-wavedrom.mjs) 头注释.
 
-波形放哪, 怎么放进文档见 [`doc/md文件编写规范.md`](../../../doc/md文件编写规范.md).
+波形放哪, 怎么放进文档见 [`doc/md 编写规范.md`](../../../doc/md%20编写规范.md).

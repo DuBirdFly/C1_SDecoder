@@ -893,11 +893,16 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 | 信号 | 方向 | 位宽 | 说明 |
 | --- | --- | --- | --- |
-| `ior_wen` | I | 1 | 写使能 |
+| `ior_en` | I | 1 | 寄存器访问使能 |
+| `ior_write` | I | 1 | 1: 写; 0: 读 |
 | `ior_waddr` | I | `IOR_ADDR_WIDTH` | 写地址 |
 | `ior_wdata` | I | `SDIOR_DATA_WIDTH` | 写数据 |
 | `ior_raddr` | I | `IOR_ADDR_WIDTH` | 读地址 |
 | `ior_rdata` | O | `SDIOR_DATA_WIDTH` | 读数据 |
+
+注: `ior_en = 1` 且 `ior_write = 0` 时为读, 当拍 `ior_rdata` 有效
+注: `ior_en = 1` 且 `ior_write = 1` 时为写, 当拍取 `ior_wdata`, 下一拍实际写入
+注: `ior_en = 0` 时不做访问, `ior_rdata` 无意义
 
 ### 异常统计接口
 
@@ -924,8 +929,8 @@ SDTLB 只允许硬件回填, 软件不可写入
 
 | 序号 | 名字 | 说明 |
 | --- | --- | --- |
-| 0 | `SDecoder_IA` | Invalid All, 软件刷新, 置无效所有 SDTLB 条目 |
-| 1 | `SDecoder_IS` | Invalid Selected, 软件刷新, 置无效指定的 SDTLB 条目 |
+| 0 | `SDecoder_IA` | Invalid All, 软件刷新, 刷新 (置无效) 所有 SDecoder 条目 |
+| 1 | `SDecoder_IS` | Invalid Selected, 软件刷新, 置无效指定的 SDecoder 条目 |
 | 2 | `SDecoder_PTBR` | Page Table Base Register, 一级表基地址 |
 | 3 | `SDecoder_ES` | Exception Summary, 异常统计寄存器 |
 | 4 | `SDecoder_Perf_CTL` | Performance Control, 性能统计控制寄存器 |
@@ -933,3 +938,39 @@ SDTLB 只允许硬件回填, 软件不可写入
 | 6 | `SDecoder_SDTLB_HitCnt` | SDTLB Hit Count, SDTLB 命中计数寄存器 |
 | 7 | `SDecoder_SDT_L1_AccessCnt` | SDTLB Level 1 Access Count, 一级表访问计数寄存器 |
 | 8 | `SDecoder_SDT_L2_AccessCnt` | SDTLB Level 2 Access Count, 二级表访问计数寄存器 |
+
+#### 寄存器
+
+##### SDecoder_IA
+
+写该寄存器 (无论写入的值是多少) 都会刷新 (置无效) 所有 SDecoder 条目
+该寄存器不存储数据, 读回 0
+
+表: SDecoder_IA 的位域
+
+| name | size | lsb_pos | access | volatile | reset | has_reset |
+| --- | --- | --- | --- | --- | --- | --- |
+| TRIGGER | 64 | 0 | WO | 1 | 0 | 1 |
+
+##### SDecoder_IS
+
+写该寄存器时, 按照写入的 PA 地址对 SDecoder 中匹配的条目进行刷新
+该寄存器存储数据, 读回 `INV_SEL_PA` 的原值
+
+表: SDecoder_IS 的位域
+
+| name | size | lsb_pos | access | volatile | reset | has_reset |
+| --- | --- | --- | --- | --- | --- | --- |
+| INV_SEL_PA[47:30] | 18 | 0 | RW | 0 | 0 | 1 |
+
+##### SDecoder_PTBR
+
+SDecoder 一级代换表基地址, 指定 SDecoder 一级表在主存 (本地的 DDR/HBM) 中的基地址
+
+表: SDecoder_PTBR 的位域
+
+| name | size | lsb_pos | access | volatile | reset | has_reset |
+| --- | --- | --- | --- | --- | --- |
+| SDT_L1_BASE[47:4] | 44 | 4 | RW | 0 | 0 | 1 |
+
+<!-- 其他之后写 -->
