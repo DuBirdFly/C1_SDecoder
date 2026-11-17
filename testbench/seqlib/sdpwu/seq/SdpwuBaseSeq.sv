@@ -29,6 +29,17 @@ class SdpwuBaseSeq extends uvm_sequence#(SdpwuItem);
         finish_item(tr);
     endtask
 
+    // 往存储器模型写一个 16B 条目 (布置页表)
+    task mem_write(input logic [PA_WIDTH-1:0] addr, input logic [127:0] data);
+        SdpwuItem tr;
+        tr = SdpwuItem::type_id::create("tr");
+        start_item(tr);
+        tr.kind      = SDPWU_MEM_WR;
+        tr.mem_addr  = addr;
+        tr.mem_wdata = data;
+        finish_item(tr);
+    endtask
+
     task wait_cycles(input int unsigned n);
         SdpwuItem tr;
         tr = SdpwuItem::type_id::create("tr");

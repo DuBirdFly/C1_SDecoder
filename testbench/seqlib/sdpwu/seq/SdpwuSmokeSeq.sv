@@ -2,7 +2,7 @@
 `define _SDPWU_SMOKE_SEQ_SV_
 
 // SDPWU smoke: 覆盖段式命中 / 页式命中 / 缺页 / 非法条目 / 两个请求并行
-//   页表内容由 test 在跑序列前写进 page_table_model (见 SdpwuTestBase)
+//   页表内容由 test 在跑序列前通过 SdpwuTableSeq 写进存储器模型 (见 SdpwuTestBase)
 class SdpwuSmokeSeq extends SdpwuBaseSeq;
 
     `uvm_object_utils(SdpwuSmokeSeq)

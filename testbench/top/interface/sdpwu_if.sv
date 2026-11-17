@@ -25,6 +25,11 @@ import sdecoder_pkg::*;
     logic [PW_ID_WIDTH-1:0]             pw_mem_raddr_id;
     logic                               pw_mem_raddr_ready;
 
+    // 写端口: tb 用存储器模型布置页表 (一拍写入一个 16B 条目)
+    logic                               pw_mem_wen;
+    logic [PA_WIDTH-1:0]                pw_mem_waddr;
+    logic [PW_RDATA_WIDTH-1:0]          pw_mem_wdata;
+
     // 访存接口 (读数据通道)
     logic [PW_RDATA_WIDTH-1:0]          pw_mem_rdata;
     logic [PW_ID_WIDTH-1:0]             pw_mem_rdata_id;
@@ -70,6 +75,9 @@ import sdecoder_pkg::*;
         input pw_mem_raddr;
         input pw_mem_raddr_id;
         input pw_mem_raddr_ready;
+        input pw_mem_wen;
+        input pw_mem_waddr;
+        input pw_mem_wdata;
         input pw_mem_rdata;
         input pw_mem_rdata_id;
         input pw_mem_rdata_valid;

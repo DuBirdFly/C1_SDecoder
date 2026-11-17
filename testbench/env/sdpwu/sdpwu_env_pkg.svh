@@ -5,7 +5,6 @@ package sdpwu_env_pkg;
 
     import uvm_pkg::*;
     import sdecoder_pkg::*;
-    import page_table_pkg::*;
     import sdpwu_seq_pkg::*;
 
     `include "SdpwuSqr.sv"

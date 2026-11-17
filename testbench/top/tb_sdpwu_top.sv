@@ -44,6 +44,27 @@ module tb_sdpwu_top;
         .pwu_finish_item    (sdpwu_if.pwu_finish_item)
     );
 
+    // 外部存储器模型: 布置页表 + 响应访存读
+    sdpwu_mem_model u_mem (
+        .clk                (clk),
+        .rst_n              (rst_n),
+
+        .pw_mem_wen         (sdpwu_if.pw_mem_wen),
+        .pw_mem_waddr       (sdpwu_if.pw_mem_waddr),
+        .pw_mem_wdata       (sdpwu_if.pw_mem_wdata),
+
+        .pw_mem_raddr_valid (sdpwu_if.pw_mem_raddr_valid),
+        .pw_mem_raddr       (sdpwu_if.pw_mem_raddr),
+        .pw_mem_raddr_id    (sdpwu_if.pw_mem_raddr_id),
+        .pw_mem_raddr_ready (sdpwu_if.pw_mem_raddr_ready),
+
+        .pw_mem_rdata       (sdpwu_if.pw_mem_rdata),
+        .pw_mem_rdata_id    (sdpwu_if.pw_mem_rdata_id),
+        .pw_mem_rdata_valid (sdpwu_if.pw_mem_rdata_valid),
+        .pw_mem_rdata_err   (sdpwu_if.pw_mem_rdata_err),
+        .pw_mem_rdata_ready (sdpwu_if.pw_mem_rdata_ready)
+    );
+
 `ifdef DUMP_FSDB
     initial begin
         $display("===============================================");

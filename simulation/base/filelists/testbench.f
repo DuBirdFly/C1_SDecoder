@@ -8,7 +8,6 @@
 +incdir+./testbench/env/sdior
 +incdir+./testbench/env/sdtlb
 +incdir+./testbench/env/sdpwu
-+incdir+./testbench/model
 +incdir+./testbench/ral/sdior
 +incdir+./testbench/seqlib/sdior
 +incdir+./testbench/seqlib/sdtlb
@@ -28,6 +27,7 @@
 
 // Testbench wrapper files
 ./testbench/top/wrapper/wrapper_sdtlb.sv
+./testbench/top/model/sdpwu_mem_model.sv
 ./testbench/top/interface/sdtlb_if_probe_bind.sv
 ./testbench/top/wrapper/wrapper_sdior.sv
 
@@ -35,7 +35,6 @@
 ./testbench/inc/uvm_header.svh
 ./testbench/seqlib/sdecoder/sdecoder_seq_pkg.svh
 ./testbench/seqlib/sdior/sdior_seq_pkg.svh
-./testbench/model/page_table_pkg.svh
 ./testbench/seqlib/sdtlb/sdtlb_seq_pkg.svh
 ./testbench/seqlib/sdpwu/sdpwu_seq_pkg.svh
 ./testbench/env/sdecoder/sdecoder_env_pkg.svh

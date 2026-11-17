@@ -45,6 +45,15 @@ class SdpwuMon extends uvm_monitor;
                 ap.write(tr);
             end
 
+            // 页表写口 (tb 布置页表)
+            if (vif.mon.pw_mem_wen === 1'b1) begin
+                tr = SdpwuItem::type_id::create("tr");
+                tr.kind      = SDPWU_MEM_WR;
+                tr.mem_addr  = vif.mon.pw_mem_waddr;
+                tr.mem_wdata = vif.mon.pw_mem_wdata;
+                ap.write(tr);
+            end
+
             // 访存读请求
             if ((vif.mon.pw_mem_raddr_valid === 1'b1) && (vif.mon.pw_mem_raddr_ready === 1'b1)) begin
                 tr = SdpwuItem::type_id::create("tr");

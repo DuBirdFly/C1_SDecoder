@@ -1,15 +1,14 @@
 `ifndef _SDPWU_DRV_SV_
 `define _SDPWU_DRV_SV_
 
-// SDPWU_TOP 的 driver: 同时扮演 SDMQ (发 Page Walk 请求) 和外部存储器 (响应读请求)
+// SDPWU_TOP 的 driver: 只扮演 SDMQ (发 Page Walk 请求) 和"布置页表"的写口
+//   存储器本身的读写行为由 tb 里的 sdpwu_mem_model 模块负责, 不再放在 driver 里
 class SdpwuDrv extends uvm_driver#(SdpwuItem);
 
     `uvm_component_utils(SdpwuDrv)
 
-    virtual sdpwu_if      vif;
-    page_table_model      pt_model;     // 由 env 注入
-    logic [PA_WIDTH-1:0]  l1_base_val = '0;     // 由 env 注入
-    SDPWU_START_t         start_q;              // start_item 的打包视图
+    virtual sdpwu_if        vif;
+    logic [PA_WIDTH-1:0]    l1_base_val = 48'h0000_1000_0000;   // 由 env 注入
 
     function new(string name = "SdpwuDrv", uvm_component parent = null);
         super.new(name, parent);
@@ -23,51 +22,22 @@ class SdpwuDrv extends uvm_driver#(SdpwuItem);
     endfunction
 
     task signal_reset();
-        vif.l1_base = '0;
-        vif.sdmq_pw_valid = 1'b0;
-        vif.sdmq_pw_item = '0;
-        vif.pw_mem_raddr_ready = 1'b0;
-        vif.pw_mem_rdata = '0;
-        vif.pw_mem_rdata_id = '0;
-        vif.pw_mem_rdata_valid = 1'b0;
-        vif.pw_mem_rdata_err = '0;
+        vif.l1_base        = '0;
+        vif.sdmq_pw_valid  = 1'b0;
+        vif.sdmq_pw_item   = '0;
+        vif.pw_mem_wen     = 1'b0;
+        vif.pw_mem_waddr   = '0;
+        vif.pw_mem_wdata   = '0;
 
         do @(vif.drv); while (vif.rst_n !== 1'b1);
         repeat (5) @(vif.drv);
+        vif.l1_base = l1_base_val;
     endtask
 
     task run_phase(uvm_phase phase);
-        signal_reset();
-
-        // 存储器: 读地址通道的 ready 常高, 收到请求后下一拍回读数据
-        fork
-            memory_respond();
-            pw_start_loop();
-        join
-    endtask
-
-    // 扮演外部存储器: 读地址通道 ready 常高, 收到请求的下一拍回数据
-    task memory_respond();
-        forever begin
-            @(vif.drv);
-            vif.l1_base            = l1_base_val;
-            vif.pw_mem_raddr_ready = 1'b1;
-            vif.pw_mem_rdata_valid = 1'b0;      // 先撤上一拍的读数据
-            if (vif.drv.pw_mem_raddr_valid === 1'b1) begin
-                // 请求拍采到, 本拍立刻给数据; 保持到 DUT 在 RD_DATA 采样 (rdata_ready)
-                vif.pw_mem_rdata       = pt_model.read_word(vif.drv.pw_mem_raddr);
-                vif.pw_mem_rdata_id    = vif.drv.pw_mem_raddr_id;
-                vif.pw_mem_rdata_err   = '0;
-                vif.pw_mem_rdata_valid = 1'b1;
-                do @(vif.drv); while (vif.drv.pw_mem_rdata_ready !== 1'b1);
-                vif.pw_mem_rdata_valid = 1'b0;
-            end
-        end
-    endtask
-
-    // 扮演 SDMQ: 按序列发 Page Walk 请求
-    task pw_start_loop();
         SdpwuItem rsp;
+
+        signal_reset();
 
         forever begin
             seq_item_port.try_next_item(req);
@@ -76,12 +46,12 @@ class SdpwuDrv extends uvm_driver#(SdpwuItem);
                 @(vif.drv);
             end
             else begin
-                if (req.kind == SDPWU_PW_START) begin
-                    drive_pw_start(req);
-                end
-                else begin
-                    repeat (req.wait_cycles) @(vif.drv);
-                end
+                case (req.kind)
+                    SDPWU_PW_START: drive_pw_start(req);
+                    SDPWU_MEM_WR:   drive_mem_wr(req);
+                    SDPWU_WAIT:     repeat (req.wait_cycles) @(vif.drv);
+                    default:        `uvm_error("KIND", "unknown SdpwuItem kind")
+                endcase
 
                 rsp = SdpwuItem::type_id::create("rsp");
                 rsp.copy(req);
@@ -93,16 +63,24 @@ class SdpwuDrv extends uvm_driver#(SdpwuItem);
     endtask
 
     // start 握手: valid 保持到 ready
-    // 用阻塞赋值直接驱动接口信号: 时钟块输出的"拉高"和"拉低"若落在同一个时钟块事件上,
-    // 后写的会覆盖先写的, valid 永远看不到 1
     task drive_pw_start(SdpwuItem tr);
-        vif.sdmq_pw_valid = 1'b1;
+        SDPWU_START_t start_q;
         start_q.pa       = tr.pa;
         start_q.sdmq_idx = tr.sdmq_idx;
-        vif.sdmq_pw_item = start_q;
+        vif.sdmq_pw_valid = 1'b1;
+        vif.sdmq_pw_item  = start_q;
         do @(vif.drv); while (vif.drv.sdmq_pw_ready !== 1'b1);
         vif.sdmq_pw_valid = 1'b0;
         @(vif.drv);
+    endtask
+
+    // 写一个页表条目 (一拍)
+    task drive_mem_wr(SdpwuItem tr);
+        vif.pw_mem_wen   = 1'b1;
+        vif.pw_mem_waddr = tr.mem_addr;
+        vif.pw_mem_wdata = tr.mem_wdata;
+        @(vif.drv);
+        vif.pw_mem_wen   = 1'b0;
     endtask
 
 endclass

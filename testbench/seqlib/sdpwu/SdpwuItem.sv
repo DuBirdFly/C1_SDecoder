@@ -10,6 +10,7 @@ class SdpwuItem extends uvm_sequence_item;
         `uvm_field_int (sdmq_idx,                         UVM_ALL_ON)
         `uvm_field_int (wait_cycles,                      UVM_ALL_ON)
         `uvm_field_int (mem_addr,                         UVM_ALL_ON)
+        `uvm_field_int (mem_wdata,                        UVM_ALL_ON)
         `uvm_field_int (mem_id,                           UVM_ALL_ON)
         // finish_item 是 packed struct, 不加 field 宏 (VCS 对 struct 的 field 宏不稳)
         `uvm_field_int (finish_item_pack,                 UVM_ALL_ON)
@@ -24,9 +25,10 @@ class SdpwuItem extends uvm_sequence_item;
     // SDPWU_WAIT
     rand int unsigned               wait_cycles;
 
-    // SDPWU_MEM_RD
+    // SDPWU_MEM_RD / SDPWU_MEM_WR
     logic [PA_WIDTH-1:0]            mem_addr;
     logic [PW_ID_WIDTH-1:0]         mem_id;
+    logic [PW_RDATA_WIDTH-1:0]      mem_wdata;
 
     // SDPWU_FINISH
     SDPWU_FINISH_t                  finish_item;
