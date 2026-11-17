@@ -18,4 +18,8 @@
 
 ./rtl/sdior.sv
 
+./rtl/sdpwu.sv
+./rtl/sdpwu_ctrl.sv
+./rtl/sdpwu_top.sv
+
 ./rtl/sdecoder-undef.svh

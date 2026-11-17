@@ -89,6 +89,62 @@ package sdecoder_pkg;
 
 
     localparam SDMQ_DEPTH = 16;
+    localparam SDMQ_IDX_WIDTH = $clog2(SDMQ_DEPTH);     // SDMQ 条目号
+
+    // ------------------------------------------------------------------
+    // SDPWU (Page Walk Unit)
+    // ------------------------------------------------------------------
+    localparam SDPWU_NUM = 2;                           // 并行 Page Walk 的个数
+    localparam PW_ID_WIDTH = (SDPWU_NUM > 1) ? $clog2(SDPWU_NUM) : 1;   // 访存请求/响应的来源标记
+    localparam PW_RDATA_WIDTH = 128;                    // 一次读回最多 16B (一级表条目)
+    localparam PW_RDATA_ERR_WIDTH = 3;                  // [2] ctrl [1] ecc [0] oob
+    localparam SDMQ_RSP_ERR_WIDTH = 5;                  // [4] ctrl [3] ecc [2] oob [1] malformed [0] page_fault
+
+    // 错误位 (访存接口 / SDMQ 响应 / Page Walk sideband 共用同一套含义)
+    localparam PW_RDATA_ERR_CTRL_BIT  = 2;
+    localparam PW_RDATA_ERR_ECC_BIT   = 1;
+    localparam PW_RDATA_ERR_OOB_BIT   = 0;
+
+    localparam SDMQ_RSP_ERR_CTRL_BIT  = 4;
+    localparam SDMQ_RSP_ERR_ECC_BIT   = 3;
+    localparam SDMQ_RSP_ERR_OOB_BIT   = 2;
+    localparam SDMQ_RSP_ERR_MALFORMED_BIT = 1;
+    localparam SDMQ_RSP_ERR_PAGE_FAULT_BIT = 0;
+
+    // 一级表条目 (128 bit) 的字段位置, 见设计方案 "一级表条目" 表
+    localparam L1_L2_BASE_LSB     = 67;     // [111:67] PTE.SDT_L2_BASE[47:3]
+    localparam L1_EID_LSB         = 56;     // [66:56]  EID[10:0]
+    localparam L1_TOKEN_ID_LSB    = 45;     // [55:45]  TokenID[10:0]
+    localparam L1_TOKEN_VALUE_LSB = 35;     // [44:35]  TokenValue[9:0]
+    localparam L1_S_PFN_LSB       = 12;     // [34:12]  S_PFN[52:30]
+    localparam L1_SEG_LEN_LSB     = 7;      // [11:7]   SEG_LEN[34:30]
+    localparam L1_SEG_BASE_LSB    = 2;      // [6:2]    SEG_BASE[34:30]
+    localparam L1_TYPE_BIT        = 1;
+    localparam L1_VALID_BIT       = 0;
+
+    // 二级表条目 (64 bit) 的字段位置, 见设计方案 "二级表条目" 表
+    localparam L2_EID_LSB         = 45;     // [55:45]
+    localparam L2_TOKEN_ID_LSB    = 34;     // [44:34]
+    localparam L2_TOKEN_VALUE_LSB = 24;     // [33:24]
+    localparam L2_S_PFN_LSB       = 1;      // [23:1]
+    localparam L2_VALID_BIT       = 0;
+
+    // SDMQ -> SDPWU_CTRL 的 Page Walk 请求
+    typedef struct packed {
+        logic [PA_WIDTH-1:0]        pa;
+        logic [SDMQ_IDX_WIDTH-1:0]  sdmq_idx;
+    } SDPWU_START_t;
+
+    // SDPWU -> SDMQ 的 Page Walk 结果 (sideband)
+    typedef struct packed {
+        logic [SDMQ_IDX_WIDTH-1:0]      sdmq_idx;
+        logic                           hit;
+        logic [EID_WIDTH-1:0]           eid;
+        logic [TOKEN_ID_WIDTH-1:0]      token_id;
+        logic [TOKEN_VALUE_WIDTH-1:0]   token_value;
+        logic [S_PFN_WIDTH-1:0]         s_pfn;
+        logic [SDMQ_RSP_ERR_WIDTH-1:0]  err;
+    } SDPWU_FINISH_t;
 
     typedef struct packed {
         logic                       valid;

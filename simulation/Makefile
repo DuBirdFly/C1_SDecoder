@@ -13,6 +13,8 @@ ifeq ($(TB_TOP),tb_sdior)
 TESTNAME ?= SdiorTestBase
 else ifeq ($(TB_TOP),tb_sdtlb)
 TESTNAME ?= SdtlbTestBase
+else ifeq ($(TB_TOP),tb_sdpwu_top)
+TESTNAME ?= SdpwuTestBase
 else
 TESTNAME ?= SDecoderTestBase
 endif
