@@ -29,13 +29,13 @@ class SdtlbRotateSeq extends SdtlbBaseSeq;
         wait_cycles(.n(6));
 
         // 最后装填的两条仍在 (落在 0 号与 1 号条目)
-        req0(.pa(gen_pa(.high(12'h100 + 12'(SDTLB_ENTRIES / 32)), .idx(5'(SDTLB_ENTRIES % 32)))));
+        cam_req_single(.cam_num(1'b0), .pa(gen_pa(.high(12'h100 + 12'(SDTLB_ENTRIES / 32)), .idx(5'(SDTLB_ENTRIES % 32)))));
         wait_cycles(.n(2));
-        req0(.pa(gen_pa(.high(12'h100 + 12'((SDTLB_ENTRIES + 1) / 32)), .idx(5'(SDTLB_ENTRIES % 32 + 1)))));
+        cam_req_single(.cam_num(1'b0), .pa(gen_pa(.high(12'h100 + 12'((SDTLB_ENTRIES + 1) / 32)), .idx(5'(SDTLB_ENTRIES % 32 + 1)))));
         wait_cycles(.n(4));
 
         // 第 1 条 (已被绕圈覆盖) 不再命中
-        req0(.pa(gen_pa(.high(12'h100), .idx(5'd0))));
+        cam_req_single(.cam_num(1'b0), .pa(gen_pa(.high(12'h100), .idx(5'd0))));
         wait_cycles(.n(4));
     endtask
 

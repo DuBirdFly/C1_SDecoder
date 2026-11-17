@@ -43,28 +43,24 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         return tr;
     endfunction
 
-    // 单端口 (cam0) 查表请求
-    task req0(input logic [PA_WIDTH-1:0] pa);
+    // 单端口查表请求: cam_num = 0 走 cam0, cam_num = 1 走 cam1
+    task cam_req_single(input bit cam_num, input logic [PA_WIDTH-1:0] pa);
         SdtlbItem tr;
         tr = new_item();
         start_item(tr);
-        tr.cam0_req_en = 1'b1;
-        tr.cam0_req_pa = pa;
-        finish_item(tr);
-    endtask
-
-    // 单端口 (cam1) 查表请求
-    task req1(input logic [PA_WIDTH-1:0] pa);
-        SdtlbItem tr;
-        tr = new_item();
-        start_item(tr);
-        tr.cam1_req_en = 1'b1;
-        tr.cam1_req_pa = pa;
+        if (cam_num) begin
+            tr.cam1_req_en = 1'b1;
+            tr.cam1_req_pa = pa;
+        end
+        else begin
+            tr.cam0_req_en = 1'b1;
+            tr.cam0_req_pa = pa;
+        end
         finish_item(tr);
     endtask
 
     // 两端口同拍查表
-    task req2(input logic [PA_WIDTH-1:0] pa0, input logic [PA_WIDTH-1:0] pa1);
+    task cam_req_both(input logic [PA_WIDTH-1:0] pa0, input logic [PA_WIDTH-1:0] pa1);
         SdtlbItem tr;
         tr = new_item();
         start_item(tr);
