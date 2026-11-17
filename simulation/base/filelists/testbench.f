@@ -19,6 +19,7 @@
 
 // Testbench wrapper files
 ./testbench/top/wrapper/wrapper_sdtlb.sv
+./testbench/top/wrapper/wrapper_sdior.sv
 
 // UVM files
 ./testbench/inc/uvm_header.svh
