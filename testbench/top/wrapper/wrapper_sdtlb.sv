@@ -29,6 +29,7 @@ import sdecoder_pkg::*;
     logic [TOKEN_VALUE_WIDTH-1:0] fill_token_value_r;
     logic [S_PFN_WIDTH-1:0]     fill_s_pfn_r;
 
+    logic                       inv_en_r;
     logic                       inv_all_r;
     logic                       inv_sel_r;
     logic [PA_BASE_WIDTH-1:0]   inv_sel_pa_r;
@@ -48,6 +49,7 @@ import sdecoder_pkg::*;
             fill_token_value_r <= '0;
             fill_s_pfn_r     <= '0;
 
+            inv_en_r         <= 1'b0;
             inv_all_r        <= 1'b0;
             inv_sel_r         <= 1'b0;
             inv_sel_pa_r         <= '0;
@@ -66,6 +68,7 @@ import sdecoder_pkg::*;
             fill_token_value_r <= sdtlb_if.fill_token_value;
             fill_s_pfn_r     <= sdtlb_if.fill_s_pfn;
 
+            inv_en_r         <= sdtlb_if.inv_en;
             inv_all_r        <= sdtlb_if.inv_all;
             inv_sel_r         <= sdtlb_if.inv_sel;
             inv_sel_pa_r         <= sdtlb_if.inv_sel_pa;
@@ -97,6 +100,7 @@ import sdecoder_pkg::*;
         .fill_token_value   (fill_token_value_r     ),
         .fill_s_pfn         (fill_s_pfn_r           ),
 
+        .inv_en             (inv_en_r               ),
         .inv_all            (inv_all_r              ),
         .inv_sel             (inv_sel_r               ),
         .inv_sel_pa             (inv_sel_pa_r               )

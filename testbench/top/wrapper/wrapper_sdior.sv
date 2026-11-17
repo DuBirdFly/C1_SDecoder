@@ -22,6 +22,7 @@ import sdecoder_pkg::*;
         .ior_rdata      (sdior_if.ior_rdata     ),
 
         .sdecoder_ptbr  (sdior_if.sdecoder_ptbr ),
+        .inv_en         (sdior_if.inv_en        ),
         .inv_all        (sdior_if.inv_all       ),
         .inv_sel        (sdior_if.inv_sel       ),
         .inv_sel_pa     (sdior_if.inv_sel_pa    )

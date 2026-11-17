@@ -146,6 +146,10 @@ class SdtlbScb extends uvm_scoreboard;
 
             SDTLB_INV: begin
                 inv_cnt++;
+                if (!tr.inv_en) begin
+                    err_cnt++;
+                    `uvm_error("SCB_INV", "置无效脉冲没有带 inv_en")
+                end
                 if (tr.inv_all) begin
                     foreach (mdl[i]) begin
                         mdl[i].valid = 1'b0;

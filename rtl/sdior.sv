@@ -34,7 +34,8 @@ import sdecoder_pkg::*;
     // SDecoder_PTBR: 一级表基地址, 给 sdptw
     output logic [PA_WIDTH-1:0]             sdecoder_ptbr,
 
-    // 置无效 (刷新): 给 sdtlb, inv_all / inv_sel 各只有 1 拍
+    // 置无效 (刷新): 给 sdtlb / sdmq, inv_en 是总使能, inv_all / inv_sel 各只有 1 拍
+    output logic                            inv_en,
     output logic                            inv_all,
     output logic                            inv_sel,
     output logic [PA_BASE_WIDTH-1:0]        inv_sel_pa
@@ -45,6 +46,7 @@ import sdecoder_pkg::*;
     wire wr_ptbr = ior_en && ior_write && (ior_waddr == ADDR_SDECODER_PTBR);
 
     // SDecoder_IA 是 volatile 寄存器: 写即触发, 不留存值
+    assign inv_en  = wr_ia | wr_is;
     assign inv_all = wr_ia;
 
     // SDecoder_IS: 写即触发置无效, 同时把 INV_SEL_PA[47:30] 存下来 (可读回)

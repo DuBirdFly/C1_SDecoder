@@ -14,6 +14,7 @@ class SdiorItem extends uvm_sequence_item;
         `uvm_field_int (wdata,                         UVM_ALL_ON)
         `uvm_field_int (rdata,                         UVM_ALL_ON)
         `uvm_field_int (wait_cycles,                   UVM_ALL_ON)
+        `uvm_field_int (inv_en,                        UVM_ALL_ON)
         `uvm_field_int (inv_all,                       UVM_ALL_ON)
         `uvm_field_int (inv_sel,                       UVM_ALL_ON)
         `uvm_field_int (inv_sel_pa,                    UVM_ALL_ON)
@@ -26,7 +27,8 @@ class SdiorItem extends uvm_sequence_item;
     rand logic [SDIOR_DATA_WIDTH-1:0]   wdata;
     logic [SDIOR_DATA_WIDTH-1:0]        rdata;      // 读回值 (driver / monitor 回填)
 
-    // 置无效
+    // 置无效: inv_en 是总使能 (置无效脉冲当拍为 1)
+    logic                               inv_en;
     logic                               inv_all;
     logic                               inv_sel;
     logic [PA_BASE_WIDTH-1:0]           inv_sel_pa;

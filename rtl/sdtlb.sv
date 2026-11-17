@@ -59,11 +59,17 @@ import sdecoder_pkg::*;
     input  logic [TOKEN_VALUE_WIDTH-1:0]        fill_token_value,
     input  logic [S_PFN_WIDTH-1:0]              fill_s_pfn,
 
-    // 置无效 (刷新): 只作用于 Tag 侧的有效位; 地址也是整条 PA[47:0]
+    // 置无效 (刷新): 只作用于 Tag 侧的有效位; 地址是 PA[47:30]
+    // inv_en 是软件刷新的总使能, inv_all / inv_sel 只在它有效的当拍起作用, 且两者不同时为 1
+    input  logic                                inv_en,
     input  logic                                inv_all,
     input  logic                                inv_sel,
     input  logic [PA_BASE_WIDTH-1:0]            inv_sel_pa
 );
+
+    // 软件置无效: 只有 inv_en 的当拍才真正生效
+    wire inv_all_q = inv_all & inv_en;
+    wire inv_sel_q = inv_sel & inv_en;
 
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
     SDTLB_DATA_ITEM_t data_item [SDTLB_ENTRIES];
@@ -145,8 +151,8 @@ import sdecoder_pkg::*;
         .fill_wr_pa_base    (fill_pa_base       ),
         .fill_wr_pa_up      (fill_pa_up         ),
 
-        .inv_all            (inv_all            ),
-        .inv_sel            (inv_sel            ),
+        .inv_all            (inv_all_q          ),
+        .inv_sel            (inv_sel_q          ),
         .inv_sel_pa         (inv_sel_pa         ),
 
         .tag_item           (tag_item           )
@@ -216,7 +222,10 @@ import sdecoder_pkg::*;
     `assert_clk(a_cam0_pa47_zero, (cam0_req_en |-> !cam0_req_pa[PA_WIDTH-1]))
     `assert_clk(a_cam1_pa47_zero, (cam1_req_en |-> !cam1_req_pa[PA_WIDTH-1]))
     `assert_clk(a_fill_pa47_zero, (fill_en |-> !fill_pa_base[PA_BASE_WIDTH-1]))
-    `assert_clk(a_inv_sel_pa47_zero,  (inv_sel  |-> !inv_sel_pa[PA_BASE_WIDTH-1]))
+    `assert_clk(a_inv_sel_pa47_zero,  ((inv_en && inv_sel) |-> !inv_sel_pa[PA_BASE_WIDTH-1]))
+
+    // 同一次软件刷新只允许一种方式: inv_en 当拍 inv_all 与 inv_sel 不能同时为 1
+    `assert_clk(a_inv_exclusive, (inv_en |-> !(inv_all && inv_sel)))
 `endif
 
 endmodule

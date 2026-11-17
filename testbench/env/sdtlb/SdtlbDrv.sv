@@ -33,6 +33,7 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
         vif.drv.fill_token_id    <= '0;
         vif.drv.fill_token_value <= '0;
         vif.drv.fill_s_pfn       <= '0;
+        vif.drv.inv_en           <= 1'b0;
         vif.drv.inv_all          <= 1'b0;
         vif.drv.inv_sel          <= 1'b0;
         vif.drv.inv_sel_pa       <= '0;
@@ -73,6 +74,7 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
     // 查表: 两端口可以同拍, 使能只打 1 拍
     // 同拍 inv_all / inv_sel 与查表一起打: 请求看到的是置无效之前的状态 (hit 由旧 valid 决定)
     task drive_req(SdtlbItem tr);
+        vif.drv.inv_en           <= tr.inv_all | tr.inv_sel;
         vif.drv.inv_all          <= tr.inv_all;
         vif.drv.inv_sel          <= tr.inv_sel;
         vif.drv.inv_sel_pa       <= tr.inv_sel_pa;
@@ -83,12 +85,14 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
         @(vif.drv);
         vif.drv.cam0_req_en <= 1'b0;
         vif.drv.cam1_req_en <= 1'b0;
+        vif.drv.inv_en      <= 1'b0;
         vif.drv.inv_all     <= 1'b0;
         vif.drv.inv_sel     <= 1'b0;
     endtask
 
     // 同拍 inv_all / inv_sel 与 fill 一起打, 用来验证"置无效优先"
     task drive_fill(SdtlbItem tr);
+        vif.drv.inv_en           <= tr.inv_all | tr.inv_sel;
         vif.drv.inv_all          <= tr.inv_all;
         vif.drv.inv_sel          <= tr.inv_sel;
         vif.drv.inv_sel_pa       <= tr.inv_sel_pa;
@@ -101,15 +105,18 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
         vif.drv.fill_en          <= 1'b1;
         @(vif.drv);
         vif.drv.fill_en          <= 1'b0;
+        vif.drv.inv_en           <= 1'b0;
         vif.drv.inv_all          <= 1'b0;
         vif.drv.inv_sel          <= 1'b0;
     endtask
 
     task drive_inv(SdtlbItem tr);
+        vif.drv.inv_en     <= 1'b1;
         vif.drv.inv_all    <= tr.inv_all;
         vif.drv.inv_sel    <= tr.inv_sel;
         vif.drv.inv_sel_pa <= tr.inv_sel_pa;
         @(vif.drv);
+        vif.drv.inv_en     <= 1'b0;
         vif.drv.inv_all    <= 1'b0;
         vif.drv.inv_sel    <= 1'b0;
     endtask

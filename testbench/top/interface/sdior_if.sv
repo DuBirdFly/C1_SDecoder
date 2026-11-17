@@ -28,6 +28,7 @@ import sdecoder_pkg::*;
 
     // sdior 输出
     logic [PA_WIDTH-1:0]            sdecoder_ptbr;
+    logic                           inv_en;
     logic                           inv_all;
     logic                           inv_sel;
     logic [PA_BASE_WIDTH-1:0]       inv_sel_pa;
@@ -58,6 +59,7 @@ import sdecoder_pkg::*;
         input  ior_rdata;
         input  rst_n;
         input  sdecoder_ptbr;
+        input  inv_en;
         input  inv_all;
         input  inv_sel;
         input  inv_sel_pa;

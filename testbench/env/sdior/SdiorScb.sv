@@ -67,6 +67,10 @@ class SdiorScb extends uvm_scoreboard;
             end
 
             SDIOR_INV: begin
+                if (!tr.inv_en) begin
+                    err_cnt++;
+                    `uvm_error("SCB_INV", "置无效脉冲没有带 inv_en")
+                end
                 if (tr.inv_all) begin
                     inv_all_cnt++;
                 end

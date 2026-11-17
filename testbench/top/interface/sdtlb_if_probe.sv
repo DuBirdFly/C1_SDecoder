@@ -32,6 +32,7 @@ import sdecoder_pkg::*;
     input  logic [TOKEN_VALUE_WIDTH-1:0]  fill_token_value,
     input  logic [S_PFN_WIDTH-1:0]        fill_s_pfn,
 
+    input  logic                    inv_en,
     input  logic                    inv_all,
     input  logic                    inv_sel,
     input  logic [PA_BASE_WIDTH-1:0] inv_sel_pa
@@ -64,6 +65,7 @@ import sdecoder_pkg::*;
         input fill_token_value;
         input fill_s_pfn;
 
+        input inv_en;
         input inv_all;
         input inv_sel;
         input inv_sel_pa;

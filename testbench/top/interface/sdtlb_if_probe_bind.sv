@@ -26,6 +26,7 @@ bind sdtlb sdtlb_if_probe u_sdtlb_if_probe_bind (
     .fill_token_value   (fill_token_value),
     .fill_s_pfn         (fill_s_pfn),
 
+    .inv_en             (inv_en),
     .inv_all            (inv_all),
     .inv_sel            (inv_sel),
     .inv_sel_pa         (inv_sel_pa)

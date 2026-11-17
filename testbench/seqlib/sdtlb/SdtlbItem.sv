@@ -20,6 +20,7 @@ class SdtlbItem extends uvm_sequence_item;
         `uvm_field_int (fill_token_id,                    UVM_ALL_ON)
         `uvm_field_int (fill_token_value,                 UVM_ALL_ON)
         `uvm_field_int (fill_s_pfn,                       UVM_ALL_ON)
+        `uvm_field_int (inv_en,                           UVM_ALL_ON)
         `uvm_field_int (inv_all,                          UVM_ALL_ON)
         `uvm_field_int (inv_sel,                          UVM_ALL_ON)
         `uvm_field_int (inv_sel_pa,                       UVM_ALL_ON)
@@ -34,9 +35,11 @@ class SdtlbItem extends uvm_sequence_item;
 
     rand Sdtlb_Item_Kind_e              kind;
 
-    // 查表请求 (两个端口可以同拍)
+    // 查表请求 (CAM0) (两个端口可以同拍)
     rand logic                          cam0_req_en;
     rand logic [PA_WIDTH-1:0]           cam0_req_pa;
+
+    // 查表请求 (CAM1) (两个端口可以同拍)
     rand logic                          cam1_req_en;
     rand logic [PA_WIDTH-1:0]           cam1_req_pa;
 
@@ -49,7 +52,8 @@ class SdtlbItem extends uvm_sequence_item;
     rand logic [TOKEN_VALUE_WIDTH-1:0]  fill_token_value;
     rand logic [S_PFN_WIDTH-1:0]        fill_s_pfn;
 
-    // 置无效
+    // 置无效: inv_en 是总使能 (driver 在发 inv_all / inv_sel 时自动拉高)
+    rand logic                          inv_en;
     rand logic                          inv_all;
     rand logic                          inv_sel;
     rand logic [PA_BASE_WIDTH-1:0]      inv_sel_pa;

@@ -35,7 +35,8 @@ import sdecoder_pkg::*;
     logic [TOKEN_VALUE_WIDTH-1:0]       fill_token_value;
     logic [S_PFN_WIDTH-1:0]             fill_s_pfn;
 
-    // 置无效 (刷新) 请求
+    // 置无效 (刷新) 请求: inv_en 是总使能, inv_all / inv_sel 只在它有效的当拍起作用
+    logic                               inv_en;
     logic                               inv_all;
     logic                               inv_sel;
     logic [PA_BASE_WIDTH-1:0]           inv_sel_pa;
@@ -55,6 +56,7 @@ import sdecoder_pkg::*;
         output fill_token_id;
         output fill_token_value;
         output fill_s_pfn;
+        output inv_en;
         output inv_all;
         output inv_sel;
         output inv_sel_pa;
@@ -88,6 +90,7 @@ import sdecoder_pkg::*;
         input  fill_token_id;
         input  fill_token_value;
         input  fill_s_pfn;
+        input  inv_en;
         input  inv_all;
         input  inv_sel;
         input  inv_sel_pa;

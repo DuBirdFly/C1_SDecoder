@@ -75,6 +75,7 @@ class SdtlbMon extends uvm_monitor;
                 if ((vif.mon.inv_all === 1'b1) || (vif.mon.inv_sel === 1'b1)) begin
                     tr = SdtlbItem::type_id::create("tr");
                     tr.kind       = SDTLB_INV;
+                    tr.inv_en     = (vif.mon.inv_en  === 1'b1);
                     tr.inv_all    = (vif.mon.inv_all === 1'b1);
                     tr.inv_sel    = (vif.mon.inv_sel === 1'b1);
                     tr.inv_sel_pa = vif.mon.inv_sel_pa;
