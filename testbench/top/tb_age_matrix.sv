@@ -157,8 +157,7 @@ module tb_age_matrix;
             end
 
             if ((pos < 0) || (valid_shadow[pos] != 1'b1)) begin
-                $display("[ERROR] @%0t: 没有可删除的条目 (oldest_vec=0b%b, item_valid=0b%b)",
-                         $realtime, uif.mon_cb.oldest_vec, valid_shadow);
+                $display("[ERROR] @%0t: 没有可删除的条目 (oldest_vec=0b%b, item_valid=0b%b)", $realtime, uif.mon_cb.oldest_vec, valid_shadow);
                 return;
             end
 

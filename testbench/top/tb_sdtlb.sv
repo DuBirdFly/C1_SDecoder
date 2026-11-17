@@ -120,10 +120,10 @@ module tb_sdtlb;
 
     // 按地址置无效, 拉高一拍; pa 是 PA[47:30], 低 30 位补 0
     task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] pa);
-        sdtlb_if.drv.inv_en <= 1'b1;
-        sdtlb_if.drv.inv_pa <= {pa, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        sdtlb_if.drv.inv_sel <= 1'b1;
+        sdtlb_if.drv.inv_sel_pa <= {pa, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);
-        sdtlb_if.drv.inv_en <= 1'b0;
+        sdtlb_if.drv.inv_sel <= 1'b0;
         repeat (2) @(sdtlb_if.drv);             // 等置无效生效
     endtask
 
@@ -148,8 +148,8 @@ module tb_sdtlb;
         sdtlb_if.drv.fill_token_value <= '0;
         sdtlb_if.drv.fill_s_pfn       <= '0;
         sdtlb_if.drv.inv_all     <= 1'b0;
-        sdtlb_if.drv.inv_en      <= 1'b0;
-        sdtlb_if.drv.inv_pa      <= '0;
+        sdtlb_if.drv.inv_sel      <= 1'b0;
+        sdtlb_if.drv.inv_sel_pa      <= '0;
 
         // 复位由 crg 产生: 等它释放, 再等两拍让接口输入生效
         wait (rst_n === 1'b1);
@@ -178,14 +178,17 @@ module tb_sdtlb;
         // 命中: Tag 与 Data 两个 struct 内容都要对得上
         set_req(.high(12'hfff), .idx(5'h1f));
         chk("page: req_hit = 1", rsp_hit == 1'b1);
-        chk("page: Tag struct (base/up/valid)",
+        chk(
+            "page: Tag struct (base/up/valid)",
             (rsp_tag.pa_base == {12'hfff, 5'h1f}) &&
             (rsp_tag.pa_up == 5'h1f) &&
-            (rsp_tag.valid == 1'b1));
-        chk("page: Data struct (eid/token_id/token_value)",
-            (rsp_data.eid == '1) && (rsp_data.token_id == '1) && (rsp_data.token_value == 10'h155));
-        chk("page: Data struct (s_pfn)",
-            (rsp_data.s_pfn == 18'h33333));
+            (rsp_tag.valid == 1'b1)
+        );
+        chk(
+            "page: Data struct (eid/token_id/token_value)",
+            (rsp_data.eid == '1) && (rsp_data.token_id == '1) && (rsp_data.token_value == 10'h155)
+        );
+        chk("page: Data struct (s_pfn)", (rsp_data.s_pfn == 18'h33333));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -204,8 +207,7 @@ module tb_sdtlb;
         @(sdtlb_if.drv);                                // 响应拍
         sample_rsp();
         chk("latency: 响应拍才命中", rsp_hit == 1'b1);
-        chk("latency: 响应拍读出正确",
-            (rsp_tag.pa_base == {12'hfff, 5'h1f}) && (rsp_data.s_pfn == 18'h33333));
+        chk("latency: 响应拍读出正确", (rsp_tag.pa_base == {12'hfff, 5'h1f}) && (rsp_data.s_pfn == 18'h33333));
         repeat (10) @(sdtlb_if.drv);
 
         // 同段高位、相邻页号: 页式条目只覆盖一页, 应该不命中
@@ -227,19 +229,19 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h001), .idx(5'd0));
-        chk("fill#2: 命中且落在 1 号条目",
-            (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h001, 5'd0}));
-        chk("fill#2: Data 内容 (不串扰)",
+        chk("fill#2: 命中且落在 1 号条目", (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h001, 5'd0}));
+        chk(
+            "fill#2: Data 内容 (不串扰)",
             (rsp_data.eid == 11'h055) &&
             (rsp_data.token_id == 10'h0aa) &&
             (rsp_data.token_value == 10'h0cb) &&
-            (rsp_data.s_pfn == 18'h0cccc));
+            (rsp_data.s_pfn == 18'h0cccc)
+        );
         repeat (10) @(sdtlb_if.drv);
 
         // 回到 0 号条目的地址: 仍然命中, 且读回的是它自己的数据
         set_req(.high(12'hfff), .idx(5'h1f));
-        chk("fill#1 仍在 (两个条目各自独立)",
-            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h33333));
+        chk("fill#1 仍在 (两个条目各自独立)", (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h33333));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -256,16 +258,11 @@ module tb_sdtlb;
 
         // 闭区间内: 左端 / 中间 / 右端 都命中
         set_req(.high(12'h002), .idx(5'd4));
-        chk("seg: 左端命中 (闭区间)",
-            (rsp_hit == 1'b1) &&
-            (rsp_tag.pa_base == {12'h002, 5'd4}) &&
-            (rsp_tag.pa_up == 5'd8));
+        chk("seg: 左端命中 (闭区间)", (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h002, 5'd4}) && (rsp_tag.pa_up == 5'd8));
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h002), .idx(5'd6));
-        chk("seg: 中间命中",
-            (rsp_hit == 1'b1) &&
-            (rsp_data.s_pfn == 18'h15555));
+        chk("seg: 中间命中", (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h15555));
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h002), .idx(5'd8));
@@ -307,19 +304,14 @@ module tb_sdtlb;
         sdtlb_if.drv.cam0_req_pa    <= {12'h002, 5'd9, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};    // C: 未命中
         @(sdtlb_if.drv);                                // 请求拍 C; 响应拍 A
         sample_rsp();
-        chk("pipeline: 第 3 拍出 A 的响应",
-            (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'hfff, 5'h1f}) &&
-            (rsp_data.s_pfn == 18'h33333));
+        chk("pipeline: 第 3 拍出 A 的响应", (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'hfff, 5'h1f}) && (rsp_data.s_pfn == 18'h33333));
         sdtlb_if.drv.cam0_req_en <= 1'b0;
         @(sdtlb_if.drv);                                // 响应拍 B
         sample_rsp();
-        chk("pipeline: 第 4 拍出 B 的响应",
-            (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h001, 5'd0}) &&
-            (rsp_data.s_pfn == 18'h0cccc));
+        chk("pipeline: 第 4 拍出 B 的响应", (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h001, 5'd0}) && (rsp_data.s_pfn == 18'h0cccc));
         @(sdtlb_if.drv);                                // 响应拍 C
         sample_rsp();
-        chk("pipeline: 第 5 拍出 C 的响应 (未命中)",
-            (rsp_hit == 1'b0) && (rsp_tag == '0) && (rsp_data == '0));
+        chk("pipeline: 第 5 拍出 C 的响应 (未命中)", (rsp_hit == 1'b0) && (rsp_tag == '0) && (rsp_data == '0));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -329,10 +321,7 @@ module tb_sdtlb;
         chk("valid: 请求拍有效 -> 下一拍命中", rsp_hit == 1'b1);
         repeat (10) @(sdtlb_if.drv);
         sample_rsp();
-        chk("valid: 请求已撤 -> 命中与读出数据都归 0",
-            (rsp_hit == 1'b0) &&
-            (rsp_tag == '0) &&
-            (rsp_data == '0));
+        chk("valid: 请求已撤 -> 命中与读出数据都归 0", (rsp_hit == 1'b0) && (rsp_tag == '0) && (rsp_data == '0));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -372,8 +361,7 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
         set_req(.high(12'h010), .idx(5'd20));
         chk("inv: 页式条目被清掉", rsp_hit == 1'b0);
-        chk("inv: 未命中时 Tag / Data 读出全 0",
-            (rsp_tag == '0) && (rsp_data == '0));
+        chk("inv: 未命中时 Tag / Data 读出全 0", (rsp_tag == '0) && (rsp_data == '0));
         repeat (10) @(sdtlb_if.drv);
 
         // 置无效只清有效位: 重新装填即可恢复, 且读回的是新数据
@@ -388,8 +376,7 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h010), .idx(5'd20));
-        chk("inv: 重新装填后恢复命中, 数据是新的",
-            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h0e0e0));
+        chk("inv: 重新装填后恢复命中, 数据是新的", (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h0e0e0));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -428,8 +415,7 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h030), .idx(5'd1));
-        chk("inv_all 后重新装填可命中",
-            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h0a0a0));
+        chk("inv_all 后重新装填可命中", (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h0a0a0));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -520,18 +506,28 @@ module tb_sdtlb;
                       (dut.u_sdtlb.data_item[e].token_value === exp_tokv) &&
                       (dut.u_sdtlb.data_item[e].s_pfn === exp_pfn))) begin
                     mismatch++;
-                    $display("FAIL 回读 entry[%0d] (第 %0d 次装填): valid=%b tag=%h/up=%0d data=%h/%h/%h/%h, 期望 tag=%h/up=%0d data=%h/%h/%h/%h",
-                             e, fill_idx,
-                             dut.u_sdtlb.tag_item[e].valid,
-                             dut.u_sdtlb.tag_item[e].pa_base, dut.u_sdtlb.tag_item[e].pa_up,
-                             dut.u_sdtlb.data_item[e].eid, dut.u_sdtlb.data_item[e].token_id,
-                             dut.u_sdtlb.data_item[e].token_value, dut.u_sdtlb.data_item[e].s_pfn,
-                             exp_base, exp_up, exp_eid, exp_tok, exp_tokv, exp_pfn);
+                    $display(
+                        "FAIL 回读 entry[%0d] (第 %0d 次装填): valid=%b tag=%h/up=%0d data=%h/%h/%h/%h, 期望 tag=%h/up=%0d data=%h/%h/%h/%h",
+                        e,
+                        fill_idx,
+                        dut.u_sdtlb.tag_item[e].valid,
+                        dut.u_sdtlb.tag_item[e].pa_base,
+                        dut.u_sdtlb.tag_item[e].pa_up,
+                        dut.u_sdtlb.data_item[e].eid,
+                        dut.u_sdtlb.data_item[e].token_id,
+                        dut.u_sdtlb.data_item[e].token_value,
+                        dut.u_sdtlb.data_item[e].s_pfn,
+                        exp_base,
+                        exp_up,
+                        exp_eid,
+                        exp_tok,
+                        exp_tokv,
+                        exp_pfn
+                    );
                 end
             end
 
-            $display("装填后回读: 起点 entry[%0d], 共比对 %0d 个条目的 Tag / Data",
-                     start_idx, SDTLB_ENTRIES);
+            $display("装填后回读: 起点 entry[%0d], 共比对 %0d 个条目的 Tag / Data", start_idx, SDTLB_ENTRIES);
             chk("装填后回读: 所有条目内容与写入一致", mismatch == 0);
         end
 
@@ -551,19 +547,16 @@ module tb_sdtlb;
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h100), .idx(5'd0));
-        chk("轮转: 绕圈后重新装填可命中, 数据正确",
-            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h3fffe));
+        chk("轮转: 绕圈后重新装填可命中, 数据正确", (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'h3fffe));
         repeat (10) @(sdtlb_if.drv);
 
         // 绕圈时填进去的占位条目各自还在 (抽查第 3 个与最后一个)
         set_req(.high(12'h100), .idx(5'd2));
-        chk("轮转: 绕圈里的占位条目仍在 (第 3 个)",
-            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'd2));
+        chk("轮转: 绕圈里的占位条目仍在 (第 3 个)", (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'd2));
         repeat (10) @(sdtlb_if.drv);
 
         set_req(.high(12'h100 + 12'((SDTLB_ENTRIES - 1) / 32)), .idx(5'((SDTLB_ENTRIES - 1) % 32)));
-        chk("轮转: 绕圈里的占位条目仍在 (最后一个)",
-            (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'(SDTLB_ENTRIES - 1)));
+        chk("轮转: 绕圈里的占位条目仍在 (最后一个)", (rsp_hit == 1'b1) && (rsp_data.s_pfn == 18'(SDTLB_ENTRIES - 1)));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -589,16 +582,16 @@ module tb_sdtlb;
         @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
         sample_rsp();
-        chk("fill 后查表: 命中且看到新 data",
+        chk(
+            "fill 后查表: 命中且看到新 data",
             (rsp_hit == 1'b1) &&
             (rsp_tag.pa_base == {12'h210, 5'd7}) &&
             (rsp_data.eid == 11'h0b2) &&
             (rsp_data.token_id == 10'h0b2) &&
             (rsp_data.token_value == 10'h1b2) &&
-            (rsp_data.s_pfn == 18'h1bbbb));
-        chk("双端口同拍查表: cam1 也命中同一条目",
-            (sdtlb_if.drv.cam1_hit == 1'b1) &&
-            (sdtlb_if.drv.cam1_hit_tag_item.pa_base == {12'h210, 5'd7}));
+            (rsp_data.s_pfn == 18'h1bbbb)
+        );
+        chk("双端口同拍查表: cam1 也命中同一条目", (sdtlb_if.drv.cam1_hit == 1'b1) && (sdtlb_if.drv.cam1_hit_tag_item.pa_base == {12'h210, 5'd7}));
         repeat (10) @(sdtlb_if.drv);
 
         // ====================================================================
@@ -631,14 +624,18 @@ module tb_sdtlb;
         sdtlb_if.drv.cam1_req_en <= 1'b0;
         @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
-        chk("双端口: cam0 命中自己的条目",
+        chk(
+            "双端口: cam0 命中自己的条目",
             (sdtlb_if.drv.cam0_hit == 1'b1) &&
             (sdtlb_if.drv.cam0_hit_tag_item.pa_base == {12'h300, 5'd0}) &&
-            (sdtlb_if.drv.cam0_hit_data_item.eid == 11'h301));
-        chk("双端口: cam1 命中自己的条目",
+            (sdtlb_if.drv.cam0_hit_data_item.eid == 11'h301)
+        );
+        chk(
+            "双端口: cam1 命中自己的条目",
             (sdtlb_if.drv.cam1_hit == 1'b1) &&
             (sdtlb_if.drv.cam1_hit_tag_item.pa_base == {12'h400, 5'd0}) &&
-            (sdtlb_if.drv.cam1_hit_data_item.eid == 11'h402));
+            (sdtlb_if.drv.cam1_hit_data_item.eid == 11'h402)
+        );
         repeat (10) @(sdtlb_if.drv);
 
         // 两路同拍: 一个命中一个未命中, 互不影响
@@ -651,14 +648,18 @@ module tb_sdtlb;
         sdtlb_if.drv.cam1_req_en <= 1'b0;
         @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
-        chk("双端口: cam0 命中 (cam1 未命中不影响它)",
+        chk(
+            "双端口: cam0 命中 (cam1 未命中不影响它)",
             (sdtlb_if.drv.cam0_hit == 1'b1) &&
             (sdtlb_if.drv.cam0_hit_tag_item.pa_base == {12'h400, 5'd0}) &&
-            (sdtlb_if.drv.cam0_hit_data_item.s_pfn == 18'h20202));
-        chk("双端口: cam1 未命中 (读出全 0)",
+            (sdtlb_if.drv.cam0_hit_data_item.s_pfn == 18'h20202)
+        );
+        chk(
+            "双端口: cam1 未命中 (读出全 0)",
             (sdtlb_if.drv.cam1_hit == 1'b0) &&
             (sdtlb_if.drv.cam1_hit_tag_item == '0) &&
-            (sdtlb_if.drv.cam1_hit_data_item == '0));
+            (sdtlb_if.drv.cam1_hit_data_item == '0)
+        );
         repeat (10) @(sdtlb_if.drv);
 
         // 两路同拍: 地址对调, 命中结果跟着各自的端口走
@@ -671,14 +672,18 @@ module tb_sdtlb;
         sdtlb_if.drv.cam1_req_en <= 1'b0;
         @(sdtlb_if.drv);             // 输入寄存器拍
         @(sdtlb_if.drv);             // 响应拍
-        chk("双端口: 地址对调后 cam0 读到 400 条目",
+        chk(
+            "双端口: 地址对调后 cam0 读到 400 条目",
             (sdtlb_if.drv.cam0_hit == 1'b1) &&
             (sdtlb_if.drv.cam0_hit_tag_item.pa_base == {12'h400, 5'd0}) &&
-            (sdtlb_if.drv.cam0_hit_data_item.eid == 11'h402));
-        chk("双端口: 地址对调后 cam1 读到 300 条目",
+            (sdtlb_if.drv.cam0_hit_data_item.eid == 11'h402)
+        );
+        chk(
+            "双端口: 地址对调后 cam1 读到 300 条目",
             (sdtlb_if.drv.cam1_hit == 1'b1) &&
             (sdtlb_if.drv.cam1_hit_tag_item.pa_base == {12'h300, 5'd0}) &&
-            (sdtlb_if.drv.cam1_hit_data_item.eid == 11'h301));
+            (sdtlb_if.drv.cam1_hit_data_item.eid == 11'h301)
+        );
         repeat (10) @(sdtlb_if.drv);
 
         $display("\n%d checks, %d errors", checks, errors);

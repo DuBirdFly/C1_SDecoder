@@ -5,11 +5,15 @@
 // include directories for package includes (按 <area>/sdecoder/ 的目录组织)
 +incdir+./testbench/env/sdecoder
 +incdir+./testbench/seqlib/sdecoder
++incdir+./testbench/env/sdior
++incdir+./testbench/ral/sdior
++incdir+./testbench/seqlib/sdior
 +incdir+./testbench/test
 +incdir+./testbench/test/sdecoder
 
 // interface files
 ./testbench/top/interface/sdtlb_if.sv
+./testbench/top/interface/sdior_if.sv
 ./testbench/top/interface/sdecoder_if.sv
 ./testbench/top/interface/age_matrix_if.sv
 
@@ -19,12 +23,16 @@
 // UVM files
 ./testbench/inc/uvm_header.svh
 ./testbench/seqlib/sdecoder/sdecoder_seq_pkg.svh
+./testbench/seqlib/sdior/sdior_seq_pkg.svh
 ./testbench/env/sdecoder/sdecoder_env_pkg.svh
+./testbench/ral/sdior/sdior_ral_pkg.svh
+./testbench/env/sdior/sdior_env_pkg.svh
 ./testbench/test/test_pkg.svh
 
 // Testbench top files
 ./testbench/top/crg.sv
 ./testbench/top/tb_sdtlb.sv
+./testbench/top/tb_sdecoder.sv
 ./testbench/top/tb_sdtlb_spec.sv
 ./testbench/top/tb_sdtlb_tag_item.sv
 ./testbench/top/tb_sdior.sv

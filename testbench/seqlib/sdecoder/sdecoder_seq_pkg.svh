@@ -10,7 +10,8 @@ package sdecoder_seq_pkg;
         SDIOR_WR,
         SDIOR_RD,
         SDTLB_CAM0_REQ,
-        SDTLB_CAM1_REQ
+        SDTLB_CAM1_REQ,
+        SDECODER_WAIT
     } Sdecoder_Item_Kind_e;
 
     `include "SdecoderItem.sv"

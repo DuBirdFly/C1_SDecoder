@@ -30,8 +30,8 @@ import sdecoder_pkg::*;
     logic [S_PFN_WIDTH-1:0]     fill_s_pfn_r;
 
     logic                       inv_all_r;
-    logic                       inv_en_r;
-    logic [PA_WIDTH-1:0]        inv_pa_r;
+    logic                       inv_sel_r;
+    logic [PA_WIDTH-1:0]        inv_sel_pa_r;
 
     always_ff @(posedge sdtlb_if.clk or negedge sdtlb_if.rst_n) begin
         if (!sdtlb_if.rst_n) begin
@@ -49,8 +49,8 @@ import sdecoder_pkg::*;
             fill_s_pfn_r     <= '0;
 
             inv_all_r        <= 1'b0;
-            inv_en_r         <= 1'b0;
-            inv_pa_r         <= '0;
+            inv_sel_r         <= 1'b0;
+            inv_sel_pa_r         <= '0;
         end
         else begin
             cam0_req_en_r <= sdtlb_if.cam0_req_en;
@@ -67,8 +67,8 @@ import sdecoder_pkg::*;
             fill_s_pfn_r     <= sdtlb_if.fill_s_pfn;
 
             inv_all_r        <= sdtlb_if.inv_all;
-            inv_en_r         <= sdtlb_if.inv_en;
-            inv_pa_r         <= sdtlb_if.inv_pa;
+            inv_sel_r         <= sdtlb_if.inv_sel;
+            inv_sel_pa_r         <= sdtlb_if.inv_sel_pa;
         end
     end
 
@@ -98,8 +98,8 @@ import sdecoder_pkg::*;
         .fill_s_pfn         (fill_s_pfn_r           ),
 
         .inv_all            (inv_all_r              ),
-        .inv_en             (inv_en_r               ),
-        .inv_pa             (inv_pa_r               )
+        .inv_sel             (inv_sel_r               ),
+        .inv_sel_pa             (inv_sel_pa_r               )
     );
 
 endmodule

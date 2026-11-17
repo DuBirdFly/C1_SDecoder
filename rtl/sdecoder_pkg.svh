@@ -77,15 +77,14 @@ package sdecoder_pkg;
 
     // IOR (sdior) 的寄存器地址与字格式: 首版不做 APB 从口, 这里用寄存器序号 (而不是接口手册的
     // 字节偏移), 见设计方案 IOR 列表 / 接口手册 寄存器列表
-    // 寄存器字宽 64: 地址类寄存器把整条 PA 填在低 PA_WIDTH 位 (即 PA[47:0]); W1P 触发位在字里
-    // 的位置各不相同 (IA 是 bit 0, IS 是 bit 63), 其余位保留
+    // 寄存器字宽 64: 各寄存器的字段位置见设计方案 "可配置的寄存器" 一节
     // 地址按设计方案的序号排: 0 IA, 1 IS, 2 PTBR; 其余寄存器暂未实现 (ES / Perf / 计数器)
     localparam SDIOR_ADDR_WIDTH = 4;
     localparam SDIOR_DATA_WIDTH = 64;
-    localparam SDIOR_IA_W1P_BIT = 0;    // SDecoder_IA: 这一位写 1 才产生 inv_all 脉冲
-    localparam SDIOR_IS_W1P_BIT = 63;   // SDecoder_IS: 这一位写 1 才产生 inv_en 脉冲
-    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IA = 4'd0;   // W1P: 置无效全部条目
-    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IS = 4'd1;   // W1P: 置无效指定 PA 的条目
+    localparam SDIOR_IS_PA_LSB   = 0;   // SDecoder_IS.INV_SEL_PA[47:30] 在寄存器字里的 lsb
+    localparam SDIOR_PTBR_LSB    = 4;   // SDecoder_PTBR.SDT_L1_BASE[47:4] 在寄存器字里的 lsb
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IA = 4'd0;   // 写即触发: 置无效全部条目
+    localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_IS = 4'd1;   // 写即触发: 置无效 INV_SEL_PA 的条目
     localparam logic [SDIOR_ADDR_WIDTH-1:0] ADDR_SDECODER_PTBR = 4'd2;   // RW: 一级表基地址
 
 

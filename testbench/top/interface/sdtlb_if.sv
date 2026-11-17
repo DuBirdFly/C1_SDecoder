@@ -37,8 +37,8 @@ import sdecoder_pkg::*;
 
     // 置无效 (刷新) 请求
     logic                               inv_all;
-    logic                               inv_en;
-    logic [PA_WIDTH-1:0]                inv_pa;
+    logic                               inv_sel;
+    logic [PA_WIDTH-1:0]                inv_sel_pa;
 
     // driver: 驱动 DUT 输入, 回读 DUT 输出
     clocking drv @(posedge clk);
@@ -56,8 +56,8 @@ import sdecoder_pkg::*;
         output fill_token_value;
         output fill_s_pfn;
         output inv_all;
-        output inv_en;
-        output inv_pa;
+        output inv_sel;
+        output inv_sel_pa;
 
         input  cam0_hit;
         input  cam0_hit_tag_item;
@@ -89,8 +89,8 @@ import sdecoder_pkg::*;
         input  fill_token_value;
         input  fill_s_pfn;
         input  inv_all;
-        input  inv_en;
-        input  inv_pa;
+        input  inv_sel;
+        input  inv_sel_pa;
     endclocking
 
 endinterface

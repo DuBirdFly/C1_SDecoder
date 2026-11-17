@@ -18,10 +18,24 @@ class SdecoderDrv extends uvm_driver#(SdecoderItem);
         end
     endfunction
 
+    task signal_reset();
+        // TODO: sdecoder_if 定稿后在这里设初始电平, 并等复位释放
+    endtask
+
     task run_phase(uvm_phase phase);
+        signal_reset();
+
         forever begin
-            seq_item_port.get_next_item(req);
-            seq_item_port.item_done();
+            seq_item_port.try_next_item(req);
+
+            if (req == null) begin
+                @(vif.drv);
+            end
+            else begin
+                // TODO: 接口定稿后按 req.kind 驱动 cam0 / cam1 / ior / sdmq_rsp 等
+
+                seq_item_port.item_done();
+            end
         end
     endtask
 

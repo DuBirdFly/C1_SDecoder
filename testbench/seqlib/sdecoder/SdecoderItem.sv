@@ -3,7 +3,16 @@
 
 class SdecoderItem extends uvm_sequence_item;
 
-    `uvm_object_utils(SdecoderItem)
+    `uvm_object_utils_begin(SdecoderItem)
+        `uvm_field_enum(Sdecoder_Item_Kind_e, kind,        UVM_ALL_ON)
+        `uvm_field_int (ior_waddr,                         UVM_ALL_ON)
+        `uvm_field_int (ior_wdata,                         UVM_ALL_ON)
+        `uvm_field_int (ior_raddr,                         UVM_ALL_ON)
+        `uvm_field_int (ior_rdata,                         UVM_ALL_ON)
+        `uvm_field_int (cam_req_pa,                        UVM_ALL_ON)
+        `uvm_field_int (cam_req_id,                        UVM_ALL_ON)
+        `uvm_field_int (wait_cycles,                       UVM_ALL_ON)
+    `uvm_object_utils_end
 
     rand Sdecoder_Item_Kind_e         kind;
 

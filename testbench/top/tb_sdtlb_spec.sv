@@ -124,10 +124,10 @@ module tb_sdtlb_spec;
     endtask
 
     task automatic inv_addr(input logic [PA_BASE_WIDTH-1:0] base);
-        sdtlb_if.drv.inv_en <= 1'b1;
-        sdtlb_if.drv.inv_pa <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        sdtlb_if.drv.inv_sel <= 1'b1;
+        sdtlb_if.drv.inv_sel_pa <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
         @(sdtlb_if.drv);
-        sdtlb_if.drv.inv_en <= 1'b0;
+        sdtlb_if.drv.inv_sel <= 1'b0;
         repeat (2) @(sdtlb_if.drv);             // wrapper 打拍 + 置无效生效
     endtask
 
@@ -162,10 +162,8 @@ module tb_sdtlb_spec;
         $display("    TOKEN_ID_WIDTH  : 11 vs %0d", TOKEN_ID_WIDTH);
         $display("    S_PFN_WIDTH     : 23 vs %0d", S_PFN_WIDTH);
         $display("    SLA_WIDTH       : 53 vs %0d", SLA_WIDTH);
-        $display("    SDTLB_DATA_ITEM : 55 bit (eid11 + token_id11 + token_value10 + s_pfn23) vs %0d bit",
-                 $bits(SDTLB_DATA_ITEM_t));
-        $display("    SDT_RSP         : 94 bit (id8 + eid11 + token_id11 + token_value10 + sla53 + err1) vs %0d bit",
-                 $bits(SDT_RSP_t));
+        $display("    SDTLB_DATA_ITEM : 55 bit (eid11 + token_id11 + token_value10 + s_pfn23) vs %0d bit", $bits(SDTLB_DATA_ITEM_t));
+        $display("    SDT_RSP         : 94 bit (id8 + eid11 + token_id11 + token_value10 + sla53 + err1) vs %0d bit", $bits(SDT_RSP_t));
 
         chk("EID_WIDTH == 11", EID_WIDTH == 11);
         chk("TOKEN_ID_WIDTH == 11", TOKEN_ID_WIDTH == 11);
@@ -185,12 +183,18 @@ module tb_sdtlb_spec;
         l1_word[1]     = 1'b1;          // Type
         l1_word[0]     = 1'b1;          // Valid
         l1             = SDT_L1_ITEM_t'(l1_word);
-        $display("    L1 按设计方案拼字后 RTL 解析: eid=%h token_id=%h s_pfn=%h seg_len=%0d seg_base=%0d valid=%b",
-                 l1.eid, l1.token_id, l1.s_pfn, l1.seg_len, l1.seg_base, l1.valid);
+        $display(
+            "    L1 按设计方案拼字后 RTL 解析: eid=%h token_id=%h s_pfn=%h seg_len=%0d seg_base=%0d valid=%b",
+            l1.eid,
+            l1.token_id,
+            l1.s_pfn,
+            l1.seg_len,
+            l1.seg_base,
+            l1.valid
+        );
         chk("L1: token_id 解析正确 (11 bit @ [55:45])", l1.token_id == 11'h7ff);
         chk("L1: s_pfn 解析正确 (23 bit @ [34:12])", l1.s_pfn == 23'h4abcd);
-        chk("L1: seg_len / seg_base / valid 解析正确",
-            (l1.seg_len == 5'd3) && (l1.seg_base == 5'd5) && (l1.valid == 1'b1));
+        chk("L1: seg_len / seg_base / valid 解析正确", (l1.seg_len == 5'd3) && (l1.seg_base == 5'd5) && (l1.valid == 1'b1));
 
         // 二级表条目: 按设计方案 [55:45] EID / [44:34] TokenID / [33:24] TokenValue / [23:1] S_PFN
         l2_word        = '0;
@@ -200,8 +204,7 @@ module tb_sdtlb_spec;
         l2_word[23:1]  = 23'h12345;     // S_PFN
         l2_word[0]     = 1'b1;          // Valid
         l2             = SDT_L2_ITEM_t'(l2_word);
-        $display("    L2 按设计方案拼字后 RTL 解析: eid=%h token_id=%h s_pfn=%h valid=%b",
-                 l2.eid, l2.token_id, l2.s_pfn, l2.valid);
+        $display("    L2 按设计方案拼字后 RTL 解析: eid=%h token_id=%h s_pfn=%h valid=%b", l2.eid, l2.token_id, l2.s_pfn, l2.valid);
         chk("L2: eid 解析正确 (11 bit @ [55:45])", l2.eid == 11'h5a5);
         chk("L2: token_id 解析正确 (11 bit @ [44:34])", l2.token_id == 11'h2d2);
         chk("L2: s_pfn 解析正确 (23 bit @ [23:1])", l2.s_pfn == 23'h12345);
@@ -227,21 +230,23 @@ module tb_sdtlb_spec;
         ptr = ptr_index();
         fill_one({12'h5a0, 5'd4}, 5'd4, 11'h004, 11'h004, 18'h00004);
         got_idx = first_valid_index();
-        $display("    (a) 全空表: 轮转指针在 entry[%0d], 装填落到 entry[%0d] (设计方案要求 entry[0])",
-                 ptr, got_idx);
+        $display("    (a) 全空表: 轮转指针在 entry[%0d], 装填落到 entry[%0d] (设计方案要求 entry[0])", ptr, got_idx);
 
         // (b) 满表 + 一个空洞
         inv_everything();
         for (int i = 0; i < SDTLB_ENTRIES; i++) begin
-            fill_one({12'h600 + 12'(i / 32), 5'(i % 32)}, 5'(i % 32),
-                     11'(i), 11'(i), 18'(i));
+            fill_one({12'h600 + 12'(i / 32), 5'(i % 32)}, 5'(i % 32), 11'(i), 11'(i), 18'(i));
         end
         ptr      = ptr_index();
         hole_idx = (ptr + 5) % SDTLB_ENTRIES;
         inv_addr({12'h600, 5'd5});
         fill_one({12'h700, 5'd9}, 5'd9, 11'h7fe, 11'h3fe, 18'h2ffff);
-        $display("    (b) 满表 + 空洞 entry[%0d]: 装填后有效条目数 = %0d, 空洞仍空 = %b (设计方案要求复用空洞)",
-                 hole_idx, valid_count(), (dut.u_sdtlb.tag_item[hole_idx].valid == 1'b0));
+        $display(
+            "    (b) 满表 + 空洞 entry[%0d]: 装填后有效条目数 = %0d, 空洞仍空 = %b (设计方案要求复用空洞)",
+            hole_idx,
+            valid_count(),
+            (dut.u_sdtlb.tag_item[hole_idx].valid == 1'b0)
+        );
     endtask
 
     // 设计方案 "访问条目": 多命中时数据未定义, 且要求有 tlb_multi_hit 异常通路.
@@ -256,15 +261,13 @@ module tb_sdtlb_spec;
         // 同一段基址填两次: 0 号条目一次, 再填 126 个不同地址后 127 号条目再来一次
         fill_one({12'h7f0, 5'd1}, 5'd1, 11'h101, 11'h101, 18'h00101);
         for (int i = 1; i <= 126; i++) begin
-            fill_one({12'h710 + 12'(i / 32), 5'(i % 32)}, 5'(i % 32),
-                     11'(i), 11'(i), 18'(i));
+            fill_one({12'h710 + 12'(i / 32), 5'(i % 32)}, 5'(i % 32), 11'(i), 11'(i), 18'(i));
         end
         fill_one({12'h7f0, 5'd1}, 5'd1, 11'h202, 11'h202, 18'h00202);
         multi_hit_cnt = 0;
         req0(pa_x);
 
-        $display("    响应拍内部命中条数 = %0d, hit = %b (设计方案要求此时上报 tlb_multi_hit)",
-                 multi_hit_cnt, rsp_hit);
+        $display("    响应拍内部命中条数 = %0d, hit = %b (设计方案要求此时上报 tlb_multi_hit)", multi_hit_cnt, rsp_hit);
     endtask
 
     // 设计方案 "访问条目": 请求拍 T 握手, 命中结果打 1 拍后给出
@@ -288,10 +291,7 @@ module tb_sdtlb_spec;
         chk("输入打拍拍仍无命中", rsp_hit == 1'b0);
         @(sdtlb_if.drv);                        // 响应拍
         sample_rsp();
-        chk("响应拍命中且数据正确",
-            (rsp_hit == 1'b1) &&
-            (rsp_tag.pa_base == {12'h8a0, 5'd6}) &&
-            (rsp_data.s_pfn == 18'h00333));
+        chk("响应拍命中且数据正确", (rsp_hit == 1'b1) && (rsp_tag.pa_base == {12'h8a0, 5'd6}) && (rsp_data.s_pfn == 18'h00333));
         @(sdtlb_if.drv);
         sample_rsp();
         chk("再下一拍命中归 0 (不重复出响应)", rsp_hit == 1'b0);
@@ -310,8 +310,8 @@ module tb_sdtlb_spec;
         sdtlb_if.drv.fill_token_value <= '0;
         sdtlb_if.drv.fill_s_pfn       <= '0;
         sdtlb_if.drv.inv_all          <= 1'b0;
-        sdtlb_if.drv.inv_en           <= 1'b0;
-        sdtlb_if.drv.inv_pa           <= '0;
+        sdtlb_if.drv.inv_sel           <= 1'b0;
+        sdtlb_if.drv.inv_sel_pa           <= '0;
 
         wait (rst_n === 1'b1);
         repeat (10) @(sdtlb_if.drv);

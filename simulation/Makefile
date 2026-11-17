@@ -8,7 +8,12 @@
 # USER CONFIG (single test case)
 # 默认顶层 (冒烟): 挑一个单元自检 tb
 TB_TOP ?= tb_sdtlb
+# 每个 tb 的默认 UVM 用例名 (单元自检 tb 用不到 +UVM_TESTNAME)
+ifeq ($(TB_TOP),tb_sdior)
+TESTNAME ?= SdiorTestBase
+else
 TESTNAME ?= SDecoderTestBase
+endif
 DUMP_WAVE ?= 1
 DUMP_SVA ?= 1
 

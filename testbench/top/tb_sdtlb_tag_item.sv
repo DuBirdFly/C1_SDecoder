@@ -35,8 +35,8 @@ module tb_sdtlb_tag_item;
 
     // 置无效
     logic                       inv_all;
-    logic                       inv_en;
-    logic [PA_WIDTH-1:0]        inv_pa;
+    logic                       inv_sel;
+    logic [PA_WIDTH-1:0]        inv_sel_pa;
 
     SDTLB_TAG_ITEM_t            tag_item;
 
@@ -73,8 +73,8 @@ module tb_sdtlb_tag_item;
         .fill_wr_pa_up    (fill_wr_pa_up  ),
 
         .inv_all          (inv_all        ),
-        .inv_en           (inv_en         ),
-        .inv_pa           (inv_pa         ),
+        .inv_sel           (inv_sel         ),
+        .inv_sel_pa           (inv_sel_pa         ),
 
         .tag_item         (tag_item       )
     );
@@ -131,10 +131,10 @@ module tb_sdtlb_tag_item;
     // 按地址置无效, 拉高一拍
     task automatic do_inv(input logic [PA_BASE_WIDTH-1:0] base);
         wait_cycle();
-        inv_pa <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        inv_en <= 1'b1;
+        inv_sel_pa <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        inv_sel <= 1'b1;
         wait_cycle();                   // 这一沿清 Valid
-        inv_en <= 1'b0;
+        inv_sel <= 1'b0;
     endtask
 
     // 同一拍请求 "置无效 base" 和 "装填 base"; 返回这一沿之后的 Valid
@@ -147,12 +147,12 @@ module tb_sdtlb_tag_item;
         fill_wr_pa_base <= base;
         fill_wr_pa_up   <= up;
         fill_wr_en      <= 1'b1;
-        inv_pa          <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        inv_en          <= 1'b1;
+        inv_sel_pa          <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        inv_sel          <= 1'b1;
         wait_cycle();                   // 同一沿: inv 清位与 fill 置位撞车
         valid_after = tag_item.valid;
         fill_wr_en <= 1'b0;
-        inv_en     <= 1'b0;
+        inv_sel     <= 1'b0;
     endtask
 
     // 查一次表 (命中是组合输出, 在请求有效的那一拍取值)
@@ -180,8 +180,8 @@ module tb_sdtlb_tag_item;
         fill_wr_pa_base = '0;
         fill_wr_pa_up   = '0;
         inv_all         = 1'b0;
-        inv_en          = 1'b0;
-        inv_pa          = '0;
+        inv_sel          = 1'b0;
+        inv_sel_pa          = '0;
         hit             = 1'b0;
         valid_after     = 1'b0;
 
@@ -192,8 +192,7 @@ module tb_sdtlb_tag_item;
         // 只装填 -> 条目有效, 查表命中
         do_fill(TAG_A, TAG_A_UP);
         chk("只装填: Valid = 1", tag_item.valid === 1'b1);
-        chk("只装填: tag 内容正确",
-            (tag_item.pa_base === TAG_A) && (tag_item.pa_up === TAG_A_UP));
+        chk("只装填: tag 内容正确", (tag_item.pa_base === TAG_A) && (tag_item.pa_up === TAG_A_UP));
         do_req(TAG_A, hit);
         chk("只装填: 查表命中", hit === 1'b1);
 
