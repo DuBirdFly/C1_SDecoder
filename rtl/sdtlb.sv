@@ -35,10 +35,10 @@ import sdecoder_pkg::*;
 
     // 查表端口: 下标就是 CAM 号. 地址是整条 PA[47:0] (条目里只存 PA[47:30], 见 sdtlb_tag_item)
     // req_en 是 1 拍使能, 与 fill_en 不同拍 (外界保证)
-    input  logic [SDTLB_CAM_NUM-1:0]               cam_req_en,
-    input  logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa,
-    output logic [SDTLB_CAM_NUM-1:0]               cam_hit,
-    output SDTLB_TAG_ITEM_t                        cam_hit_tag_item [SDTLB_CAM_NUM],
+    input  logic                                   cam_req_en        [SDTLB_CAM_NUM],
+    input  logic [PA_WIDTH-1:0]                    cam_req_pa        [SDTLB_CAM_NUM],
+    output logic                                   cam_hit           [SDTLB_CAM_NUM],
+    output SDTLB_TAG_ITEM_t                        cam_hit_tag_item  [SDTLB_CAM_NUM],
     output SDTLB_DATA_ITEM_t                       cam_hit_data_item [SDTLB_CAM_NUM],
 
     // 装填: sdptw 在 DONE 状态给出的 Page Walk 结果, 一次填一个条目, 请求拍有效.
@@ -71,8 +71,8 @@ import sdecoder_pkg::*;
     logic [SDTLB_ENTRIES-1:0]   fill_en_vector;
 
     // 命中向量: 每个 CAM 一份, 各 SDTLB_ENTRIES 位
-    logic [SDTLB_CAM_NUM-1:0][SDTLB_ENTRIES-1:0] cam_hit_vector;
-    logic [SDTLB_CAM_NUM-1:0][SDTLB_ENTRIES-1:0] cam_hit_vector_r;
+    logic [SDTLB_ENTRIES-1:0] cam_hit_vector   [SDTLB_CAM_NUM];
+    logic [SDTLB_ENTRIES-1:0] cam_hit_vector_r [SDTLB_CAM_NUM];
 
     // 请求拍选出的命中 tag / data 快照, 与命中向量在同一沿寄存
     SDTLB_TAG_ITEM_t  cam_hit_tag_sel  [SDTLB_CAM_NUM];
@@ -94,14 +94,18 @@ import sdecoder_pkg::*;
     // 命中拍与响应: 每拍把组合命中向量 / 快照打 1 拍, 使能为 0 的拍按 0 打拍
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            cam_hit_vector_r <= '0;
+            foreach (cam_hit_vector_r[i]) begin
+                cam_hit_vector_r[i] <= '0;
+            end
             foreach (cam_hit_tag_r[i]) begin
                 cam_hit_tag_r[i]  <= '0;
                 cam_hit_data_r[i] <= '0;
             end
         end
         else begin
-            cam_hit_vector_r <= cam_hit_vector;
+            foreach (cam_hit_vector_r[i]) begin
+                cam_hit_vector_r[i] <= cam_hit_vector[i];
+            end
             foreach (cam_hit_tag_r[i]) begin
                 cam_hit_tag_r[i]  <= cam_hit_tag_sel[i];
                 cam_hit_data_r[i] <= cam_hit_data_sel[i];
@@ -179,9 +183,6 @@ import sdecoder_pkg::*;
     // 写 Latch 的使能必须严格 one-hot (空指针会让一次装填悄悄丢掉)
     `assert_clk(a_fill_wr_onehot0, (fill_en |-> $onehot(fill_en_vector)))
 
-    // 外界约定: 装填与任何查表端口都不同拍 (Latch 不支持同拍读写)
-    `assert_clk(a_cam_req_fill_exclusive, (!((|cam_req_en) && fill_en)))
-
     // SDecoder 只处理 Mem 空间 (PA[47] = 1 是 IO 空间): 装填 / 置无效地址的 PA[47] 都必须为 0.
     // 口径: cam_req_pa 是整条 PA[47:0] (bit[PA_WIDTH-1] 就是 PA[47]),
     //       fill_pa_base 是 PA[47:30] (bit[PA_BASE_WIDTH-1] 才是 PA[47])
@@ -191,9 +192,10 @@ import sdecoder_pkg::*;
     // 同一次软件刷新只允许一种方式: inv_en 当拍 inv_all 与 inv_sel 不能同时为 1
     `assert_clk(a_inv_exclusive, (inv_en |-> !(inv_all && inv_sel)))
 
-    // 每个 CAM 端口的查表地址也要在 Mem 空间
+    // 每个 CAM 端口各自检查: 装填与查表不同拍 (Latch 不支持同拍读写), 查表地址在 Mem 空间
     generate
-        for (genvar_i = 0; genvar_i < SDTLB_CAM_NUM; genvar_i++) begin : gen_cam_pa_check
+        for (genvar_i = 0; genvar_i < SDTLB_CAM_NUM; genvar_i++) begin : gen_cam_check
+            `assert_clk(a_cam_req_fill_exclusive, (!(cam_req_en[genvar_i] && fill_en)))
             `assert_clk(a_cam_pa47_zero, (cam_req_en[genvar_i] |-> !cam_req_pa[genvar_i][PA_WIDTH-1]))
         end
     endgenerate

@@ -74,15 +74,28 @@ class SdtlbMon extends uvm_monitor;
         end
     endtask
 
+    // 这个 item 里是否有任何一个 CAM 端口在发请求
+    function automatic bit item_any_cam_req(SdtlbItem tr);
+        bit any = 1'b0;
+        foreach (tr.cam_req_en[i]) begin
+            any |= tr.cam_req_en[i];
+        end
+        return any;
+    endfunction
+
     // 事务合法性检查 (地址空间 + 端口冲突)
     function void check_item(SdtlbItem tr);
         // 装填与查表不能同拍 (Latch 不支持同拍读写, 见 sdtlb 的 a_cam_req_fill_exclusive)
-        if (tr.fill_en && (tr.cam_req_en != '0)) begin
-            `uvm_warning(
-                "FILL_CAM",
-                $sformatf("装填与查表同拍: fill_pa_base=0x%0h, cam_req_en=%b",
-                          tr.fill_pa_base, tr.cam_req_en)
-            )
+        if (tr.fill_en) begin
+            for (int unsigned cam = 0; cam < SDTLB_CAM_NUM; cam++) begin
+                if (tr.cam_req_en[cam]) begin
+                    `uvm_warning(
+                        "FILL_CAM",
+                        $sformatf("装填与查表同拍: fill_pa_base=0x%0h, cam%0d 同时在查表",
+                                  tr.fill_pa_base, cam)
+                    )
+                end
+            end
         end
 
         // PA[47] = 1 是 IO 空间, 不该进 SDecoder (只处理 Mem 空间)

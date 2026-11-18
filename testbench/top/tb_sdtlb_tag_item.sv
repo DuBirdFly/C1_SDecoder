@@ -21,9 +21,9 @@ module tb_sdtlb_tag_item;
     logic                       rst_n;
 
     // 查表端口 (item 里命中是组合输出, 没有打拍), 下标就是 CAM 号
-    logic [SDTLB_CAM_NUM-1:0]               cam_req_en;
-    logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa;
-    logic [SDTLB_CAM_NUM-1:0]               cam_hit;
+    logic                       cam_req_en [SDTLB_CAM_NUM];
+    logic [PA_WIDTH-1:0]        cam_req_pa [SDTLB_CAM_NUM];
+    logic                       cam_hit    [SDTLB_CAM_NUM];
 
     // 装填 (本拍有效, 本拍写 Latch)
     logic                       fill_wr_en;
@@ -159,8 +159,8 @@ module tb_sdtlb_tag_item;
     logic valid_after;
 
     initial begin
-        cam_req_en      = '0;
-        cam_req_pa      = '0;
+        cam_req_en      = '{default: 1'b0};
+        cam_req_pa      = '{default: '0};
         fill_wr_en      = 1'b0;
         fill_wr_pa_base = '0;
         fill_wr_pa_up   = '0;

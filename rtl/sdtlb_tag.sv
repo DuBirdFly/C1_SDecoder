@@ -4,7 +4,6 @@
 
 // SDTLB 的 Tag 阵列: SDTLB_CAM_NUM 个查表端口 + 1 个装填端口 + 1 个置无效端口
 // 各查表端口把自己的请求拍上的 accept 广播给全部条目, 得到各自的命中向量.
-// 装填分两步: 请求拍选目标条目, 下一拍用 fill_wr_* 写 Latch.
 module sdtlb_tag
 import sdecoder_pkg::*;
 (
@@ -12,9 +11,9 @@ import sdecoder_pkg::*;
     input  logic                                        rst_n,
 
     // 查表端口: 下标就是 CAM 号, accept 有效时广播给全部条目做比较
-    input  logic [SDTLB_CAM_NUM-1:0]                    cam_req_en,
-    input  logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0]      cam_req_pa,
-    output logic [SDTLB_CAM_NUM-1:0][SDTLB_ENTRIES-1:0] cam_hit_vector,
+    input  logic                                        cam_req_en      [SDTLB_CAM_NUM],
+    input  logic [PA_WIDTH-1:0]                         cam_req_pa      [SDTLB_CAM_NUM],
+    output logic [SDTLB_ENTRIES-1:0]                    cam_hit_vector  [SDTLB_CAM_NUM],
 
     // 装填写入: 下一拍生效, 数据与使能都已寄存
     input  logic [SDTLB_ENTRIES-1:0]                    fill_wr_en_vector,
@@ -26,11 +25,11 @@ import sdecoder_pkg::*;
     input  logic                                        inv_sel,
     input  logic [PA_BASE_WIDTH-1:0]                    inv_sel_pa,
 
-    output SDTLB_TAG_ITEM_t                             tag_item [SDTLB_ENTRIES]
+    output SDTLB_TAG_ITEM_t                             tag_item        [SDTLB_ENTRIES]
 );
 
     // 条目按 [条目][CAM] 给出命中 (一个条目给所有 CAM 各出一位)
-    logic [SDTLB_CAM_NUM-1:0] entry_cam_hit [SDTLB_ENTRIES];
+    logic entry_cam_hit [SDTLB_ENTRIES][SDTLB_CAM_NUM];
 
     genvar genvar_entry;
     genvar genvar_cam;

@@ -11,8 +11,8 @@
 class SdtlbItem extends uvm_sequence_item;
 
     `uvm_object_utils_begin(SdtlbItem)
-        `uvm_field_int (cam_req_en,                       UVM_ALL_ON)
-        `uvm_field_int (cam_req_pa,                       UVM_ALL_ON)
+        `uvm_field_sarray_int (cam_req_en,                UVM_ALL_ON)
+        `uvm_field_sarray_int (cam_req_pa,                UVM_ALL_ON)
         `uvm_field_int (fill_en,                          UVM_ALL_ON)
         `uvm_field_int (fill_pa_base,                     UVM_ALL_ON)
         `uvm_field_int (fill_pa_up,                       UVM_ALL_ON)
@@ -26,9 +26,9 @@ class SdtlbItem extends uvm_sequence_item;
         `uvm_field_int (inv_sel_pa,                       UVM_ALL_ON)
         `uvm_field_int (wait_cycles_en,                   UVM_ALL_ON)
         `uvm_field_int (wait_cycles,                      UVM_ALL_ON)
-        `uvm_field_int (cam_hit,                          UVM_ALL_ON)
-        `uvm_field_int (cam_tag,                          UVM_ALL_ON)
-        `uvm_field_int (cam_data,                         UVM_ALL_ON)
+        `uvm_field_sarray_int (cam_hit,                   UVM_ALL_ON)
+        `uvm_field_sarray_int (cam_tag,                   UVM_ALL_ON)
+        `uvm_field_sarray_int (cam_data,                  UVM_ALL_ON)
     `uvm_object_utils_end
 
     // 端口使能 (每 bit 一个 CAM 端口)
@@ -36,9 +36,9 @@ class SdtlbItem extends uvm_sequence_item;
     rand logic                          inv_en;
     rand logic                          wait_cycles_en;
 
-    // 查表请求
-    rand logic [SDTLB_CAM_NUM-1:0]                  cam_req_en;
-    rand logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0]    cam_req_pa;
+    // 查表请求 (下标就是 CAM 号)
+    rand logic                                      cam_req_en [SDTLB_CAM_NUM];
+    rand logic [PA_WIDTH-1:0]                       cam_req_pa [SDTLB_CAM_NUM];
 
     // 装填
     rand logic [PA_BASE_WIDTH-1:0]      fill_pa_base;
@@ -56,14 +56,16 @@ class SdtlbItem extends uvm_sequence_item;
     // 等待
     rand int unsigned                   wait_cycles;
 
-    // 响应 (monitor 回填, 每 bit / 每段对应一个 CAM 端口)
-    logic [SDTLB_CAM_NUM-1:0]                           cam_hit;
-    logic [SDTLB_CAM_NUM-1:0][SDTLB_TAG_ITEM_WIDTH-1:0]  cam_tag;
-    logic [SDTLB_CAM_NUM-1:0][SDTLB_DATA_ITEM_WIDTH-1:0] cam_data;
+    // 响应 (monitor 回填, 每段对应一个 CAM 端口)
+    logic                               cam_hit  [SDTLB_CAM_NUM];
+    logic [SDTLB_TAG_ITEM_WIDTH-1:0]    cam_tag  [SDTLB_CAM_NUM];
+    logic [SDTLB_DATA_ITEM_WIDTH-1:0]   cam_data [SDTLB_CAM_NUM];
 
     // 外界约定: 装填与查表不能同拍
     constraint c_fill_cam_excl {
-        !(fill_en && (cam_req_en != '0));
+        foreach (cam_req_en[i]) {
+            !(fill_en && cam_req_en[i]);
+        }
     }
 
     function new(string name = "SdtlbItem");

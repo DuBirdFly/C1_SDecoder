@@ -13,9 +13,9 @@ import sdecoder_pkg::*;
     // PA[47] = 1 是 IO 空间, SDecoder 只处理 Mem 空间, 因此断言 PA[47] 为 0 (字段保留这一位
     // 只为维持 48 位地址口径, 索引与 Tag 都比较 [47:35], 但装填时该位恒为 0)
     // req_en 是 1 拍使能, 与 fill_en 不同拍 (外界约定), 命中结果在下一拍由 hit / tag / data 给出
-    logic [SDTLB_CAM_NUM-1:0]               cam_req_en;
-    logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa;
-    logic [SDTLB_CAM_NUM-1:0]               cam_hit;             // 命中 (同时充当响应 valid)
+    logic                                   cam_req_en        [SDTLB_CAM_NUM];
+    logic [PA_WIDTH-1:0]                    cam_req_pa        [SDTLB_CAM_NUM];
+    logic                                   cam_hit           [SDTLB_CAM_NUM];  // 命中 (同时充当响应 valid)
     SDTLB_TAG_ITEM_t                        cam_hit_tag_item  [SDTLB_CAM_NUM];  // 命中条目的 Tag 段内容
     SDTLB_DATA_ITEM_t                       cam_hit_data_item [SDTLB_CAM_NUM];  // 命中条目的 Data 段内容
 

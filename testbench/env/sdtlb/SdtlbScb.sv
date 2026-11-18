@@ -127,6 +127,15 @@ class SdtlbScb extends uvm_scoreboard;
         end
     endfunction
 
+    // 这个 item 里是否有任何一个 CAM 端口在发请求
+    function automatic bit any_cam_req(SdtlbItem tr);
+        bit any = 1'b0;
+        foreach (tr.cam_req_en[i]) begin
+            any |= tr.cam_req_en[i];
+        end
+        return any;
+    endfunction
+
     function void write(SdtlbItem tr);
         entry_t e;
 
@@ -135,7 +144,7 @@ class SdtlbScb extends uvm_scoreboard;
             check_port($sformatf("cam%0d", cam), tr.cam_req_en[cam], tr.cam_req_pa[cam],
                        tr.cam_hit[cam], tr.cam_tag[cam], tr.cam_data[cam]);
         end
-        if (tr.cam_req_en != '0) begin
+        if (any_cam_req(tr)) begin
             req_cnt++;
         end
 

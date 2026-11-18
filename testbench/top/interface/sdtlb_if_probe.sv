@@ -12,9 +12,9 @@ import sdecoder_pkg::*;
     input  logic                                   clk,
     input  logic                                   rst_n,
 
-    input  logic [SDTLB_CAM_NUM-1:0]               cam_req_en,
-    input  logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa,
-    input  logic [SDTLB_CAM_NUM-1:0]               cam_hit,
+    input  logic                                   cam_req_en        [SDTLB_CAM_NUM],
+    input  logic [PA_WIDTH-1:0]                    cam_req_pa        [SDTLB_CAM_NUM],
+    input  logic                                   cam_hit           [SDTLB_CAM_NUM],
     input  SDTLB_TAG_ITEM_t                        cam_hit_tag_item  [SDTLB_CAM_NUM],
     input  SDTLB_DATA_ITEM_t                       cam_hit_data_item [SDTLB_CAM_NUM],
 

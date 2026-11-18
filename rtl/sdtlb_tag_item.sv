@@ -8,10 +8,10 @@ import sdecoder_pkg::*;
     input  logic                                   clk,
     input  logic                                   rst_n,
 
-    // 查表端口: 下标就是 CAM 号 (CAM 维用 packed, 便于整条向量直接接到子模块)
-    input  logic [SDTLB_CAM_NUM-1:0]               cam_req_en,
-    input  logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa,
-    output logic [SDTLB_CAM_NUM-1:0]               cam_hit,
+    // 查表端口: 下标就是 CAM 号
+    input  logic                                    cam_req_en [SDTLB_CAM_NUM],
+    input  logic [PA_WIDTH-1:0]                     cam_req_pa [SDTLB_CAM_NUM],
+    output logic                                    cam_hit    [SDTLB_CAM_NUM],
 
     // 装填写入
     input  logic                                   fill_wr_en,

@@ -16,8 +16,8 @@ import sdecoder_pkg::*;
 );
 
     // 所有 input 打 1 拍 (查表端口是 SDTLB_CAM_NUM 路)
-    logic [SDTLB_CAM_NUM-1:0]               cam_req_en_r;
-    logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa_r;
+    logic                                   cam_req_en_r [SDTLB_CAM_NUM];
+    logic [PA_WIDTH-1:0]                    cam_req_pa_r [SDTLB_CAM_NUM];
 
     logic                                   fill_en_r;
     logic [PA_BASE_WIDTH-1:0]               fill_pa_base_r;
@@ -34,8 +34,10 @@ import sdecoder_pkg::*;
 
     always_ff @(posedge sdtlb_if.clk or negedge sdtlb_if.rst_n) begin
         if (!sdtlb_if.rst_n) begin
-            cam_req_en_r <= '0;
-            cam_req_pa_r <= '0;
+            foreach (cam_req_en_r[i]) begin
+                cam_req_en_r[i] <= 1'b0;
+                cam_req_pa_r[i] <= '0;
+            end
 
             fill_en_r        <= 1'b0;
             fill_pa_base_r   <= '0;

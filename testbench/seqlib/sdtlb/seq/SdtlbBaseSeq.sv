@@ -40,8 +40,10 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
     protected function SdtlbItem new_item();
         SdtlbItem tr;
         tr = SdtlbItem::type_id::create("tr");
-        tr.cam_req_en     = '0;
-        tr.cam_req_pa     = '0;
+        foreach (tr.cam_req_en[i]) begin
+            tr.cam_req_en[i] = 1'b0;
+            tr.cam_req_pa[i] = '0;
+        end
         tr.fill_en        = 1'b0;
         tr.inv_en         = 1'b0;
         tr.wait_cycles_en = 1'b0;
