@@ -10,6 +10,7 @@
 ./rtl/common/syn_fifo.sv
 ./rtl/common/tlb_victim_pointer.sv
 
+./rtl/sdtlb_tag_item_match.sv
 ./rtl/sdtlb_tag_item.sv
 ./rtl/sdtlb_data_item.sv
 ./rtl/sdtlb_tag.sv
