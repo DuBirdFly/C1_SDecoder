@@ -23,6 +23,15 @@ class SdtlbMon extends uvm_monitor;
         end
     endfunction
 
+    // 本拍是否有任何一个 CAM 端口在发请求
+    function automatic bit any_cam_req();
+        bit any = 1'b0;
+        for (int unsigned cam = 0; cam < SDTLB_CAM_NUM; cam++) begin
+            any |= (vif.mon.cam_req_en[cam] === 1'b1);
+        end
+        return any;
+    endfunction
+
     task run_phase(uvm_phase phase);
         SdtlbItem tr;
 
@@ -41,14 +50,12 @@ class SdtlbMon extends uvm_monitor;
                 pend.delete();
 
                 // 2) 采样本拍的输入, 压进队列 (一个 item 描述这一拍)
-                if ((vif.mon.cam0_req_en === 1'b1) || (vif.mon.cam1_req_en === 1'b1) ||
+                if (any_cam_req() ||
                     (vif.mon.fill_en === 1'b1) ||
                     (vif.mon.inv_all === 1'b1) || (vif.mon.inv_sel === 1'b1)) begin
                     tr = SdtlbItem::type_id::create("tr");
-                    tr.cam0_req_en = (vif.mon.cam0_req_en === 1'b1);
-                    tr.cam0_req_pa = vif.mon.cam0_req_pa;
-                    tr.cam1_req_en = (vif.mon.cam1_req_en === 1'b1);
-                    tr.cam1_req_pa = vif.mon.cam1_req_pa;
+                    tr.cam_req_en       = vif.mon.cam_req_en;
+                    tr.cam_req_pa       = vif.mon.cam_req_pa;
                     tr.fill_en          = (vif.mon.fill_en === 1'b1);
                     tr.fill_pa_base     = vif.mon.fill_pa_base;
                     tr.fill_pa_up       = vif.mon.fill_pa_up;
@@ -69,27 +76,24 @@ class SdtlbMon extends uvm_monitor;
 
     // 事务合法性检查 (地址空间 + 端口冲突)
     function void check_item(SdtlbItem tr);
-        // 装填与查表不能同拍 (Latch 不支持同拍读写, 见 sdtlb 的 a_cam0/1_req_fill_exclusive)
-        if (tr.fill_en && (tr.cam0_req_en || tr.cam1_req_en)) begin
+        // 装填与查表不能同拍 (Latch 不支持同拍读写, 见 sdtlb 的 a_cam_req_fill_exclusive)
+        if (tr.fill_en && (tr.cam_req_en != '0)) begin
             `uvm_warning(
                 "FILL_CAM",
-                $sformatf("装填与查表同拍: fill_pa_base=0x%0h, cam0_req_en=%0b, cam1_req_en=%0b",
-                          tr.fill_pa_base, tr.cam0_req_en, tr.cam1_req_en)
+                $sformatf("装填与查表同拍: fill_pa_base=0x%0h, cam_req_en=%b",
+                          tr.fill_pa_base, tr.cam_req_en)
             )
         end
 
         // PA[47] = 1 是 IO 空间, 不该进 SDecoder (只处理 Mem 空间)
-        if (tr.cam0_req_en && tr.cam0_req_pa[PA_WIDTH-1]) begin
-            `uvm_warning(
-                "PA47",
-                $sformatf("cam0 请求地址在 IO 空间 (PA[47]=1): 0x%0h", tr.cam0_req_pa)
-            )
-        end
-        if (tr.cam1_req_en && tr.cam1_req_pa[PA_WIDTH-1]) begin
-            `uvm_warning(
-                "PA47",
-                $sformatf("cam1 请求地址在 IO 空间 (PA[47]=1): 0x%0h", tr.cam1_req_pa)
-            )
+        for (int unsigned cam = 0; cam < SDTLB_CAM_NUM; cam++) begin
+            if (tr.cam_req_en[cam] && tr.cam_req_pa[cam][PA_WIDTH-1]) begin
+                `uvm_warning(
+                    "PA47",
+                    $sformatf("cam%0d 请求地址在 IO 空间 (PA[47]=1): 0x%0h",
+                              cam, tr.cam_req_pa[cam])
+                )
+            end
         end
         if (tr.fill_en && tr.fill_pa_base[PA_BASE_WIDTH-1]) begin
             `uvm_warning(
@@ -107,12 +111,11 @@ class SdtlbMon extends uvm_monitor;
 
     // 把当前采样到的响应回填到上一拍的请求上
     function void fill_rsp(SdtlbItem tr);
-        tr.cam0_hit  = vif.mon.cam0_hit;
-        tr.cam0_tag  = vif.mon.cam0_hit_tag_item;
-        tr.cam0_data = vif.mon.cam0_hit_data_item;
-        tr.cam1_hit  = vif.mon.cam1_hit;
-        tr.cam1_tag  = vif.mon.cam1_hit_tag_item;
-        tr.cam1_data = vif.mon.cam1_hit_data_item;
+        tr.cam_hit = vif.mon.cam_hit;
+        for (int unsigned cam = 0; cam < SDTLB_CAM_NUM; cam++) begin
+            tr.cam_tag[cam]  = vif.mon.cam_hit_tag_item[cam];
+            tr.cam_data[cam] = vif.mon.cam_hit_data_item[cam];
+        end
     endfunction
 
 endclass

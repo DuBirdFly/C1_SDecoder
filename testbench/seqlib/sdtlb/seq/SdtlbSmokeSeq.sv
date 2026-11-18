@@ -12,7 +12,7 @@ class SdtlbSmokeSeq extends SdtlbBaseSeq;
 
     task body();
         // 空表: 不命中
-        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'hfff), .idx(5'h1f))));
+        cam_req(.cam(0), .pa(gen_pa(.high(12'hfff), .idx(5'h1f))));
         wait_cycles(.n(4));
 
         // 装填 0xffff_ffe0 这一页 (段基地址 = {12'hfff, 5'h1f}, 只覆盖一页)
@@ -27,15 +27,15 @@ class SdtlbSmokeSeq extends SdtlbBaseSeq;
         wait_cycles(.n(4));
 
         // 命中: Tag / Data 都应为装填进去的内容
-        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'hfff), .idx(5'h1f))));
+        cam_req(.cam(0), .pa(gen_pa(.high(12'hfff), .idx(5'h1f))));
         wait_cycles(.n(4));
 
         // 相邻页 (页号不同) 不命中
-        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'hfff), .idx(5'h1e))));
+        cam_req(.cam(0), .pa(gen_pa(.high(12'hfff), .idx(5'h1e))));
         wait_cycles(.n(4));
 
         // 页内偏移不影响命中
-        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'hfff), .idx(5'h1f), .offset(30'h3f0))));
+        cam_req(.cam(0), .pa(gen_pa(.high(12'hfff), .idx(5'h1f), .offset(30'h3f0))));
         wait_cycles(.n(4));
     endtask
 

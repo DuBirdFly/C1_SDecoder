@@ -9,33 +9,27 @@ interface sdtlb_if_probe
 import sdecoder_pkg::*;
 
 (
-    input  logic                    clk,
-    input  logic                    rst_n,
+    input  logic                                   clk,
+    input  logic                                   rst_n,
 
-    input  logic                    cam0_req_en,
-    input  logic [PA_WIDTH-1:0]     cam0_req_pa,
-    input  logic                    cam0_hit,
-    input  SDTLB_TAG_ITEM_t         cam0_hit_tag_item,
-    input  SDTLB_DATA_ITEM_t        cam0_hit_data_item,
+    input  logic [SDTLB_CAM_NUM-1:0]               cam_req_en,
+    input  logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa,
+    input  logic [SDTLB_CAM_NUM-1:0]               cam_hit,
+    input  SDTLB_TAG_ITEM_t                        cam_hit_tag_item  [SDTLB_CAM_NUM],
+    input  SDTLB_DATA_ITEM_t                       cam_hit_data_item [SDTLB_CAM_NUM],
 
-    input  logic                    cam1_req_en,
-    input  logic [PA_WIDTH-1:0]     cam1_req_pa,
-    input  logic                    cam1_hit,
-    input  SDTLB_TAG_ITEM_t         cam1_hit_tag_item,
-    input  SDTLB_DATA_ITEM_t        cam1_hit_data_item,
+    input  logic                                   fill_en,
+    input  logic [PA_BASE_WIDTH-1:0]               fill_pa_base,
+    input  logic [PA_UP_WIDTH-1:0]                 fill_pa_up,
+    input  logic [EID_WIDTH-1:0]                   fill_eid,
+    input  logic [TOKEN_ID_WIDTH-1:0]              fill_token_id,
+    input  logic [TOKEN_VALUE_WIDTH-1:0]           fill_token_value,
+    input  logic [S_PFN_WIDTH-1:0]                 fill_s_pfn,
 
-    input  logic                    fill_en,
-    input  logic [PA_BASE_WIDTH-1:0]      fill_pa_base,
-    input  logic [PA_UP_WIDTH-1:0]        fill_pa_up,
-    input  logic [EID_WIDTH-1:0]          fill_eid,
-    input  logic [TOKEN_ID_WIDTH-1:0]     fill_token_id,
-    input  logic [TOKEN_VALUE_WIDTH-1:0]  fill_token_value,
-    input  logic [S_PFN_WIDTH-1:0]        fill_s_pfn,
-
-    input  logic                    inv_en,
-    input  logic                    inv_all,
-    input  logic                    inv_sel,
-    input  logic [PA_BASE_WIDTH-1:0] inv_sel_pa
+    input  logic                                   inv_en,
+    input  logic                                   inv_all,
+    input  logic                                   inv_sel,
+    input  logic [PA_BASE_WIDTH-1:0]               inv_sel_pa
 );
 
     timeunit      1ps;
@@ -45,17 +39,11 @@ import sdecoder_pkg::*;
     clocking mon @(posedge clk);
         default input #1;
 
-        input cam0_req_en;
-        input cam0_req_pa;
-        input cam0_hit;
-        input cam0_hit_tag_item;
-        input cam0_hit_data_item;
-
-        input cam1_req_en;
-        input cam1_req_pa;
-        input cam1_hit;
-        input cam1_hit_tag_item;
-        input cam1_hit_data_item;
+        input cam_req_en;
+        input cam_req_pa;
+        input cam_hit;
+        input cam_hit_tag_item;
+        input cam_hit_data_item;
 
         input fill_en;
         input fill_pa_base;
@@ -72,4 +60,3 @@ import sdecoder_pkg::*;
     endclocking
 
 endinterface
-

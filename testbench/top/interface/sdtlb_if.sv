@@ -2,29 +2,22 @@ interface sdtlb_if
 import sdecoder_pkg::*;
 
 (
-    input  logic                    clk,
-    input  logic                    rst_n
+    input  logic clk,
+    input  logic rst_n
 );
 
     timeunit 1ps;
     timeprecision 1ps;
 
-    // 查表端口 0 (CAM0): 请求地址是整条 PA[47:0].
+    // 查表端口: 下标就是 CAM 号 (共 SDTLB_CAM_NUM 个). 请求地址是整条 PA[47:0].
     // PA[47] = 1 是 IO 空间, SDecoder 只处理 Mem 空间, 因此断言 PA[47] 为 0 (字段保留这一位
     // 只为维持 48 位地址口径, 索引与 Tag 都比较 [47:35], 但装填时该位恒为 0)
     // req_en 是 1 拍使能, 与 fill_en 不同拍 (外界约定), 命中结果在下一拍由 hit / tag / data 给出
-    logic                               cam0_req_en;
-    logic [PA_WIDTH-1:0]                cam0_req_pa;
-    logic                               cam0_hit;             // 命中 (同时充当响应 valid)
-    SDTLB_TAG_ITEM_t                    cam0_hit_tag_item;    // 命中条目的 Tag 段内容
-    SDTLB_DATA_ITEM_t                   cam0_hit_data_item;   // 命中条目的 Data 段内容
-
-    // 查表端口 1 (CAM1): 与 CAM0 完全独立, 可以和 CAM0 同拍握手、同拍命中
-    logic                               cam1_req_en;
-    logic [PA_WIDTH-1:0]                cam1_req_pa;
-    logic                               cam1_hit;
-    SDTLB_TAG_ITEM_t                    cam1_hit_tag_item;
-    SDTLB_DATA_ITEM_t                   cam1_hit_data_item;
+    logic [SDTLB_CAM_NUM-1:0]               cam_req_en;
+    logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa;
+    logic [SDTLB_CAM_NUM-1:0]               cam_hit;             // 命中 (同时充当响应 valid)
+    SDTLB_TAG_ITEM_t                        cam_hit_tag_item  [SDTLB_CAM_NUM];  // 命中条目的 Tag 段内容
+    SDTLB_DATA_ITEM_t                       cam_hit_data_item [SDTLB_CAM_NUM];  // 命中条目的 Data 段内容
 
     // 装填请求 (Page Walk 结果)
     logic                               fill_en;
@@ -45,10 +38,8 @@ import sdecoder_pkg::*;
     clocking drv @(posedge clk);
         default input #1 output #1;
 
-        output cam0_req_en;
-        output cam0_req_pa;
-        output cam1_req_en;
-        output cam1_req_pa;
+        output cam_req_en;
+        output cam_req_pa;
         output fill_en;
         output fill_pa_base;
         output fill_pa_up;
@@ -61,28 +52,20 @@ import sdecoder_pkg::*;
         output inv_sel;
         output inv_sel_pa;
 
-        input  cam0_hit;
-        input  cam0_hit_tag_item;
-        input  cam0_hit_data_item;
-        input  cam1_hit;
-        input  cam1_hit_tag_item;
-        input  cam1_hit_data_item;
+        input  cam_hit;
+        input  cam_hit_tag_item;
+        input  cam_hit_data_item;
     endclocking
 
     // monitor: 全部采样
     clocking mon @(posedge clk);
         default input #1 output #1;
 
-        input  cam0_req_en;
-        input  cam0_req_pa;
-        input  cam0_hit;
-        input  cam0_hit_tag_item;
-        input  cam0_hit_data_item;
-        input  cam1_req_en;
-        input  cam1_req_pa;
-        input  cam1_hit;
-        input  cam1_hit_tag_item;
-        input  cam1_hit_data_item;
+        input  cam_req_en;
+        input  cam_req_pa;
+        input  cam_hit;
+        input  cam_hit_tag_item;
+        input  cam_hit_data_item;
         input  fill_en;
         input  fill_pa_base;
         input  fill_pa_up;

@@ -15,31 +15,27 @@ import sdecoder_pkg::*;
     sdtlb_if sdtlb_if
 );
 
-    // 所有 input 打 1 拍
-    logic                       cam0_req_en_r;
-    logic [PA_WIDTH-1:0]        cam0_req_pa_r;
-    logic                       cam1_req_en_r;
-    logic [PA_WIDTH-1:0]        cam1_req_pa_r;
+    // 所有 input 打 1 拍 (查表端口是 SDTLB_CAM_NUM 路)
+    logic [SDTLB_CAM_NUM-1:0]               cam_req_en_r;
+    logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa_r;
 
-    logic                       fill_en_r;
-    logic [PA_BASE_WIDTH-1:0]   fill_pa_base_r;
-    logic [PA_UP_WIDTH-1:0]     fill_pa_up_r;
-    logic [EID_WIDTH-1:0]       fill_eid_r;
-    logic [TOKEN_ID_WIDTH-1:0]  fill_token_id_r;
-    logic [TOKEN_VALUE_WIDTH-1:0] fill_token_value_r;
-    logic [S_PFN_WIDTH-1:0]     fill_s_pfn_r;
+    logic                                   fill_en_r;
+    logic [PA_BASE_WIDTH-1:0]               fill_pa_base_r;
+    logic [PA_UP_WIDTH-1:0]                 fill_pa_up_r;
+    logic [EID_WIDTH-1:0]                   fill_eid_r;
+    logic [TOKEN_ID_WIDTH-1:0]              fill_token_id_r;
+    logic [TOKEN_VALUE_WIDTH-1:0]           fill_token_value_r;
+    logic [S_PFN_WIDTH-1:0]                 fill_s_pfn_r;
 
-    logic                       inv_en_r;
-    logic                       inv_all_r;
-    logic                       inv_sel_r;
-    logic [PA_BASE_WIDTH-1:0]   inv_sel_pa_r;
+    logic                                   inv_en_r;
+    logic                                   inv_all_r;
+    logic                                   inv_sel_r;
+    logic [PA_BASE_WIDTH-1:0]               inv_sel_pa_r;
 
     always_ff @(posedge sdtlb_if.clk or negedge sdtlb_if.rst_n) begin
         if (!sdtlb_if.rst_n) begin
-            cam0_req_en_r <= 1'b0;
-            cam0_req_pa_r <= '0;
-            cam1_req_en_r <= 1'b0;
-            cam1_req_pa_r <= '0;
+            cam_req_en_r <= '0;
+            cam_req_pa_r <= '0;
 
             fill_en_r        <= 1'b0;
             fill_pa_base_r   <= '0;
@@ -55,10 +51,8 @@ import sdecoder_pkg::*;
             inv_sel_pa_r         <= '0;
         end
         else begin
-            cam0_req_en_r <= sdtlb_if.cam0_req_en;
-            cam0_req_pa_r <= sdtlb_if.cam0_req_pa;
-            cam1_req_en_r <= sdtlb_if.cam1_req_en;
-            cam1_req_pa_r <= sdtlb_if.cam1_req_pa;
+            cam_req_en_r <= sdtlb_if.cam_req_en;
+            cam_req_pa_r <= sdtlb_if.cam_req_pa;
 
             fill_en_r        <= sdtlb_if.fill_en;
             fill_pa_base_r   <= sdtlb_if.fill_pa_base;
@@ -80,17 +74,11 @@ import sdecoder_pkg::*;
         .clk                (sdtlb_if.clk           ),
         .rst_n              (sdtlb_if.rst_n         ),
 
-        .cam0_req_en        (cam0_req_en_r          ),
-        .cam0_req_pa        (cam0_req_pa_r          ),
-        .cam0_hit           (sdtlb_if.cam0_hit      ),
-        .cam0_hit_tag_item  (sdtlb_if.cam0_hit_tag_item ),
-        .cam0_hit_data_item (sdtlb_if.cam0_hit_data_item),
-
-        .cam1_req_en        (cam1_req_en_r          ),
-        .cam1_req_pa        (cam1_req_pa_r          ),
-        .cam1_hit           (sdtlb_if.cam1_hit      ),
-        .cam1_hit_tag_item  (sdtlb_if.cam1_hit_tag_item ),
-        .cam1_hit_data_item (sdtlb_if.cam1_hit_data_item),
+        .cam_req_en         (cam_req_en_r           ),
+        .cam_req_pa         (cam_req_pa_r           ),
+        .cam_hit            (sdtlb_if.cam_hit       ),
+        .cam_hit_tag_item   (sdtlb_if.cam_hit_tag_item ),
+        .cam_hit_data_item  (sdtlb_if.cam_hit_data_item),
 
         .fill_en            (fill_en_r              ),
         .fill_pa_base       (fill_pa_base_r         ),

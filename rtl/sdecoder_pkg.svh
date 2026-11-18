@@ -3,6 +3,8 @@
 
 package sdecoder_pkg;
 
+    localparam SDTLB_CAM_NUM = 2;
+
     localparam PA_WIDTH      = 48; // PA[47:0]
     localparam PA_BASE_WIDTH = 18; // PA[47:30]
     localparam PA_UP_WIDTH   = 5;  // PA[34:30]

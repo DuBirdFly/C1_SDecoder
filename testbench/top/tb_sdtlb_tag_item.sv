@@ -20,13 +20,10 @@ module tb_sdtlb_tag_item;
     logic                       clk;
     logic                       rst_n;
 
-    // 查表端口 (item 里命中是组合输出, 没有打拍)
-    logic                       cam0_req_en;
-    logic [PA_WIDTH-1:0]        cam0_req_pa;
-    logic                       cam0_hit;
-    logic                       cam1_req_en;
-    logic [PA_WIDTH-1:0]        cam1_req_pa;
-    logic                       cam1_hit;
+    // 查表端口 (item 里命中是组合输出, 没有打拍), 下标就是 CAM 号
+    logic [SDTLB_CAM_NUM-1:0]               cam_req_en;
+    logic [SDTLB_CAM_NUM-1:0][PA_WIDTH-1:0] cam_req_pa;
+    logic [SDTLB_CAM_NUM-1:0]               cam_hit;
 
     // 装填 (本拍有效, 本拍写 Latch)
     logic                       fill_wr_en;
@@ -54,13 +51,9 @@ module tb_sdtlb_tag_item;
         .clk              (clk            ),
         .rst_n            (rst_n          ),
 
-        .cam0_req_en      (cam0_req_en    ),
-        .cam0_req_pa      (cam0_req_pa    ),
-        .cam0_hit         (cam0_hit       ),
-
-        .cam1_req_en      (cam1_req_en    ),
-        .cam1_req_pa      (cam1_req_pa    ),
-        .cam1_hit         (cam1_hit       ),
+        .cam_req_en       (cam_req_en     ),
+        .cam_req_pa       (cam_req_pa     ),
+        .cam_hit          (cam_hit        ),
 
         .fill_wr_en       (fill_wr_en     ),
         .fill_wr_pa_base  (fill_wr_pa_base),
@@ -155,21 +148,19 @@ module tb_sdtlb_tag_item;
         output logic                     hit
     );
         wait_cycle();
-        cam0_req_pa <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        cam0_req_en <= 1'b1;
+        cam_req_pa[0] <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        cam_req_en[0] <= 1'b1;
         wait_cycle();                   // 请求有效的一拍
-        hit = cam0_hit;
-        cam0_req_en <= 1'b0;
+        hit = cam_hit[0];
+        cam_req_en[0] <= 1'b0;
     endtask
 
     logic hit;
     logic valid_after;
 
     initial begin
-        cam0_req_en     = 1'b0;
-        cam0_req_pa     = '0;
-        cam1_req_en     = 1'b0;
-        cam1_req_pa     = '0;
+        cam_req_en      = '0;
+        cam_req_pa      = '0;
         fill_wr_en      = 1'b0;
         fill_wr_pa_base = '0;
         fill_wr_pa_up   = '0;

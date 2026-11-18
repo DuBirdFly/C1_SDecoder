@@ -4,6 +4,7 @@
 // SDTLB 序列基类: 提供 req / fill / inv / wait 的封装, 以及地址拼装的小工具
 //   事务不再用 kind 区分, 而是由各端口使能描述: 一个 item 可以同时开多个使能
 //   (如查表 + 置无效同拍), 由 driver 用 fork-join 并行驱动
+//   查表端口按 CAM 号寻址 (0 .. SDTLB_CAM_NUM-1)
 class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
 
     `uvm_object_utils(SdtlbBaseSeq)
@@ -39,8 +40,8 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
     protected function SdtlbItem new_item();
         SdtlbItem tr;
         tr = SdtlbItem::type_id::create("tr");
-        tr.cam0_req_en    = 1'b0;
-        tr.cam1_req_en    = 1'b0;
+        tr.cam_req_en     = '0;
+        tr.cam_req_pa     = '0;
         tr.fill_en        = 1'b0;
         tr.inv_en         = 1'b0;
         tr.wait_cycles_en = 1'b0;
@@ -48,14 +49,10 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
         return tr;
     endfunction
 
-    function void set_cam0(SdtlbItem tr, input logic [PA_WIDTH-1:0] pa);
-        tr.cam0_req_en = 1'b1;
-        tr.cam0_req_pa = pa;
-    endfunction
-
-    function void set_cam1(SdtlbItem tr, input logic [PA_WIDTH-1:0] pa);
-        tr.cam1_req_en = 1'b1;
-        tr.cam1_req_pa = pa;
+    // 给第 cam 个查表端口发请求
+    function void set_cam(SdtlbItem tr, input int unsigned cam, input logic [PA_WIDTH-1:0] pa);
+        tr.cam_req_en[cam] = 1'b1;
+        tr.cam_req_pa[cam] = pa;
     endfunction
 
     function void set_fill(
@@ -102,21 +99,14 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
     // 常用组合的短封装 (内部与 set_* + send 等价)
     // ----------------------------------------------------------------
 
-    // 查表请求: 两个端口各自带使能, 可以只发一个端口, 也可以同拍发两个
+    // 单个端口的查表请求; 同拍多端口请用 new_item + set_cam + send
     task cam_req(
-        input bit                  cam0_en = 1'b0,
-        input logic [PA_WIDTH-1:0] cam0_pa = '0,
-        input bit                  cam1_en = 1'b0,
-        input logic [PA_WIDTH-1:0] cam1_pa = '0
+        input int unsigned          cam = 0,
+        input logic [PA_WIDTH-1:0]  pa  = '0
     );
         SdtlbItem tr;
         tr = new_item();
-        if (cam0_en) begin
-            set_cam0(tr, cam0_pa);
-        end
-        if (cam1_en) begin
-            set_cam1(tr, cam1_pa);
-        end
+        set_cam(tr, cam, pa);
         send(tr);
     endtask
 
