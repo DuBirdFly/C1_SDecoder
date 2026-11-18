@@ -2,16 +2,9 @@
 `include "sdecoder_pkg.svh"
 `default_nettype none
 
-// SDTLB 单个条目的 Data 段
-// 存储: 全部字段用 Latch (有效位在 Tag 段, 是 FF).
-// Latch 注意: 装填期间字段对输入透明, 因此本条目在装填当拍不可被查表读.
-// 顶层的 camN_req_ready 在装填当拍拉低, 由它保证这一点.
 module sdtlb_data_item
 import sdecoder_pkg::*;
 (
-    input  logic                        clk,
-    input  logic                        rst_n,
-
     // 装填请求
     input  logic                        fill_en,
     input  logic [EID_WIDTH-1:0]        fill_eid,
@@ -23,22 +16,15 @@ import sdecoder_pkg::*;
     output SDTLB_DATA_ITEM_t            data_item
 );
 
-    logic [EID_WIDTH-1:0]           eid_q;
-    logic [TOKEN_ID_WIDTH-1:0]      token_id_q;
-    logic [TOKEN_VALUE_WIDTH-1:0]   token_value_q;
-    logic [S_PFN_WIDTH-1:0]         s_pfn_q;
-
     // 只由装填写: 置无效只清 Tag 段的 Valid, 不碰 Data 段, 所以这里没有清位分支
     always_latch begin
         if (fill_en) begin
-            eid_q         <= fill_eid;
-            token_id_q    <= fill_token_id;
-            token_value_q <= fill_token_value;
-            s_pfn_q       <= fill_s_pfn;
+            data_item.eid         <= fill_eid;
+            data_item.token_id    <= fill_token_id;
+            data_item.token_value <= fill_token_value;
+            data_item.s_pfn       <= fill_s_pfn;
         end
     end
-
-    assign data_item = '{eid: eid_q, token_id: token_id_q, token_value: token_value_q, s_pfn: s_pfn_q};
 
 endmodule
 

@@ -12,14 +12,14 @@ import sdecoder_pkg::*;
     input  logic                                rst_n,
 
     // 查表端口 0 (CAM0): accept 有效时广播给全部条目做比较
-    input  logic                                req0_en,
-    input  logic [PA_WIDTH-1:0]                 req0_pa,
-    output logic [SDTLB_ENTRIES-1:0]            req0_hit_vector,
+    input  logic                                cam0_req_en,
+    input  logic [PA_WIDTH-1:0]                 cam0_req_pa,
+    output logic [SDTLB_ENTRIES-1:0]            cam0_hit_vector,
 
     // 查表端口 1 (CAM1)
-    input  logic                                req1_en,
-    input  logic [PA_WIDTH-1:0]                 req1_pa,
-    output logic [SDTLB_ENTRIES-1:0]            req1_hit_vector,
+    input  logic                                cam1_req_en,
+    input  logic [PA_WIDTH-1:0]                 cam1_req_pa,
+    output logic [SDTLB_ENTRIES-1:0]            cam1_hit_vector,
 
     // 装填写入: 下一拍生效, 数据与使能都已寄存
     input  logic [SDTLB_ENTRIES-1:0]            fill_wr_en_vector,
@@ -41,13 +41,13 @@ import sdecoder_pkg::*;
                 .clk              (clk),
                 .rst_n            (rst_n),
 
-                .req0_en          (req0_en),
-                .req0_pa          (req0_pa),
-                .req0_hit         (req0_hit_vector[genvar_i]),
+                .cam0_req_en      (cam0_req_en),
+                .cam0_req_pa      (cam0_req_pa),
+                .cam0_hit         (cam0_hit_vector[genvar_i]),
 
-                .req1_en          (req1_en),
-                .req1_pa          (req1_pa),
-                .req1_hit         (req1_hit_vector[genvar_i]),
+                .cam1_req_en      (cam1_req_en),
+                .cam1_req_pa      (cam1_req_pa),
+                .cam1_hit         (cam1_hit_vector[genvar_i]),
 
                 .fill_wr_en       (fill_wr_en_vector[genvar_i]),
                 .fill_wr_pa_base  (fill_wr_pa_base),

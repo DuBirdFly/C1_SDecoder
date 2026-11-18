@@ -139,13 +139,13 @@ import sdecoder_pkg::*;
         .clk                (clk                ),
         .rst_n              (rst_n              ),
 
-        .req0_en            (cam0_req_en        ),
-        .req0_pa            (cam0_req_pa        ),
-        .req0_hit_vector    (cam0_hit_vector    ),
+        .cam0_req_en        (cam0_req_en        ),
+        .cam0_req_pa        (cam0_req_pa        ),
+        .cam0_hit_vector    (cam0_hit_vector    ),
 
-        .req1_en            (cam1_req_en        ),
-        .req1_pa            (cam1_req_pa        ),
-        .req1_hit_vector    (cam1_hit_vector    ),
+        .cam1_req_en        (cam1_req_en        ),
+        .cam1_req_pa        (cam1_req_pa        ),
+        .cam1_hit_vector    (cam1_hit_vector    ),
 
         .fill_wr_en_vector  (fill_en_vector     ),
         .fill_wr_pa_base    (fill_pa_base       ),
@@ -159,9 +159,6 @@ import sdecoder_pkg::*;
     );
 
     sdtlb_data u_sdtlb_data (
-        .clk                (clk                ),
-        .rst_n              (rst_n              ),
-
         .fill_en_vector     (fill_en_vector     ),
         .fill_eid           (fill_eid           ),
         .fill_token_id      (fill_token_id      ),

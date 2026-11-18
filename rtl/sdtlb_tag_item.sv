@@ -2,12 +2,6 @@
 `include "sdecoder_pkg.svh"
 `default_nettype none
 
-// SDTLB 单个条目的 Tag 段
-// 存储: Valid 用 FF (可复位), PA_Base / PA_Up 用 Latch.
-// 两个查表端口 (CAM0 / CAM1) 各自与本条目比较, 各自给出命中.
-//
-// Latch 在写周期内对输入透明, 因此写周期不可被查表读
-// 顶层的 camN_req_ready 在写周期拉低, 以此保证读写不会同拍发生
 module sdtlb_tag_item
 import sdecoder_pkg::*;
 (
@@ -15,21 +9,21 @@ import sdecoder_pkg::*;
     input  logic                        rst_n,
 
     // 查表端口 0 (CAM0)
-    input  logic                        req0_en,
-    input  logic [PA_WIDTH-1:0]         req0_pa,
-    output logic                        req0_hit,
+    input  logic                        cam0_req_en,
+    input  logic [PA_WIDTH-1:0]         cam0_req_pa,
+    output logic                        cam0_hit,
 
     // 查表端口 1 (CAM1)
-    input  logic                        req1_en,
-    input  logic [PA_WIDTH-1:0]         req1_pa,
-    output logic                        req1_hit,
+    input  logic                        cam1_req_en,
+    input  logic [PA_WIDTH-1:0]         cam1_req_pa,
+    output logic                        cam1_hit,
 
-    // 装填写入: 下一拍生效, 数据与使能都已寄存
+    // 装填写入
     input  logic                        fill_wr_en,
     input  logic [PA_BASE_WIDTH-1:0]    fill_wr_pa_base,
     input  logic [PA_UP_WIDTH-1:0]      fill_wr_pa_up,
 
-    // 置无效 (刷新) 请求: 立即生效, 清本条目 Valid
+    // 置无效 (刷新) 请求
     input  logic                        inv_all,
     input  logic                        inv_sel,
     input  logic [PA_BASE_WIDTH-1:0]    inv_sel_pa,
@@ -38,35 +32,30 @@ import sdecoder_pkg::*;
     output SDTLB_TAG_ITEM_t             tag_item
 );
 
-    // req_pa 是 PA[47:0] (48 bit)
+    // camN_req_pa 是 PA[47:0] (48 bit)
     // inv_sel_pa 是 PA[47:30] (18 bit)
     // 条目里只存 PA[47:30] (pa_base) 与 段上限 PA[34:30] (pa_up)
     // (pa_up), 所以命中判定要按 "整条 PA 上的位段" 切片, 坐标与设计方案 SDTLB 命中条件一致
-    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] req0_high = req0_pa[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
-    wire [PA_UP_WIDTH-1:0]               req0_up   = req0_pa[PA_BASE_LSB +: PA_UP_WIDTH];
-    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] req1_high = req1_pa[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
-    wire [PA_UP_WIDTH-1:0]               req1_up   = req1_pa[PA_BASE_LSB +: PA_UP_WIDTH];
+    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] cam0_high = cam0_req_pa[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
+    wire [PA_UP_WIDTH-1:0]               cam0_up   = cam0_req_pa[PA_BASE_LSB +: PA_UP_WIDTH];
+    wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] cam1_high = cam1_req_pa[PA_HIGH_LSB +: (PA_BASE_WIDTH - PA_UP_WIDTH)];
+    wire [PA_UP_WIDTH-1:0]               cam1_up   = cam1_req_pa[PA_BASE_LSB +: PA_UP_WIDTH];
     wire [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] inv_high  = inv_sel_pa[PA_BASE_WIDTH-1:PA_UP_WIDTH];
     wire [PA_UP_WIDTH-1:0]               inv_up    = inv_sel_pa[PA_UP_WIDTH-1:0];
 
-    // 存储器件: pa_base / pa_up 是 Latch, valid 是 FF
-    logic [PA_BASE_WIDTH-1:0] pa_base_q;
-    logic [PA_UP_WIDTH-1:0]   pa_up_q;
-    logic                     valid_q;
+    wire cam0_high_hit  = (cam0_high == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
+    wire cam0_range_hit = (cam0_up >= tag_item.pa_base[PA_UP_WIDTH-1:0]) && (cam0_up <= tag_item.pa_up);
+    wire cam1_high_hit  = (cam1_high == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
+    wire cam1_range_hit = (cam1_up >= tag_item.pa_base[PA_UP_WIDTH-1:0]) && (cam1_up <= tag_item.pa_up);
+    wire inv_high_hit   = (inv_high == tag_item.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
+    wire inv_range_hit  = (inv_up >= tag_item.pa_base[PA_UP_WIDTH-1:0]) && (inv_up <= tag_item.pa_up);
 
-    wire req0_high_hit  = (req0_high == pa_base_q[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
-    wire req0_range_hit = (req0_up >= pa_base_q[PA_UP_WIDTH-1:0]) && (req0_up <= pa_up_q);
-    wire req1_high_hit  = (req1_high == pa_base_q[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
-    wire req1_range_hit = (req1_up >= pa_base_q[PA_UP_WIDTH-1:0]) && (req1_up <= pa_up_q);
-    wire inv_high_hit   = (inv_high == pa_base_q[PA_BASE_WIDTH-1:PA_UP_WIDTH]);
-    wire inv_range_hit  = (inv_up >= pa_base_q[PA_UP_WIDTH-1:0]) && (inv_up <= pa_up_q);
-
-    // req_match: 请求地址命中本条目 (不含有效位)
-    wire req0_match = req0_high_hit && req0_range_hit;
-    wire req1_match = req1_high_hit && req1_range_hit;
+    // camN_match: 请求地址命中本条目 (不含有效位)
+    wire cam0_match = cam0_high_hit && cam0_range_hit;
+    wire cam1_match = cam1_high_hit && cam1_range_hit;
 
     // inv_match: 本条目被无效化地址覆盖 (不含有效位)
-    // note: 这里刻意不带 valid_q (为了同拍 ).
+    // note: 这里刻意不带 tag_item.valid (为了同拍 ).
     //       "else if" 的优先级只在分支条件成立时才起作用:
     //       若把有效位并进匹配条件, 条目当前无效时 inv_match 就是 0, 清位分支根本不会
     //       被选中, 同拍的装填会照常执行, 把一条覆盖 "正在被刷新的地址" 的映射填进去.
@@ -77,29 +66,26 @@ import sdecoder_pkg::*;
     // 组合门会晚一个 delta 稳定, Latch 可能在使能还高的时候抓到下一拍的写数据.
     always_latch begin
         if (fill_wr_en) begin
-            pa_base_q <= fill_wr_pa_base;
-            pa_up_q   <= fill_wr_pa_up;
+            tag_item.pa_base <= fill_wr_pa_base;
+            tag_item.pa_up   <= fill_wr_pa_up;
         end
     end
 
     // Valid 用 FF: 复位为空, 装填置位, 置无效清位
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            valid_q <= 1'b0;
+            tag_item.valid <= 1'b0;
         end
         else if (inv_all || inv_match) begin
-            valid_q <= 1'b0;
+            tag_item.valid <= 1'b0;
         end
         else if (fill_wr_en) begin
-            valid_q <= 1'b1;
+            tag_item.valid <= 1'b1;
         end
     end
 
-    assign tag_item = '{pa_base: pa_base_q, pa_up: pa_up_q, valid: valid_q};
-
-    assign req0_hit = req0_en && valid_q && req0_match;
-    assign req1_hit = req1_en && valid_q && req1_match;
-
+    assign cam0_hit = cam0_req_en && tag_item.valid && cam0_match;
+    assign cam1_hit = cam1_req_en && tag_item.valid && cam1_match;
 
 `ifdef ASSERT_ON
     // fill_wr_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]
