@@ -30,7 +30,8 @@ import sdecoder_pkg::*;
     input  logic [PA_BASE_WIDTH-1:0]    inv_sel_pa,
 
     // 本条目内容透传输出
-    output SDTLB_TAG_ITEM_t             tag_item
+    output SDTLB_TAG_ITEM_t             tag_item,
+    output logic                        tag_valid
 );
 
     wire cam0_req_match;
@@ -61,16 +62,16 @@ import sdecoder_pkg::*;
     // 同拍同时发生 `inv` 和 `fill` 时, 优先实现 `inv`, 且本次 `fill` 被**丢弃**
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            tag_item.valid <= 1'b0;
+            tag_valid <= 1'b0;
         end
-        // 刻意不带 tag_item.valid: "else if" 的优先级只在分支条件成立时才起作用, 若把有效位并进
+        // 刻意不带 tag_valid: "else if" 的优先级只在分支条件成立时才起作用, 若把有效位并进
         // 匹配条件, 条目当前无效时清位分支根本不会被选中, 同拍的装填会照常执行,
         // 把一条覆盖 "正在被刷新的地址" 的映射填进去.
         else if (inv_en & (inv_all | (inv_sel & inv_sel_match))) begin
-            tag_item.valid <= 1'b0;
+            tag_valid <= 1'b0;
         end
         else if (fill_en) begin
-            tag_item.valid <= 1'b1;
+            tag_valid <= 1'b1;
         end
     end
 
@@ -81,8 +82,8 @@ import sdecoder_pkg::*;
         end
     end
 
-    assign cam0_hit = cam0_req_en && tag_item.valid && cam0_req_match;
-    assign cam1_hit = cam1_req_en && tag_item.valid && cam1_req_match;
+    assign cam0_hit = cam0_req_en && tag_valid && cam0_req_match;
+    assign cam1_hit = cam1_req_en && tag_valid && cam1_req_match;
 
 `ifdef ASSERT_ON
     // fill_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]

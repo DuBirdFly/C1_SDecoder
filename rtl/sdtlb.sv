@@ -29,7 +29,7 @@
 // 装填 TLB (见设计方案 "装填指针"):
 //   1. 有空闲条目时, 优先装填最低位的空闲条目;
 //   2. 没有空闲条目时, 用轮转 $onehot 指针 (设计方案里的 "伪随机指针" 早期先用轮转代替).
-//   空闲集合取本拍装填前的有效位 (tlb_entry_valid): 本拍 inv 释放的条目不算进来, 因为同一条目
+//   空闲集合取本拍装填前的有效位 (tag_valid_vector): 本拍 inv 释放的条目不算进来, 因为同一条目
 //   同拍 inv + fill 时 inv 优先, 指向它会让这次装填被静默丢弃; 释放的条目下一拍自然会被捡回来.
 
 module sdtlb
@@ -79,7 +79,7 @@ import sdecoder_pkg::*;
     logic [SDTLB_ENTRIES-1:0] cam0_hit_vector_r;
     logic [SDTLB_ENTRIES-1:0] cam1_hit_vector_r;
     logic [SDTLB_ENTRIES-1:0] fill_vector;       // 本拍装填目标
-    logic [SDTLB_ENTRIES-1:0] valid_vector;    // 各条目的有效位
+    logic [SDTLB_ENTRIES-1:0] tag_valid_vector;   // 各条目的有效位
 
     // 请求拍选出的命中 tag / data 快照, 与命中向量在同一沿寄存
     SDTLB_TAG_ITEM_t  cam0_hit_tag_sel;
@@ -122,13 +122,13 @@ import sdecoder_pkg::*;
 
     // 装填目标指针: 有空闲条目时指向最低位空闲条目, TLB 满时指向轮转指针
     tlb_fill_pointer #(
-        .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES)
+        .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES      )
     ) u_tlb_fill_pointer (
-        .clk                (clk),
-        .rst_n              (rst_n),
-        .fill_en            (fill_en),
-        .tlb_entry_valid    (valid_vector),
-        .fill_vector        (fill_vector)
+        .clk                (clk                ),
+        .rst_n              (rst_n              ),
+        .fill_en            (fill_en            ),
+        .tag_valid_vector   (tag_valid_vector   ),
+        .fill_vector        (fill_vector        )
     );
 
     sdtlb_tag u_sdtlb_tag (
@@ -154,12 +154,12 @@ import sdecoder_pkg::*;
         .inv_sel_pa         (inv_sel_pa         ),
 
         .tag_item           (tag_item           ),
-        .valid_vector       (valid_vector       )
+        .tag_valid_vector   (tag_valid_vector   )
     );
 
     sdtlb_data u_sdtlb_data (
         .fill_en            (fill_en            ),
-        .fill_vector           (fill_vector           ),
+        .fill_vector        (fill_vector        ),
         .fill_eid           (fill_eid           ),
         .fill_token_id      (fill_token_id      ),
         .fill_token_value   (fill_token_value   ),

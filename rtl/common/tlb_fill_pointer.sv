@@ -6,12 +6,12 @@
 //   2. 没有空闲条目时, 指向轮转指针的当前位置, 并在本次装填后左移一格
 //      (设计方案里的 "伪随机指针" 在早期开发阶段先用轮转 $onehot 指针代替).
 //
-// 空闲位置由 tlb_entry_valid 当拍组合找首 0, 直接给 TLB 做装填目标 (fill_vector):
-//   free_exists = ~&tlb_entry_valid
-//   fill_vector = free_exists ? find_first_zero(tlb_entry_valid) : shift_onehot_q
+// 空闲位置由 tag_valid_vector 当拍组合找首 0, 直接给 TLB 做装填目标 (fill_vector):
+//   free_exists = ~&tag_valid_vector
+//   fill_vector = free_exists ? find_first_zero(tag_valid_vector) : shift_onehot_q
 //
-// 注: ~&tlb_entry_valid 的性能可能比 |first_free_vec 更好 (在不考虑综合器优化的情况下)
-//     因为 |first_free_vec 是对找到的首 0 的组合逻辑结果再加组合运算, 而 tlb_entry_valid
+// 注: ~&tag_valid_vector 的性能可能比 |first_free_vec 更好 (在不考虑综合器优化的情况下)
+//     因为 |first_free_vec 是对找到的首 0 的组合逻辑结果再加组合运算, 而 tag_valid_vector
 //     直接就来自于 TLB 的 FF 输出
 
 module tlb_fill_pointer #(
@@ -21,7 +21,7 @@ module tlb_fill_pointer #(
     input  logic                            rst_n,
 
     input  logic                            fill_en,            // 装填条目使能
-    input  logic [TLB_ENTRY_NUMBER-1:0]     tlb_entry_valid,    // 各条目的有效位
+    input  logic [TLB_ENTRY_NUMBER-1:0]     tag_valid_vector,    // 各条目的有效位
     output logic [TLB_ENTRY_NUMBER-1:0]     fill_vector            // 本拍装填目标
 );
 
@@ -32,12 +32,12 @@ module tlb_fill_pointer #(
     logic [TLB_ENTRY_NUMBER-1:0] first_free_vec;
 
     // 是否有空闲条目
-    wire free_exists = ~&tlb_entry_valid;
+    wire free_exists = ~&tag_valid_vector;
 
     find_first_zero #(
         .A_WIDTH (TLB_ENTRY_NUMBER)
     ) u_find_first_zero (
-        .a          (tlb_entry_valid),
+        .a          (tag_valid_vector),
         .direction  (1'b0),               // LSB2MSB: 从低位往高位找
         .dec        (first_free_vec),
         .enc        ()
@@ -60,7 +60,7 @@ module tlb_fill_pointer #(
     `assert_clk(a_fill_sel_onehot, (fill_en |-> $onehot(fill_vector)))
 
     // 有空闲条目时, 目标必须是空闲的
-    `assert_clk(a_fill_sel_free, ((fill_en && free_exists) |-> !(fill_vector & tlb_entry_valid)))
+    `assert_clk(a_fill_sel_free, ((fill_en && free_exists) |-> !(fill_vector & tag_valid_vector)))
 `endif
 
 endmodule

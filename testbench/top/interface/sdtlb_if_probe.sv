@@ -15,7 +15,7 @@ import sdecoder_pkg::*;
     input  logic                    cam0_req_en,
     input  logic [PA_WIDTH-1:0]     cam0_req_pa,
     input  logic                    cam0_hit,
-    input  SDTLB_TAG_ITEM_t         cam0_hit_tag_item,
+    input  SDTLB_TAG_ITEM_t         cam0_hit_tag_item,     // 不含 Valid (见 cam0_hit)
     input  SDTLB_DATA_ITEM_t        cam0_hit_data_item,
 
     input  logic                    cam1_req_en,

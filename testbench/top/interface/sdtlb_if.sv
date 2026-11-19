@@ -16,14 +16,14 @@ import sdecoder_pkg::*;
     logic                               cam0_req_en;
     logic [PA_WIDTH-1:0]                cam0_req_pa;
     logic                               cam0_hit;             // 命中 (同时充当响应 valid)
-    SDTLB_TAG_ITEM_t                    cam0_hit_tag_item;    // 命中条目的 Tag 段内容
+    SDTLB_TAG_ITEM_t                    cam0_hit_tag_item;    // 命中条目的 Tag 内容 (不含 Valid, 见 cam0_hit)
     SDTLB_DATA_ITEM_t                   cam0_hit_data_item;   // 命中条目的 Data 段内容
 
     // 查表端口 1 (CAM1): 与 CAM0 完全独立, 可以和 CAM0 同拍握手、同拍命中
     logic                               cam1_req_en;
     logic [PA_WIDTH-1:0]                cam1_req_pa;
     logic                               cam1_hit;
-    SDTLB_TAG_ITEM_t                    cam1_hit_tag_item;
+    SDTLB_TAG_ITEM_t                    cam1_hit_tag_item;    // 同上
     SDTLB_DATA_ITEM_t                   cam1_hit_data_item;
 
     // 装填请求 (Page Walk 结果)

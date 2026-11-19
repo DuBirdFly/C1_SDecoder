@@ -33,7 +33,7 @@ import sdecoder_pkg::*;
     output SDTLB_TAG_ITEM_t                     tag_item [SDTLB_ENTRIES],
 
     // 各条目的有效位: 给装填指针判断 "有没有空闲条目"
-    output logic [SDTLB_ENTRIES-1:0]            valid_vector
+    output logic [SDTLB_ENTRIES-1:0]            tag_valid_vector
 );
 
     genvar genvar_i;
@@ -60,10 +60,9 @@ import sdecoder_pkg::*;
                 .inv_sel          (inv_sel),
                 .inv_sel_pa       (inv_sel_pa),
 
-                .tag_item         (tag_item[genvar_i])
+                .tag_item         (tag_item[genvar_i]),
+                .tag_valid        (tag_valid_vector[genvar_i])
             );
-
-            assign valid_vector[genvar_i] = tag_item[genvar_i].valid;
         end
     endgenerate
 

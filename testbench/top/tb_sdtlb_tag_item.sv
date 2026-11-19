@@ -40,6 +40,7 @@ module tb_sdtlb_tag_item;
     logic [PA_BASE_WIDTH-1:0]   inv_sel_pa;
 
     SDTLB_TAG_ITEM_t            tag_item;
+    logic                       tag_valid;
 
     int unsigned checks = 0;
     int unsigned errors = 0;
@@ -72,7 +73,8 @@ module tb_sdtlb_tag_item;
         .inv_sel           (inv_sel         ),
         .inv_sel_pa           (inv_sel_pa         ),
 
-        .tag_item         (tag_item       )
+        .tag_item         (tag_item       ),
+        .tag_valid        (tag_valid      )
     );
 
 `ifdef DUMP_FSDB
@@ -149,7 +151,7 @@ module tb_sdtlb_tag_item;
         inv_sel_pa  <= base;
         inv_sel     <= 1'b1;
         wait_cycle();                   // 同一沿: inv 清位与 fill 置位撞车
-        valid_after = tag_item.valid;
+        valid_after = tag_valid;
         fill_en <= 1'b0;
         inv_en      <= 1'b0;
         inv_sel     <= 1'b0;
@@ -192,7 +194,7 @@ module tb_sdtlb_tag_item;
         // ====================================================================
         // 只装填 -> 条目有效, 查表命中
         do_fill(TAG_A, TAG_A_UP);
-        chk("只装填: Valid = 1", tag_item.valid === 1'b1);
+        chk("只装填: Valid = 1", tag_valid === 1'b1);
         chk("只装填: tag 内容正确", (tag_item.pa_base === TAG_A) && (tag_item.pa_up === TAG_A_UP));
         do_req(TAG_A, hit);
         chk("只装填: 查表命中", hit === 1'b1);
@@ -200,31 +202,31 @@ module tb_sdtlb_tag_item;
         // ====================================================================
         // 只置无效 -> 条目无效, 查表不命中
         do_inv(TAG_A);
-        chk("只置无效: Valid = 0", tag_item.valid === 1'b0);
+        chk("只置无效: Valid = 0", tag_valid === 1'b0);
         do_req(TAG_A, hit);
         chk("只置无效: 查表不命中", hit === 1'b0);
 
         // ====================================================================
         // 同拍 inv + fill -> 置无效优先, 本次装填丢弃
         do_fill(TAG_A, TAG_A_UP);
-        chk("同拍前置: 重新装填后 Valid = 1", tag_item.valid === 1'b1);
+        chk("同拍前置: 重新装填后 Valid = 1", tag_valid === 1'b1);
 
         do_fill_and_inv(TAG_A, TAG_A_UP, valid_after);
         $display("");
         $display("--------------------------------------------------------------");
         $display("同拍 inv + fill: 置无效优先, 装填被丢弃");
-        $display("  tag_item.valid   = %b", tag_item.valid);
+        $display("  tag_valid   = %b", tag_valid);
         $display("  tag_item.pa_base = 0x%h", tag_item.pa_base);
         $display("--------------------------------------------------------------");
         chk("同拍 inv+fill: 置无效赢, Valid = 0", valid_after === 1'b0);
-        chk("同拍 inv+fill: 拍末 Valid 仍为 0", tag_item.valid === 1'b0);
+        chk("同拍 inv+fill: 拍末 Valid 仍为 0", tag_valid === 1'b0);
         do_req(TAG_A, hit);
         chk("同拍 inv+fill: 查表不命中", hit === 1'b0);
 
         // 装填通路没被这次仲裁破坏: 再来一次普通装填仍能命中
         do_fill(TAG_A, TAG_A_UP);
         do_req(TAG_A, hit);
-        chk("仲裁后再装填: 恢复命中", (tag_item.valid === 1'b1) && (hit === 1'b1));
+        chk("仲裁后再装填: 恢复命中", (tag_valid === 1'b1) && (hit === 1'b1));
 
         $display("\n%0d checks, %0d errors", checks, errors);
         if (errors == 0) begin

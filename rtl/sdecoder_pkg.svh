@@ -11,10 +11,10 @@ package sdecoder_pkg;
     localparam PA_BASE_LSB = PA_WIDTH - PA_BASE_WIDTH;      // 30: PA[47:30] 的 LSB (也是 PA[34:30] 的 LSB)
     localparam PA_HIGH_LSB = PA_BASE_LSB + PA_UP_WIDTH;     // 35: PA[47:35] 的 LSB
 
+    // 条目 Tag 段的内容; 有效位单独由 sdtlb_tag_item 的 tag_valid 给出
     typedef struct packed {
         logic [PA_BASE_WIDTH-1:0]   pa_base;
         logic [PA_UP_WIDTH-1:0]     pa_up;
-        logic                       valid;
     } SDTLB_TAG_ITEM_t;
 
     localparam EID_WIDTH = 11;

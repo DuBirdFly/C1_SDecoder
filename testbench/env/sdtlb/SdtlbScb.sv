@@ -81,7 +81,7 @@ class SdtlbScb extends uvm_scoreboard;
         for (int unsigned i = 0; i < SDTLB_ENTRIES; i++) begin
             if (mdl[i].valid && in_range(pa, mdl[i])) begin
                 hit  = 1'b1;
-                tag  = '{pa_base: mdl[i].pa_base, pa_up: mdl[i].pa_up, valid: 1'b1};
+                tag  = '{pa_base: mdl[i].pa_base, pa_up: mdl[i].pa_up};
                 data = '{eid: mdl[i].eid, token_id: mdl[i].token_id,
                          token_value: mdl[i].token_value, s_pfn: mdl[i].s_pfn};
             end
