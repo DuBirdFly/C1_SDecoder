@@ -17,16 +17,20 @@
 //      不能查表"由上游保证: 上游在发出 fill_en 的同一拍不许再发 camN_req_en.
 //      这里用断言 a_camN_req_fill_exclusive 兜底, 违反时仿真报错.
 //   2. 装填 / 置无效的使能与写数据都由上游用 FF 给出 (见 doc/design_plan/AI 易错点.md).
-//      本模块内部送给 Latch 的写使能也只是 FF 的组合 (victim_sel 与 fill_en 相与),
+//      本模块内部送给 Latch 的写使能也只是 FF 的组合 (fill_en 与 fill_sel 相与),
 //      不再为了仿真竞争额外加打拍寄存器: 时序节拍属于设计, 仿真竞争由 tb 的 wrapper 打拍解决.
+//      注: fill_sel 由 tlb_fill_pointer 给出, 是两个 FF (空闲指针 / 轮转指针) 的 mux,
+//          拍内稳定, 到 Latch 使能只有 "mux + 与门"; "最低位空闲" 的找首 0 落在指针
+//          自己的寄存器 setup 路径上 (见 tlb_fill_pointer 的文件头).
 //
 // 装填 / 置无效时序:
 //   装填与置无效都在请求拍当拍作用到阵列 (Latch 写入 / Valid 清位), 不额外打拍.
 //
-// 装填目标 (暂定):
-//   全部按轮转替换指针 victim_sel 装填, 每次装填指针步进一格; 不区分空闲 / 有效条目.
-//   设计方案 "装填条目 (SDTLB)" 要求 "有空闲条目时优先装填最低位空闲条目", 这一条先不实现,
-//   等替换策略定稿后再补 (届时会把 victim_sel 换成 "空闲指针 / 轮转指针" 二选一).
+// 装填目标 (见设计方案 "装填指针"):
+//   1. 有空闲条目时, 优先装填最低位的空闲条目;
+//   2. 没有空闲条目时, 用轮转 $onehot 指针 (设计方案里的 "伪随机指针" 早期先用轮转代替).
+//   空闲集合取本拍装填前的有效位 (tlb_entry_valid): 本拍 inv 释放的条目不算进来, 因为同一条目
+//   同拍 inv + fill 时 inv 优先, 指向它会让这次装填被静默丢弃; 释放的条目下一拍自然会被捡回来.
 module sdtlb
 import sdecoder_pkg::*;
 (
@@ -69,14 +73,16 @@ import sdecoder_pkg::*;
     SDTLB_TAG_ITEM_t  tag_item  [SDTLB_ENTRIES];
     SDTLB_DATA_ITEM_t data_item [SDTLB_ENTRIES];
 
-    // 写 Latch 的使能 (victim_sel 与 fill_en 都是 FF, 见文件头的约定)
+    // 写 Latch 的使能 = fill_en 与装填目标相与 (见文件头的约定)
     logic [SDTLB_ENTRIES-1:0]   fill_en_vector;
 
     logic [SDTLB_ENTRIES-1:0] cam0_hit_vector;
     logic [SDTLB_ENTRIES-1:0] cam1_hit_vector;
     logic [SDTLB_ENTRIES-1:0] cam0_hit_vector_r;
     logic [SDTLB_ENTRIES-1:0] cam1_hit_vector_r;
-    logic [SDTLB_ENTRIES-1:0] victim_sel;
+    logic [SDTLB_ENTRIES-1:0] fill_sel;       // 本拍装填目标 ($onehot)
+    logic [SDTLB_ENTRIES-1:0] valid_vector;    // 各条目的有效位
+    logic [SDTLB_ENTRIES-1:0] clear_vector;    // 本拍各条目被置无效清位
 
     // 请求拍选出的命中 tag / data 快照, 与命中向量在同一沿寄存
     SDTLB_TAG_ITEM_t  cam0_hit_tag_sel;
@@ -88,8 +94,8 @@ import sdecoder_pkg::*;
     SDTLB_TAG_ITEM_t  cam1_hit_tag_r;
     SDTLB_DATA_ITEM_t cam1_hit_data_r;
 
-    // 装填目标 = 轮转替换指针 (暂不做 "空闲优先", 见文件头)
-    assign fill_en_vector = fill_en ? victim_sel : '0;
+    // 装填目标 = 空闲优先, 满表时用轮转指针
+    assign fill_en_vector = fill_en ? fill_sel : '0;
 
     // 注: 设计方案要求多命中时上报 tlb_multi_hit (响应 err 位 + 异常寄存器), 暂不实现;
     //     多命中时命中数据未定义, 行为与原来一致.
@@ -120,14 +126,16 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 被替换条目指针: 严格 one-hot 左移循环, 每次装填都步进
-    tlb_victim_pointer #(
+    // 装填目标指针: 有空闲条目时指向最低位空闲条目, 满表时指向轮转指针
+    tlb_fill_pointer #(
         .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES)
-    ) u_tlb_victim_pointer (
+    ) u_tlb_fill_pointer (
         .clk                (clk),
         .rst_n              (rst_n),
-        .step               (fill_en),
-        .victim_sel         (victim_sel)
+        .fill_en            (fill_en),
+        .tlb_entry_valid    (valid_vector),
+        .tlb_entry_clear    (clear_vector),
+        .fill_sel           (fill_sel)
     );
 
     sdtlb_tag u_sdtlb_tag (
@@ -151,7 +159,9 @@ import sdecoder_pkg::*;
         .inv_sel            (inv_sel            ),
         .inv_sel_pa         (inv_sel_pa         ),
 
-        .tag_item           (tag_item           )
+        .tag_item           (tag_item           ),
+        .valid_vector       (valid_vector       ),
+        .clear_vector       (clear_vector       )
     );
 
     sdtlb_data u_sdtlb_data (

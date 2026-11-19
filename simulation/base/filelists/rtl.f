@@ -8,7 +8,7 @@
 ./rtl/common/lod.sv
 ./rtl/common/onehot0_mux.sv
 ./rtl/common/syn_fifo.sv
-./rtl/common/tlb_victim_pointer.sv
+./rtl/common/tlb_fill_pointer.sv
 
 ./rtl/sdtlb_tag_item_match.sv
 ./rtl/sdtlb_tag_item.sv

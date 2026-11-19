@@ -94,7 +94,7 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
         wait_cycles(.n(4));
 
         // 同拍 fill + inv_sel: 置无效优先, 这次装填的地址不应命中, 别的条目不受影响
-        //   先填一条 0x050 的条目 (占 1 号条目), 再用同拍 fill + inv_sel 去填/清 0x051
+        //   先填一条 0x050 的条目 (落在最低位空闲条目), 再用同拍 fill + inv_sel 去填/清 0x051
         fill(
             .base   (gen_pa_base(.high(12'h050), .idx(5'd4))),
             .up     (5'd4),

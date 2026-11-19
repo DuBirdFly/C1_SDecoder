@@ -1,7 +1,9 @@
 `ifndef _SDTLB_ROTATE_SEQ_SV_
 `define _SDTLB_ROTATE_SEQ_SV_
 
-// SDTLB 替换指针轮转: 连续装填超过 SDTLB_ENTRIES 条, 指针绕圈覆盖最老的条目
+// SDTLB 替换指针: inv_all 之后连续装填超过 SDTLB_ENTRIES 条
+//   前 SDTLB_ENTRIES 条按 "最低位空闲" 顺序落进 0..N-1 号条目;
+//   之后没有空闲条目, 改用轮转指针, 从 0 号开始覆盖最老的条目
 class SdtlbRotateSeq extends SdtlbBaseSeq;
 
     `uvm_object_utils(SdtlbRotateSeq)

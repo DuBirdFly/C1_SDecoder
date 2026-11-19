@@ -13,6 +13,7 @@ package sdtlb_seq_pkg;
     `include "seq/SdtlbInvSeq.sv"
     `include "seq/SdtlbDualSeq.sv"
     `include "seq/SdtlbRotateSeq.sv"
+    `include "seq/SdtlbFreeSeq.sv"
 
 endpackage
 

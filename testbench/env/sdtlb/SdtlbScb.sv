@@ -5,7 +5,9 @@
 //   一个 item 描述一拍 (可能同时有查表 / 装填 / 置无效), 处理顺序与 RTL 一致:
 //     查表 -> 装填 -> 置无效 (请求看到的是装填 / 置无效之前的状态)
 //   模型语义与 RTL 一致:
-//     - 装填: 写到当前替换指针指向的条目, 指针每装填一次步进 (复位指向 0 号)
+//     - 装填: 有空闲条目时写最低位空闲条目; 没有空闲条目时写轮转指针指向的条目,
+//       并把轮转指针步进 (复位指向 0 号). 空闲集合取本拍装填前 (也就是本拍 inv 之前) 的
+//       valid: 同一条目同拍 inv + fill 时 inv 优先, 那次装填丢弃
 //     - 命中: valid && 高位 (PA[47:35]) 相等 && pa_base[4:0] <= PA[34:30] <= pa_up
 //     - 置无效: inv_all 清全部; inv_sel 清被覆盖的条目 (含无效条目), 同拍与装填时置无效优先
 class SdtlbScb extends uvm_scoreboard;
@@ -25,7 +27,7 @@ class SdtlbScb extends uvm_scoreboard;
     } entry_t;
 
     entry_t  mdl[SDTLB_ENTRIES];
-    int unsigned victim;        // 当前替换指针 (复位指向 0 号)
+    int unsigned victim;        // 轮转指针 (只在没有空闲条目时装填后步进, 复位指向 0 号)
 
     int req_cnt  = 0;
     int fill_cnt = 0;
@@ -123,6 +125,7 @@ class SdtlbScb extends uvm_scoreboard;
 
     function void write(SdtlbItem tr);
         entry_t e;
+        int     free_idx;
 
         // 1) 查表: 先按当前模型算期望 (装填 / 置无效还没生效)
         check_port("cam0", tr.cam0_req_en, tr.cam0_req_pa,
@@ -133,7 +136,7 @@ class SdtlbScb extends uvm_scoreboard;
             req_cnt++;
         end
 
-        // 2) 装填: 写到当前替换指针指向的条目, 指针步进
+        // 2) 装填: 空闲优先 (最低位空闲条目), 满表时写轮转指针并步进
         if (tr.fill_en) begin
             fill_cnt++;
             e.valid       = 1'b1;
@@ -143,8 +146,22 @@ class SdtlbScb extends uvm_scoreboard;
             e.token_id    = tr.fill_token_id;
             e.token_value = tr.fill_token_value;
             e.s_pfn       = tr.fill_s_pfn;
-            mdl[victim]   = e;
-            victim        = (victim + 1) % SDTLB_ENTRIES;
+
+            free_idx = -1;
+            for (int unsigned i = 0; i < SDTLB_ENTRIES; i++) begin
+                if (!mdl[i].valid) begin
+                    free_idx = int'(i);
+                    break;
+                end
+            end
+
+            if (free_idx >= 0) begin
+                mdl[free_idx] = e;
+            end
+            else begin
+                mdl[victim] = e;
+                victim      = (victim + 1) % SDTLB_ENTRIES;
+            end
         end
 
         // 3) 置无效: inv_en 当拍才生效, 且只允许 inv_all / inv_sel 之一

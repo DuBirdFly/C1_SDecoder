@@ -1,7 +1,7 @@
 `ifndef _SDTLB_TEST_BASE_SV_
 `define _SDTLB_TEST_BASE_SV_
 
-// SDTLB 的基础用例: 依次跑 smoke / 段式 / 置无效 / 双端口 / 轮转序列,
+// SDTLB 的基础用例: 依次跑 smoke / 段式 / 置无效 / 双端口 / 轮转 / 空闲优先序列,
 // 期望值与比对全部由 scoreboard 的参考模型负责 (这里的任务只给激励)
 class SdtlbTestBase extends uvm_test;
 
@@ -24,6 +24,7 @@ class SdtlbTestBase extends uvm_test;
         SdtlbInvSeq    invSeq;
         SdtlbDualSeq   dualSeq;
         SdtlbRotateSeq rotateSeq;
+        SdtlbFreeSeq   freeSeq;
 
         phase.raise_objection(this);
 
@@ -41,6 +42,9 @@ class SdtlbTestBase extends uvm_test;
 
         rotateSeq = SdtlbRotateSeq::type_id::create("rotateSeq");
         rotateSeq.start(sdtlb_env.agt.sqr);
+
+        freeSeq = SdtlbFreeSeq::type_id::create("freeSeq");
+        freeSeq.start(sdtlb_env.agt.sqr);
 
         `uvm_info("TEST", "Sdtlb 序列跑完", UVM_LOW)
 
