@@ -19,9 +19,9 @@
 //   2. 装填 / 置无效的使能与写数据都由上游用 FF 给出 (见 doc/design_plan/AI 易错点.md).
 //      本模块内部送给 Latch 的写使能也只是 FF 的组合 (fill_en 与 fill_sel 相与),
 //      不再为了仿真竞争额外加打拍寄存器: 时序节拍属于设计, 仿真竞争由 tb 的 wrapper 打拍解决.
-//      注: fill_sel 由 tlb_fill_pointer 给出, 是两个 FF (空闲指针 / 轮转指针) 的 mux,
-//          拍内稳定, 到 Latch 使能只有 "mux + 与门"; "最低位空闲" 的找首 0 落在指针
-//          自己的寄存器 setup 路径上 (见 tlb_fill_pointer 的文件头).
+//      注: fill_sel 由 tlb_fill_pointer 当拍算出 (valid -> 找首 0 -> mux), 输入全是 FF,
+//          沿后稳定, 没有毛刺; 这条路径比查表那条 "比较 + onehot0_mux" 还短, 见
+//          tlb_fill_pointer 的文件头.
 //
 // 装填 / 置无效时序:
 //   装填与置无效都在请求拍当拍作用到阵列 (Latch 写入 / Valid 清位), 不额外打拍.
@@ -82,7 +82,6 @@ import sdecoder_pkg::*;
     logic [SDTLB_ENTRIES-1:0] cam1_hit_vector_r;
     logic [SDTLB_ENTRIES-1:0] fill_sel;       // 本拍装填目标 ($onehot)
     logic [SDTLB_ENTRIES-1:0] valid_vector;    // 各条目的有效位
-    logic [SDTLB_ENTRIES-1:0] clear_vector;    // 本拍各条目被置无效清位
 
     // 请求拍选出的命中 tag / data 快照, 与命中向量在同一沿寄存
     SDTLB_TAG_ITEM_t  cam0_hit_tag_sel;
@@ -126,7 +125,7 @@ import sdecoder_pkg::*;
         end
     end
 
-    // 装填目标指针: 有空闲条目时指向最低位空闲条目, 满表时指向轮转指针
+    // 装填目标指针: 有空闲条目时指向最低位空闲条目, TLB 满时指向轮转指针
     tlb_fill_pointer #(
         .TLB_ENTRY_NUMBER   (SDTLB_ENTRIES)
     ) u_tlb_fill_pointer (
@@ -134,7 +133,6 @@ import sdecoder_pkg::*;
         .rst_n              (rst_n),
         .fill_en            (fill_en),
         .tlb_entry_valid    (valid_vector),
-        .tlb_entry_clear    (clear_vector),
         .fill_sel           (fill_sel)
     );
 
@@ -160,8 +158,7 @@ import sdecoder_pkg::*;
         .inv_sel_pa         (inv_sel_pa         ),
 
         .tag_item           (tag_item           ),
-        .valid_vector       (valid_vector       ),
-        .clear_vector       (clear_vector       )
+        .valid_vector       (valid_vector       )
     );
 
     sdtlb_data u_sdtlb_data (

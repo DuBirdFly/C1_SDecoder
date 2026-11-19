@@ -40,7 +40,6 @@ module tb_sdtlb_tag_item;
     logic [PA_BASE_WIDTH-1:0]   inv_sel_pa;
 
     SDTLB_TAG_ITEM_t            tag_item;
-    logic                       valid_clear;
 
     int unsigned checks = 0;
     int unsigned errors = 0;
@@ -73,8 +72,7 @@ module tb_sdtlb_tag_item;
         .inv_sel           (inv_sel         ),
         .inv_sel_pa           (inv_sel_pa         ),
 
-        .tag_item         (tag_item       ),
-        .valid_clear      (valid_clear    )
+        .tag_item         (tag_item       )
     );
 
 `ifdef DUMP_FSDB
@@ -123,7 +121,6 @@ module tb_sdtlb_tag_item;
         fill_wr_pa_up   <= up;
         fill_wr_en      <= 1'b1;
         wait_cycle();                   // 这一沿写 Latch 并置 Valid
-        chk("只装填: valid_clear 保持 0", valid_clear === 1'b0);
         fill_wr_en <= 1'b0;
     endtask
 
@@ -134,7 +131,6 @@ module tb_sdtlb_tag_item;
         inv_sel_pa  <= base;
         inv_sel     <= 1'b1;
         wait_cycle();                   // 这一沿清 Valid
-        chk("置无效: 条目报 valid_clear", valid_clear === 1'b1);
         inv_en      <= 1'b0;
         inv_sel     <= 1'b0;
     endtask
