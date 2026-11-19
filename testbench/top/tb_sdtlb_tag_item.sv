@@ -7,7 +7,7 @@
 // sdtlb 现在装填不打拍: 装填在 fill_en 当拍写 Latch, 置无效也当拍清 Valid,
 // 两者同拍由 item 的 if/else 仲裁 —— 置无效优先, 本次装填丢弃:
 //
-//   Valid 的更新优先级: inv_all || inv_match  >  fill_wr_en
+//   Valid 的更新优先级: inv_all || inv_match  >  fill_en
 //
 // 本 tb 的次序: 只装填 (正常) -> 只置无效 (正常) -> 同拍 inv + fill (inv 赢).
 module tb_sdtlb_tag_item;
@@ -29,9 +29,9 @@ module tb_sdtlb_tag_item;
     logic                       cam1_hit;
 
     // 装填 (本拍有效, 本拍写 Latch)
-    logic                       fill_wr_en;
-    logic [PA_BASE_WIDTH-1:0]   fill_wr_pa_base;
-    logic [PA_UP_WIDTH-1:0]     fill_wr_pa_up;
+    logic                       fill_en;
+    logic [PA_BASE_WIDTH-1:0]   fill_pa_base;
+    logic [PA_UP_WIDTH-1:0]     fill_pa_up;
 
     // 置无效 (inv_en 是总使能, inv_all / inv_sel 只在它有效的当拍起作用)
     logic                       inv_en;
@@ -63,9 +63,9 @@ module tb_sdtlb_tag_item;
         .cam1_req_pa      (cam1_req_pa    ),
         .cam1_hit         (cam1_hit       ),
 
-        .fill_wr_en       (fill_wr_en     ),
-        .fill_wr_pa_base  (fill_wr_pa_base),
-        .fill_wr_pa_up    (fill_wr_pa_up  ),
+        .fill_en       (fill_en     ),
+        .fill_pa_base  (fill_pa_base),
+        .fill_pa_up    (fill_pa_up  ),
 
         .inv_en           (inv_en         ),
         .inv_all          (inv_all        ),
@@ -117,11 +117,11 @@ module tb_sdtlb_tag_item;
         input logic [PA_UP_WIDTH-1:0]   up
     );
         wait_cycle();
-        fill_wr_pa_base <= base;
-        fill_wr_pa_up   <= up;
-        fill_wr_en      <= 1'b1;
+        fill_pa_base <= base;
+        fill_pa_up   <= up;
+        fill_en      <= 1'b1;
         wait_cycle();                   // 这一沿写 Latch 并置 Valid
-        fill_wr_en <= 1'b0;
+        fill_en <= 1'b0;
     endtask
 
     // 按地址置无效, 拉高一拍
@@ -142,15 +142,15 @@ module tb_sdtlb_tag_item;
         output logic                     valid_after
     );
         wait_cycle();
-        fill_wr_pa_base <= base;
-        fill_wr_pa_up   <= up;
-        fill_wr_en      <= 1'b1;
+        fill_pa_base <= base;
+        fill_pa_up   <= up;
+        fill_en      <= 1'b1;
         inv_en      <= 1'b1;
         inv_sel_pa  <= base;
         inv_sel     <= 1'b1;
         wait_cycle();                   // 同一沿: inv 清位与 fill 置位撞车
         valid_after = tag_item.valid;
-        fill_wr_en <= 1'b0;
+        fill_en <= 1'b0;
         inv_en      <= 1'b0;
         inv_sel     <= 1'b0;
     endtask
@@ -176,9 +176,9 @@ module tb_sdtlb_tag_item;
         cam0_req_pa     = '0;
         cam1_req_en     = 1'b0;
         cam1_req_pa     = '0;
-        fill_wr_en      = 1'b0;
-        fill_wr_pa_base = '0;
-        fill_wr_pa_up   = '0;
+        fill_en      = 1'b0;
+        fill_pa_base = '0;
+        fill_pa_up   = '0;
         inv_en          = 1'b0;
         inv_all         = 1'b0;
         inv_sel          = 1'b0;

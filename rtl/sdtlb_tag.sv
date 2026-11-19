@@ -18,10 +18,11 @@ import sdecoder_pkg::*;
     input  logic [PA_WIDTH-1:0]                 cam1_req_pa,
     output logic [SDTLB_ENTRIES-1:0]            cam1_hit_vector,
 
-    // 装填写入: 下一拍生效, 数据与使能都已寄存
-    input  logic [SDTLB_ENTRIES-1:0]            fill_wr_en_vector,
-    input  logic [PA_BASE_WIDTH-1:0]            fill_wr_pa_base,
-    input  logic [PA_UP_WIDTH-1:0]              fill_wr_pa_up,
+    // 装填写入
+    input  logic                                fill_en,
+    input  logic [SDTLB_ENTRIES-1:0]            fill_vector,
+    input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
+    input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
 
     // 置无效 (刷新) 请求
     input  logic                                inv_en,
@@ -50,9 +51,9 @@ import sdecoder_pkg::*;
                 .cam1_req_pa      (cam1_req_pa),
                 .cam1_hit         (cam1_hit_vector[genvar_i]),
 
-                .fill_wr_en       (fill_wr_en_vector[genvar_i]),
-                .fill_wr_pa_base  (fill_wr_pa_base),
-                .fill_wr_pa_up    (fill_wr_pa_up),
+                .fill_en          (fill_en & fill_vector[genvar_i]),
+                .fill_pa_base     (fill_pa_base),
+                .fill_pa_up       (fill_pa_up),
 
                 .inv_en           (inv_en),
                 .inv_all          (inv_all),

@@ -19,9 +19,9 @@ import sdecoder_pkg::*;
     output logic                        cam1_hit,
 
     // 装填写入
-    input  logic                        fill_wr_en,
-    input  logic [PA_BASE_WIDTH-1:0]    fill_wr_pa_base,
-    input  logic [PA_UP_WIDTH-1:0]      fill_wr_pa_up,
+    input  logic                        fill_en,
+    input  logic [PA_BASE_WIDTH-1:0]    fill_pa_base,
+    input  logic [PA_UP_WIDTH-1:0]      fill_pa_up,
 
     // 置无效 (刷新) 请求
     input  logic                        inv_en,
@@ -69,15 +69,15 @@ import sdecoder_pkg::*;
         else if (inv_en & (inv_all | (inv_sel & inv_sel_match))) begin
             tag_item.valid <= 1'b0;
         end
-        else if (fill_wr_en) begin
+        else if (fill_en) begin
             tag_item.valid <= 1'b1;
         end
     end
 
     always_latch begin
-        if (fill_wr_en) begin
-            tag_item.pa_base <= fill_wr_pa_base;
-            tag_item.pa_up   <= fill_wr_pa_up;
+        if (fill_en) begin
+            tag_item.pa_base <= fill_pa_base;
+            tag_item.pa_up   <= fill_pa_up;
         end
     end
 
@@ -85,8 +85,8 @@ import sdecoder_pkg::*;
     assign cam1_hit = cam1_req_en && tag_item.valid && cam1_req_match;
 
 `ifdef ASSERT_ON
-    // fill_wr_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]
-    `assert_clk(a_fill_pa_range_valid, ((fill_wr_en == 1'b0) || (fill_wr_pa_up >= fill_wr_pa_base[PA_UP_WIDTH-1:0])))
+    // fill_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]
+    `assert_clk(a_fill_pa_range_valid, ((fill_en == 1'b0) || (fill_pa_up >= fill_pa_base[PA_UP_WIDTH-1:0])))
 `endif
 
 endmodule
