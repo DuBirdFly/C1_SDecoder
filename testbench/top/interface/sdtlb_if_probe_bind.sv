@@ -6,11 +6,17 @@ bind sdtlb sdtlb_if_probe u_sdtlb_if_probe_bind (
     .clk                (clk),
     .rst_n              (rst_n),
 
-    .cam_req_en         (cam_req_en),
-    .cam_req_pa         (cam_req_pa),
-    .cam_hit            (cam_hit),
-    .cam_hit_tag_item   (cam_hit_tag_item),
-    .cam_hit_data_item  (cam_hit_data_item),
+    .cam0_req_en        (cam0_req_en),
+    .cam0_req_pa        (cam0_req_pa),
+    .cam0_hit           (cam0_hit),
+    .cam0_hit_tag_item  (cam0_hit_tag_item),
+    .cam0_hit_data_item (cam0_hit_data_item),
+
+    .cam1_req_en        (cam1_req_en),
+    .cam1_req_pa        (cam1_req_pa),
+    .cam1_hit           (cam1_hit),
+    .cam1_hit_tag_item  (cam1_hit_tag_item),
+    .cam1_hit_data_item (cam1_hit_data_item),
 
     .fill_en            (fill_en),
     .fill_pa_base       (fill_pa_base),

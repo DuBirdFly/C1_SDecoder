@@ -6,9 +6,8 @@
 //     查表 -> 装填 -> 置无效 (请求看到的是装填 / 置无效之前的状态)
 //   模型语义与 RTL 一致:
 //     - 装填: 写到当前替换指针指向的条目, 指针每装填一次步进 (复位指向 0 号)
-//     - 命中: 端口有请求 && valid && 高位 (PA[47:35]) 相等 && pa_base[4:0] <= PA[34:30] <= pa_up
+//     - 命中: valid && 高位 (PA[47:35]) 相等 && pa_base[4:0] <= PA[34:30] <= pa_up
 //     - 置无效: inv_all 清全部; inv_sel 清被覆盖的条目 (含无效条目), 同拍与装填时置无效优先
-//   查表端口按 cam_req_en 的每一位循环比对 (共 SDTLB_CAM_NUM 个端口)
 class SdtlbScb extends uvm_scoreboard;
 
     `uvm_component_utils(SdtlbScb)
@@ -72,22 +71,17 @@ class SdtlbScb extends uvm_scoreboard;
     // 预测一个端口在给定请求下的响应; 多条命中时按 onehot0_mux 的行为取最后一条
     function automatic void predict(input logic [PA_WIDTH-1:0] pa,
                                     output logic hit,
-                                    output logic [SDTLB_TAG_ITEM_WIDTH-1:0]  tag,
-                                    output logic [SDTLB_DATA_ITEM_WIDTH-1:0] data);
-        SDTLB_TAG_ITEM_t  tag_s;
-        SDTLB_DATA_ITEM_t data_s;
-
+                                    output SDTLB_TAG_ITEM_t tag,
+                                    output SDTLB_DATA_ITEM_t data);
         hit  = 1'b0;
         tag  = '0;
         data = '0;
         for (int unsigned i = 0; i < SDTLB_ENTRIES; i++) begin
             if (mdl[i].valid && in_range(pa, mdl[i])) begin
-                hit    = 1'b1;
-                tag_s  = '{pa_base: mdl[i].pa_base, pa_up: mdl[i].pa_up, valid: 1'b1};
-                data_s = '{eid: mdl[i].eid, token_id: mdl[i].token_id,
-                           token_value: mdl[i].token_value, s_pfn: mdl[i].s_pfn};
-                tag    = tag_s;
-                data   = data_s;
+                hit  = 1'b1;
+                tag  = '{pa_base: mdl[i].pa_base, pa_up: mdl[i].pa_up, valid: 1'b1};
+                data = '{eid: mdl[i].eid, token_id: mdl[i].token_id,
+                         token_value: mdl[i].token_value, s_pfn: mdl[i].s_pfn};
             end
         end
     endfunction
@@ -97,11 +91,11 @@ class SdtlbScb extends uvm_scoreboard;
                               input bit            en,
                               input logic [PA_WIDTH-1:0] pa,
                               input logic          act_hit,
-                              input logic [SDTLB_TAG_ITEM_WIDTH-1:0]  act_tag,
-                              input logic [SDTLB_DATA_ITEM_WIDTH-1:0] act_data);
-        logic          exp_hit;
-        logic [SDTLB_TAG_ITEM_WIDTH-1:0]  exp_tag;
-        logic [SDTLB_DATA_ITEM_WIDTH-1:0] exp_data;
+                              input SDTLB_TAG_ITEM_t  act_tag,
+                              input SDTLB_DATA_ITEM_t act_data);
+        logic            exp_hit;
+        SDTLB_TAG_ITEM_t exp_tag;
+        SDTLB_DATA_ITEM_t exp_data;
 
         if (!en) begin
             // 没发请求时响应必须全 0
@@ -127,24 +121,15 @@ class SdtlbScb extends uvm_scoreboard;
         end
     endfunction
 
-    // 这个 item 里是否有任何一个 CAM 端口在发请求
-    function automatic bit any_cam_req(SdtlbItem tr);
-        bit any = 1'b0;
-        foreach (tr.cam_req_en[i]) begin
-            any |= tr.cam_req_en[i];
-        end
-        return any;
-    endfunction
-
     function void write(SdtlbItem tr);
         entry_t e;
 
-        // 1) 查表: 先按当前模型算期望 (装填 / 置无效还没生效), 每个 CAM 端口各比一次
-        for (int unsigned cam = 0; cam < SDTLB_CAM_NUM; cam++) begin
-            check_port($sformatf("cam%0d", cam), tr.cam_req_en[cam], tr.cam_req_pa[cam],
-                       tr.cam_hit[cam], tr.cam_tag[cam], tr.cam_data[cam]);
-        end
-        if (any_cam_req(tr)) begin
+        // 1) 查表: 先按当前模型算期望 (装填 / 置无效还没生效)
+        check_port("cam0", tr.cam0_req_en, tr.cam0_req_pa,
+                   tr.cam0_hit, tr.cam0_tag, tr.cam0_data);
+        check_port("cam1", tr.cam1_req_en, tr.cam1_req_pa,
+                   tr.cam1_hit, tr.cam1_tag, tr.cam1_data);
+        if (tr.cam0_req_en || tr.cam1_req_en) begin
             req_cnt++;
         end
 

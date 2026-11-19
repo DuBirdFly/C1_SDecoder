@@ -22,19 +22,19 @@ class SdtlbSegSeq extends SdtlbBaseSeq;
         );
         wait_cycles(.n(4));
 
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h002), .idx(5'd4))));     // 左端
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h002), .idx(5'd4))));     // 左端
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h002), .idx(5'd6))));     // 中间
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h002), .idx(5'd6))));     // 中间
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h002), .idx(5'd8))));     // 右端
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h002), .idx(5'd8))));     // 右端
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h002), .idx(5'd3))));     // 左端外
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h002), .idx(5'd3))));     // 左端外
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h002), .idx(5'd9))));     // 右端外
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h002), .idx(5'd9))));     // 右端外
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h003), .idx(5'd6))));     // 段高位不同
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h003), .idx(5'd6))));     // 段高位不同
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h002), .idx(5'd6), .offset(30'h10))));  // 段内带页内偏移
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h002), .idx(5'd6), .offset(30'h10))));  // 段内带页内偏移
         wait_cycles(.n(4));
     endtask
 

@@ -36,9 +36,9 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
         // 段内中间地址置无效: 段条目被清, 页式条目不受影响
         inv_sel(.pa(gen_pa_base(.high(12'h020), .idx(5'd6))));
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h020), .idx(5'd6))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h020), .idx(5'd6))));
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h010), .idx(5'd20))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h010), .idx(5'd20))));
         wait_cycles(.n(4));
 
         // 重新装填后可命中, 数据是新的
@@ -51,15 +51,15 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
             .pfn    (18'h0a0a0)
         );
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h020), .idx(5'd6))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h020), .idx(5'd6))));
         wait_cycles(.n(4));
 
         // inv_all: 全部条目不再命中
         inv_all();
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h020), .idx(5'd6))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h020), .idx(5'd6))));
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h010), .idx(5'd20))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h010), .idx(5'd20))));
         wait_cycles(.n(4));
 
         // inv_all 后重新装填可命中
@@ -72,25 +72,25 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
             .pfn    (18'h0b0b0)
         );
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h010), .idx(5'd20))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h010), .idx(5'd20))));
         wait_cycles(.n(4));
 
         // 同拍 查表 + inv_sel: 请求按置无效之前的状态算 (命中), 之后同一地址不再命中
         item = new_item();
-        set_cam(item, 0, gen_pa(.high(12'h020), .idx(5'd6)));
+        set_cam0(item, gen_pa(.high(12'h020), .idx(5'd6)));
         set_inv_sel(item, gen_pa_base(.high(12'h020), .idx(5'd6)));
         send(item);
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h020), .idx(5'd6))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h020), .idx(5'd6))));
         wait_cycles(.n(4));
 
         // 同拍 查表 + inv_all: 请求同样看到置无效之前的状态
         item = new_item();
-        set_cam(item, 0, gen_pa(.high(12'h010), .idx(5'd20)));
+        set_cam0(item, gen_pa(.high(12'h010), .idx(5'd20)));
         set_inv_all(item);
         send(item);
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h010), .idx(5'd20))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h010), .idx(5'd20))));
         wait_cycles(.n(4));
 
         // 同拍 fill + inv_sel: 置无效优先, 这次装填的地址不应命中, 别的条目不受影响
@@ -110,9 +110,9 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
         set_inv_sel(item, gen_pa_base(.high(12'h051), .idx(5'd4)));
         send(item);
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h051), .idx(5'd4))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h051), .idx(5'd4))));
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h050), .idx(5'd4))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h050), .idx(5'd4))));
         wait_cycles(.n(4));
 
         // 同拍 fill + inv_all: 置无效优先, 这次装填的地址不应命中
@@ -122,9 +122,9 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
         set_inv_all(item);
         send(item);
         wait_cycles(.n(4));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h040), .idx(5'd7))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h040), .idx(5'd7))));
         wait_cycles(.n(2));
-        cam_req(.cam(0), .pa(gen_pa(.high(12'h010), .idx(5'd20))));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h010), .idx(5'd20))));
         wait_cycles(.n(4));
     endtask
 

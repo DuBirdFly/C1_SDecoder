@@ -20,8 +20,10 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
 
     // 复位期间把接口输入拉低, 等复位释放
     task signal_reset();
-        vif.drv.cam_req_en      <= '{default: 1'b0};
-        vif.drv.cam_req_pa      <= '{default: '0};
+        vif.drv.cam0_req_en      <= 1'b0;
+        vif.drv.cam0_req_pa      <= '0;
+        vif.drv.cam1_req_en      <= 1'b0;
+        vif.drv.cam1_req_pa      <= '0;
         vif.drv.fill_en          <= 1'b0;
         vif.drv.fill_pa_base     <= '0;
         vif.drv.fill_pa_up       <= '0;
@@ -51,7 +53,8 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
             end
             else begin
                 fork
-                    cam_req_drive(req);
+                    cam0_req_drive(req);
+                    cam1_req_drive(req);
                     fill_drive(req);
                     inv_drive(req);
                     wait_drive(req);
@@ -66,18 +69,21 @@ class SdtlbDrv extends uvm_driver#(SdtlbItem);
         end
     endtask
 
-    // 所有 CAM 端口的请求在同拍一起发, 保持一拍后统一撤
-    task cam_req_drive(SdtlbItem tr);
-        bit any_req;
-        any_req = 1'b0;
-        foreach (tr.cam_req_en[i]) begin
-            any_req |= tr.cam_req_en[i];
-        end
-        if (any_req) begin
-            vif.drv.cam_req_en <= tr.cam_req_en;
-            vif.drv.cam_req_pa <= tr.cam_req_pa;
+    task cam0_req_drive(SdtlbItem tr);
+        if (tr.cam0_req_en) begin
+            vif.drv.cam0_req_en <= 1'b1;
+            vif.drv.cam0_req_pa <= tr.cam0_req_pa;
             @(vif.drv);
-            vif.drv.cam_req_en <= '{default: 1'b0};
+            vif.drv.cam0_req_en <= 1'b0;
+        end
+    endtask
+
+    task cam1_req_drive(SdtlbItem tr);
+        if (tr.cam1_req_en) begin
+            vif.drv.cam1_req_en <= 1'b1;
+            vif.drv.cam1_req_pa <= tr.cam1_req_pa;
+            @(vif.drv);
+            vif.drv.cam1_req_en <= 1'b0;
         end
     endtask
 

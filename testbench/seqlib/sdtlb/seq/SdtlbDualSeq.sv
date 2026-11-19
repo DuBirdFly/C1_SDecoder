@@ -11,8 +11,6 @@ class SdtlbDualSeq extends SdtlbBaseSeq;
     endfunction
 
     task body();
-        SdtlbItem item;
-
         fill(
             .base   (gen_pa_base(.high(12'h030), .idx(5'd0))),
             .up     (5'd0),
@@ -33,32 +31,38 @@ class SdtlbDualSeq extends SdtlbBaseSeq;
         wait_cycles(.n(4));
 
         // 两端口同拍命中各自的条目
-        item = new_item();
-        set_cam(item, 0, gen_pa(.high(12'h030), .idx(5'd0)));
-        set_cam(item, 1, gen_pa(.high(12'h031), .idx(5'd0)));
-        send(item);
+        cam_req(
+            .cam0_en   (1'b1),
+            .cam0_pa   (gen_pa(.high(12'h030), .idx(5'd0))),
+            .cam1_en   (1'b1),
+            .cam1_pa   (gen_pa(.high(12'h031), .idx(5'd0)))
+        );
         wait_cycles(.n(4));
 
         // 地址对调, 仍应各自命中
-        item = new_item();
-        set_cam(item, 0, gen_pa(.high(12'h031), .idx(5'd0)));
-        set_cam(item, 1, gen_pa(.high(12'h030), .idx(5'd0)));
-        send(item);
+        cam_req(
+            .cam0_en   (1'b1),
+            .cam0_pa   (gen_pa(.high(12'h031), .idx(5'd0))),
+            .cam1_en   (1'b1),
+            .cam1_pa   (gen_pa(.high(12'h030), .idx(5'd0)))
+        );
         wait_cycles(.n(4));
 
         // 一端命中一端未命中
-        item = new_item();
-        set_cam(item, 0, gen_pa(.high(12'h030), .idx(5'd0)));
-        set_cam(item, 1, gen_pa(.high(12'h032), .idx(5'd0)));
-        send(item);
+        cam_req(
+            .cam0_en   (1'b1),
+            .cam0_pa   (gen_pa(.high(12'h030), .idx(5'd0))),
+            .cam1_en   (1'b1),
+            .cam1_pa   (gen_pa(.high(12'h032), .idx(5'd0)))
+        );
         wait_cycles(.n(4));
 
         // 只有 cam1 发请求: 命中
-        cam_req(.cam(1), .pa(gen_pa(.high(12'h031), .idx(5'd0))));
+        cam_req(.cam1_en(1'b1), .cam1_pa(gen_pa(.high(12'h031), .idx(5'd0))));
         wait_cycles(.n(4));
 
         // 只有 cam1 发请求: 未命中 (cam0 没请求, 响应必须是全 0)
-        cam_req(.cam(1), .pa(gen_pa(.high(12'h033), .idx(5'd0))));
+        cam_req(.cam1_en(1'b1), .cam1_pa(gen_pa(.high(12'h033), .idx(5'd0))));
         wait_cycles(.n(4));
     endtask
 

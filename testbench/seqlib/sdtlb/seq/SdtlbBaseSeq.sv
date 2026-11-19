@@ -4,7 +4,6 @@
 // SDTLB 序列基类: 提供 req / fill / inv / wait 的封装, 以及地址拼装的小工具
 //   事务不再用 kind 区分, 而是由各端口使能描述: 一个 item 可以同时开多个使能
 //   (如查表 + 置无效同拍), 由 driver 用 fork-join 并行驱动
-//   查表端口按 CAM 号寻址 (0 .. SDTLB_CAM_NUM-1)
 class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
 
     `uvm_object_utils(SdtlbBaseSeq)
@@ -36,25 +35,39 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
     // 最后 send() 提交. 单类型 / 常用双类型另有下面的短封装, 但新增组合不需要新 task.
     // ----------------------------------------------------------------
 
-    // 新建一个 item, 所有使能默认 0
+    // 新建一个 item: 使能和载荷全部清 0
+    // 载荷也要清, 否则没用到的字段是 X, 会被 driver 原样打进 DUT
     protected function SdtlbItem new_item();
         SdtlbItem tr;
         tr = SdtlbItem::type_id::create("tr");
-        foreach (tr.cam_req_en[i]) begin
-            tr.cam_req_en[i] = 1'b0;
-            tr.cam_req_pa[i] = '0;
-        end
-        tr.fill_en        = 1'b0;
-        tr.inv_en         = 1'b0;
-        tr.wait_cycles_en = 1'b0;
-        tr.wait_cycles    = 0;
+        tr.cam0_req_en      = 1'b0;
+        tr.cam0_req_pa      = '0;
+        tr.cam1_req_en      = 1'b0;
+        tr.cam1_req_pa      = '0;
+        tr.fill_en          = 1'b0;
+        tr.fill_pa_base     = '0;
+        tr.fill_pa_up       = '0;
+        tr.fill_eid         = '0;
+        tr.fill_token_id    = '0;
+        tr.fill_token_value = '0;
+        tr.fill_s_pfn       = '0;
+        tr.inv_en           = 1'b0;
+        tr.inv_all          = 1'b0;
+        tr.inv_sel          = 1'b0;
+        tr.inv_sel_pa       = '0;
+        tr.wait_cycles_en   = 1'b0;
+        tr.wait_cycles      = 0;
         return tr;
     endfunction
 
-    // 给第 cam 个查表端口发请求
-    function void set_cam(SdtlbItem tr, input int unsigned cam, input logic [PA_WIDTH-1:0] pa);
-        tr.cam_req_en[cam] = 1'b1;
-        tr.cam_req_pa[cam] = pa;
+    function void set_cam0(SdtlbItem tr, input logic [PA_WIDTH-1:0] pa);
+        tr.cam0_req_en = 1'b1;
+        tr.cam0_req_pa = pa;
+    endfunction
+
+    function void set_cam1(SdtlbItem tr, input logic [PA_WIDTH-1:0] pa);
+        tr.cam1_req_en = 1'b1;
+        tr.cam1_req_pa = pa;
     endfunction
 
     function void set_fill(
@@ -77,13 +90,16 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
 
     function void set_inv_sel(SdtlbItem tr, input logic [PA_BASE_WIDTH-1:0] inv_pa);
         tr.inv_en     = 1'b1;
+        tr.inv_all    = 1'b0;
         tr.inv_sel    = 1'b1;
         tr.inv_sel_pa = inv_pa;
     endfunction
 
     function void set_inv_all(SdtlbItem tr);
-        tr.inv_en  = 1'b1;
-        tr.inv_all = 1'b1;
+        tr.inv_en     = 1'b1;
+        tr.inv_all    = 1'b1;
+        tr.inv_sel    = 1'b0;
+        tr.inv_sel_pa = '0;
     endfunction
 
     function void set_wait(SdtlbItem tr, input int unsigned n);
@@ -101,14 +117,21 @@ class SdtlbBaseSeq extends uvm_sequence#(SdtlbItem);
     // 常用组合的短封装 (内部与 set_* + send 等价)
     // ----------------------------------------------------------------
 
-    // 单个端口的查表请求; 同拍多端口请用 new_item + set_cam + send
+    // 查表请求: 两个端口各自带使能, 可以只发一个端口, 也可以同拍发两个
     task cam_req(
-        input int unsigned          cam = 0,
-        input logic [PA_WIDTH-1:0]  pa  = '0
+        input bit                  cam0_en = 1'b0,
+        input logic [PA_WIDTH-1:0] cam0_pa = '0,
+        input bit                  cam1_en = 1'b0,
+        input logic [PA_WIDTH-1:0] cam1_pa = '0
     );
         SdtlbItem tr;
         tr = new_item();
-        set_cam(tr, cam, pa);
+        if (cam0_en) begin
+            set_cam0(tr, cam0_pa);
+        end
+        if (cam1_en) begin
+            set_cam1(tr, cam1_pa);
+        end
         send(tr);
     endtask
 

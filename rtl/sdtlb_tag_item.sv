@@ -8,10 +8,15 @@ import sdecoder_pkg::*;
     input  logic                        clk,
     input  logic                        rst_n,
 
-    // 查表端口: 下标就是 CAM 号
-    input  logic                        cam_req_en [SDTLB_CAM_NUM],
-    input  logic [PA_WIDTH-1:0]         cam_req_pa [SDTLB_CAM_NUM],
-    output logic                        cam_hit    [SDTLB_CAM_NUM],
+    // 查表端口 0 (CAM0)
+    input  logic                        cam0_req_en,
+    input  logic [PA_WIDTH-1:0]         cam0_req_pa,
+    output logic                        cam0_hit,
+
+    // 查表端口 1 (CAM1)
+    input  logic                        cam1_req_en,
+    input  logic [PA_WIDTH-1:0]         cam1_req_pa,
+    output logic                        cam1_hit,
 
     // 装填写入
     input  logic                        fill_wr_en,
@@ -19,6 +24,7 @@ import sdecoder_pkg::*;
     input  logic [PA_UP_WIDTH-1:0]      fill_wr_pa_up,
 
     // 置无效 (刷新) 请求
+    input  logic                        inv_en,
     input  logic                        inv_all,
     input  logic                        inv_sel,
     input  logic [PA_BASE_WIDTH-1:0]    inv_sel_pa,
@@ -27,24 +33,23 @@ import sdecoder_pkg::*;
     output SDTLB_TAG_ITEM_t             tag_item
 );
 
-    genvar genvar_i;
-    generate
-        for (genvar_i = 0; genvar_i < SDTLB_CAM_NUM; genvar_i++) begin : gen_cam
-            wire tag_match;
-
-            sdtlb_tag_item_match u_tag_match (
-                .tag_pa_base (tag_item.pa_base),
-                .tag_pa_up   (tag_item.pa_up),
-                .pa          (cam_req_pa[genvar_i][PA_WIDTH-1:PA_BASE_LSB]),
-                .match       (tag_match)
-            );
-
-            // 命中 = 本拍该端口有请求 && 条目有效 && 地址落在段里
-            assign cam_hit[genvar_i] = cam_req_en[genvar_i] && tag_item.valid && tag_match;
-        end
-    endgenerate
-
+    wire cam0_req_match;
+    wire cam1_req_match;
     wire inv_sel_match;
+
+    sdtlb_tag_item_match u_cam0_match (
+        .tag_pa_base (tag_item.pa_base),
+        .tag_pa_up   (tag_item.pa_up),
+        .pa          (cam0_req_pa[PA_WIDTH-1:PA_BASE_LSB]),
+        .match       (cam0_req_match)
+    );
+
+    sdtlb_tag_item_match u_cam1_match (
+        .tag_pa_base (tag_item.pa_base),
+        .tag_pa_up   (tag_item.pa_up),
+        .pa          (cam1_req_pa[PA_WIDTH-1:PA_BASE_LSB]),
+        .match       (cam1_req_match)
+    );
 
     sdtlb_tag_item_match u_inv_match (
         .tag_pa_base (tag_item.pa_base),
@@ -53,16 +58,6 @@ import sdecoder_pkg::*;
         .match       (inv_sel_match)
     );
 
-    // inv_match: 本条目被无效化地址覆盖 (不含有效位)
-    // note: 设计要求, 当 inv 与 fill 同拍发生时, inv 优先生效, 当拍 fill **丢弃**
-    // note: 这里刻意不带 tag_item.valid, 因为"else if" 的优先级只在分支条件成立时才起作用:
-    //       若把有效位并进匹配条件, 条目当前无效时清位分支根本不会被选中,
-    //       同拍的装填会照常执行, 把一条覆盖 "正在被刷新的地址" 的映射填进去
-    wire inv_match = inv_sel && inv_sel_match;
-
-    // 除 valid 外的字段用 Latch, 只在写周期打开.
-    // 使能直接用寄存器出来的 fill_wr_en, 不再串组合门: 使能与写数据同拍变化时,
-    // 组合门会晚一个 delta 稳定, Latch 可能在使能还高的时候抓到下一拍的写数据.
     always_latch begin
         if (fill_wr_en) begin
             tag_item.pa_base <= fill_wr_pa_base;
@@ -75,13 +70,20 @@ import sdecoder_pkg::*;
         if (!rst_n) begin
             tag_item.valid <= 1'b0;
         end
-        else if (inv_all || inv_match) begin
+        // 这里刻意不在 inv 的 if 判断条件里带 tag_item.valid.
+        // 因为 "else if" 的优先级只在分支条件成立时才起作用:
+        // 若把有效位并进匹配条件, 条目当前无效时清位分支根本不会被选中,
+        // 同拍的装填会照常执行, 把一条覆盖 "正在被刷新的地址" 的映射填进去.
+        else if (inv_en & (inv_all | (inv_sel & inv_sel_match))) begin
             tag_item.valid <= 1'b0;
         end
         else if (fill_wr_en) begin
             tag_item.valid <= 1'b1;
         end
     end
+
+    assign cam0_hit = cam0_req_en && tag_item.valid && cam0_req_match;
+    assign cam1_hit = cam1_req_en && tag_item.valid && cam1_req_match;
 
 `ifdef ASSERT_ON
     // fill_wr_pa_base 是 PA[47:30], 所以它的低 5 位就是段下界 PA[34:30]

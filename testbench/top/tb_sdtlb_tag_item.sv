@@ -20,17 +20,21 @@ module tb_sdtlb_tag_item;
     logic                       clk;
     logic                       rst_n;
 
-    // 查表端口 (item 里命中是组合输出, 没有打拍), 下标就是 CAM 号
-    logic                       cam_req_en [SDTLB_CAM_NUM];
-    logic [PA_WIDTH-1:0]        cam_req_pa [SDTLB_CAM_NUM];
-    logic                       cam_hit    [SDTLB_CAM_NUM];
+    // 查表端口 (item 里命中是组合输出, 没有打拍)
+    logic                       cam0_req_en;
+    logic [PA_WIDTH-1:0]        cam0_req_pa;
+    logic                       cam0_hit;
+    logic                       cam1_req_en;
+    logic [PA_WIDTH-1:0]        cam1_req_pa;
+    logic                       cam1_hit;
 
     // 装填 (本拍有效, 本拍写 Latch)
     logic                       fill_wr_en;
     logic [PA_BASE_WIDTH-1:0]   fill_wr_pa_base;
     logic [PA_UP_WIDTH-1:0]     fill_wr_pa_up;
 
-    // 置无效
+    // 置无效 (inv_en 是总使能, inv_all / inv_sel 只在它有效的当拍起作用)
+    logic                       inv_en;
     logic                       inv_all;
     logic                       inv_sel;
     logic [PA_BASE_WIDTH-1:0]   inv_sel_pa;
@@ -51,14 +55,19 @@ module tb_sdtlb_tag_item;
         .clk              (clk            ),
         .rst_n            (rst_n          ),
 
-        .cam_req_en       (cam_req_en     ),
-        .cam_req_pa       (cam_req_pa     ),
-        .cam_hit          (cam_hit        ),
+        .cam0_req_en      (cam0_req_en    ),
+        .cam0_req_pa      (cam0_req_pa    ),
+        .cam0_hit         (cam0_hit       ),
+
+        .cam1_req_en      (cam1_req_en    ),
+        .cam1_req_pa      (cam1_req_pa    ),
+        .cam1_hit         (cam1_hit       ),
 
         .fill_wr_en       (fill_wr_en     ),
         .fill_wr_pa_base  (fill_wr_pa_base),
         .fill_wr_pa_up    (fill_wr_pa_up  ),
 
+        .inv_en           (inv_en         ),
         .inv_all          (inv_all        ),
         .inv_sel           (inv_sel         ),
         .inv_sel_pa           (inv_sel_pa         ),
@@ -118,10 +127,12 @@ module tb_sdtlb_tag_item;
     // 按地址置无效, 拉高一拍
     task automatic do_inv(input logic [PA_BASE_WIDTH-1:0] base);
         wait_cycle();
-        inv_sel_pa <= base;
-        inv_sel <= 1'b1;
+        inv_en      <= 1'b1;
+        inv_sel_pa  <= base;
+        inv_sel     <= 1'b1;
         wait_cycle();                   // 这一沿清 Valid
-        inv_sel <= 1'b0;
+        inv_en      <= 1'b0;
+        inv_sel     <= 1'b0;
     endtask
 
     // 同一拍请求 "置无效 base" 和 "装填 base"; 返回这一沿之后的 Valid
@@ -134,11 +145,13 @@ module tb_sdtlb_tag_item;
         fill_wr_pa_base <= base;
         fill_wr_pa_up   <= up;
         fill_wr_en      <= 1'b1;
-        inv_sel_pa          <= base;
-        inv_sel          <= 1'b1;
+        inv_en      <= 1'b1;
+        inv_sel_pa  <= base;
+        inv_sel     <= 1'b1;
         wait_cycle();                   // 同一沿: inv 清位与 fill 置位撞车
         valid_after = tag_item.valid;
         fill_wr_en <= 1'b0;
+        inv_en      <= 1'b0;
         inv_sel     <= 1'b0;
     endtask
 
@@ -148,22 +161,25 @@ module tb_sdtlb_tag_item;
         output logic                     hit
     );
         wait_cycle();
-        cam_req_pa[0] <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
-        cam_req_en[0] <= 1'b1;
+        cam0_req_pa <= {base, {(PA_WIDTH-PA_BASE_WIDTH){1'b0}}};
+        cam0_req_en <= 1'b1;
         wait_cycle();                   // 请求有效的一拍
-        hit = cam_hit[0];
-        cam_req_en[0] <= 1'b0;
+        hit = cam0_hit;
+        cam0_req_en <= 1'b0;
     endtask
 
     logic hit;
     logic valid_after;
 
     initial begin
-        cam_req_en      = '{default: 1'b0};
-        cam_req_pa      = '{default: '0};
+        cam0_req_en     = 1'b0;
+        cam0_req_pa     = '0;
+        cam1_req_en     = 1'b0;
+        cam1_req_pa     = '0;
         fill_wr_en      = 1'b0;
         fill_wr_pa_base = '0;
         fill_wr_pa_up   = '0;
+        inv_en          = 1'b0;
         inv_all         = 1'b0;
         inv_sel          = 1'b0;
         inv_sel_pa          = '0;
