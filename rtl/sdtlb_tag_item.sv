@@ -64,8 +64,8 @@ import sdecoder_pkg::*;
         if (!rst_n) begin
             tag_valid <= 1'b0;
         end
-        // 刻意不带 tag_valid: "else if" 的优先级只在分支条件成立时才起作用, 若把有效位并进
-        // 匹配条件, 条目当前无效时清位分支根本不会被选中, 同拍的装填会照常执行,
+        // 刻意不带 tag_valid: 当发生 `inv` 和 `fill` 同拍有效, 且该条目是 !tag_valid 的空闲条目时,
+        // 如果 tag_valid 放入置无效的 if 匹配条件, 则这条 inv 分支必然被跳过, 同拍的装填会照常执行,
         // 把一条覆盖 "正在被刷新的地址" 的映射填进去.
         else if (inv_en & (inv_all | (inv_sel & inv_sel_match))) begin
             tag_valid <= 1'b0;
