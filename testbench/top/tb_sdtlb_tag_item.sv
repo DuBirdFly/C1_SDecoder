@@ -2,14 +2,14 @@
 
 `timescale 1ns/1ps
 
-// sdtlb_tag_item 单元自检: 装填 (fill), 置无效 (inv), 以及两者同拍的仲裁.
+// sdtlb_tag_item 单元自检: 装填 (fill), 置无效 (inv), 以及两者同拍时条目层的优先级.
 //
-// sdtlb 现在装填不打拍: 装填在 fill_en 当拍写 Latch, 置无效也当拍清 Valid,
-// 两者同拍由 item 的 if/else 仲裁 —— 置无效优先, 本次装填丢弃:
+// 装填与置无效的仲裁在阵列层做 (按 "inv 是否命中本次装填地址" 决定丢不丢这笔装填),
+// 条目层拿到的 fill_en 已经是门控过的, 所以一拍里不会再出现 "该被丢弃的失效":
 //
-//   Valid 的更新优先级: inv_all || inv_match  >  fill_en
+//   Valid 的更新优先级: fill_en  >  inv_all || inv_match
 //
-// 本 tb 的次序: 只装填 (正常) -> 只置无效 (正常) -> 同拍 inv + fill (inv 赢).
+// 本 tb 的次序: 只装填 (正常) -> 只置无效 (正常) -> 同拍 inv + fill (条目层装填赢).
 module tb_sdtlb_tag_item;
 
     import sdecoder_pkg::*;
@@ -207,21 +207,22 @@ module tb_sdtlb_tag_item;
         chk("只置无效: 查表不命中", hit === 1'b0);
 
         // ====================================================================
-        // 同拍 inv + fill -> 置无效优先, 本次装填丢弃
+        // 同拍 inv + fill -> 条目层装填优先 (冲突的装填在阵列层就丢了, 到不了这里)
         do_fill(TAG_A, TAG_A_UP);
         chk("同拍前置: 重新装填后 Valid = 1", tag_valid === 1'b1);
 
         do_fill_and_inv(TAG_A, TAG_A_UP, valid_after);
         $display("");
         $display("--------------------------------------------------------------");
-        $display("同拍 inv + fill: 置无效优先, 装填被丢弃");
+        $display("同拍 inv + fill: 条目层装填优先 (阵列层会先丢掉冲突的装填)");
         $display("  tag_valid   = %b", tag_valid);
         $display("  tag_item.pa_base = 0x%h", tag_item.pa_base);
         $display("--------------------------------------------------------------");
-        chk("同拍 inv+fill: 置无效赢, Valid = 0", valid_after === 1'b0);
-        chk("同拍 inv+fill: 拍末 Valid 仍为 0", tag_valid === 1'b0);
+        chk("同拍 inv+fill: 条目层装填赢, Valid = 1", valid_after === 1'b1);
+        chk("同拍 inv+fill: 拍末 Valid 仍为 1", tag_valid === 1'b1);
+        chk("同拍 inv+fill: tag 保持装填内容", (tag_item.pa_base === TAG_A) && (tag_item.pa_up === TAG_A_UP));
         do_req(TAG_A, hit);
-        chk("同拍 inv+fill: 查表不命中", hit === 1'b0);
+        chk("同拍 inv+fill: 查表命中", hit === 1'b1);
 
         // 装填通路没被这次仲裁破坏: 再来一次普通装填仍能命中
         do_fill(TAG_A, TAG_A_UP);

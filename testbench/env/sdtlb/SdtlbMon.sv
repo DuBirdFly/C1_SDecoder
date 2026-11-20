@@ -11,6 +11,9 @@ class SdtlbMon extends uvm_monitor;
     // 上一拍留下、本拍带响应发布的事件
     SdtlbItem pend[$];
 
+    // 上一拍是否有装填请求 (本拍就是写阵列拍)
+    bit fill_en_d;
+
     function new(string name = "SdtlbMon", uvm_component parent = null);
         super.new(name, parent);
     endfunction
@@ -41,9 +44,8 @@ class SdtlbMon extends uvm_monitor;
                 pend.delete();
 
                 // 2) 采样本拍的输入, 压进队列 (一个 item 描述这一拍)
-                if ((vif.mon.cam0_req_en === 1'b1) || (vif.mon.cam1_req_en === 1'b1) ||
-                    (vif.mon.fill_en === 1'b1) ||
-                    (vif.mon.inv_all === 1'b1) || (vif.mon.inv_sel === 1'b1)) begin
+                //    每一拍都发: scoreboard 的参考模型按拍推进 (装填是 2 拍流水)
+                begin
                     tr = SdtlbItem::type_id::create("tr");
                     tr.cam0_req_en = (vif.mon.cam0_req_en === 1'b1);
                     tr.cam0_req_pa = vif.mon.cam0_req_pa;
@@ -63,18 +65,21 @@ class SdtlbMon extends uvm_monitor;
                     check_item(tr);
                     pend.push_back(tr);
                 end
+
+                fill_en_d = (vif.mon.fill_en === 1'b1);
             end
         end
     endtask
 
     // 事务合法性检查 (地址空间 + 端口冲突)
     function void check_item(SdtlbItem tr);
-        // 装填与查表不能同拍 (Latch 不支持同拍读写, 见 sdtlb 的 a_cam0/1_req_fill_exclusive)
-        if (tr.fill_en && (tr.cam0_req_en || tr.cam1_req_en)) begin
+        // 写阵列那一拍不能查表 (Latch 不支持同拍读写, 见 sdtlb 的 a_camN_req_fill_exclusive);
+        // 装填请求是上一拍发的, 这一拍才写阵列
+        if (fill_en_d && (tr.cam0_req_en || tr.cam1_req_en)) begin
             `uvm_warning(
                 "FILL_CAM",
-                $sformatf("装填与查表同拍: fill_pa_base=0x%0h, cam0_req_en=%0b, cam1_req_en=%0b",
-                          tr.fill_pa_base, tr.cam0_req_en, tr.cam1_req_en)
+                $sformatf("写阵列拍与查表同拍: cam0_req_en=%0b, cam1_req_en=%0b",
+                          tr.cam0_req_en, tr.cam1_req_en)
             )
         end
 

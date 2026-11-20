@@ -59,19 +59,19 @@ import sdecoder_pkg::*;
         .match       (inv_sel_match)
     );
 
-    // 同拍同时发生 `inv` 和 `fill` 时, 优先实现 `inv`, 且本次 `fill` 被**丢弃**
+    // 写阵列那一拍装填优先: 装填和置无效的仲裁已经在上层按 "inv 是否命中本装填地址" 判过了
+    // (inv_all 的拍不会给 fill_en; inv_sel 命中本装填地址的拍也不会), 所以这里只要 fill_en
+    // 有效就置 Valid, 否则按置无效条件清位
+    // note: inv 分支刻意不带 tag_valid, 否则条目当前无效时清位分支不会被选中
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             tag_valid <= 1'b0;
         end
-        // 刻意不带 tag_valid: 当发生 `inv` 和 `fill` 同拍有效, 且该条目是 !tag_valid 的空闲条目时,
-        // 如果 tag_valid 放入置无效的 if 匹配条件, 则这条 inv 分支必然被跳过, 同拍的装填会照常执行,
-        // 把一条覆盖 "正在被刷新的地址" 的映射填进去.
-        else if (inv_en & (inv_all | (inv_sel & inv_sel_match))) begin
-            tag_valid <= 1'b0;
-        end
         else if (fill_en) begin
             tag_valid <= 1'b1;
+        end
+        else if (inv_en & (inv_all | (inv_sel & inv_sel_match))) begin
+            tag_valid <= 1'b0;
         end
     end
 

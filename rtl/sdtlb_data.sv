@@ -5,8 +5,8 @@
 module sdtlb_data
 import sdecoder_pkg::*;
 (
-    input  logic                                fill_en,
-    input  logic [SDTLB_ENTRIES-1:0]            fill_vector,
+    // 装填写入: 已经门控好的 one-hot 写使能 (与 sdtlb_tag 同一根网络)
+    input  logic [SDTLB_ENTRIES-1:0]            fill_en_vector,
     input  logic [EID_WIDTH-1:0]                fill_eid,
     input  logic [TOKEN_ID_WIDTH-1:0]           fill_token_id,
     input  logic [TOKEN_VALUE_WIDTH-1:0]        fill_token_value,
@@ -19,7 +19,7 @@ import sdecoder_pkg::*;
     generate
         for (genvar_i = 0; genvar_i < SDTLB_ENTRIES; genvar_i++) begin : gen_data_item
             sdtlb_data_item u_data_item (
-                .fill_en       (fill_en & fill_vector[genvar_i]),
+                .fill_en       (fill_en_vector[genvar_i]),
                 .fill_eid      (fill_eid),
                 .fill_token_id (fill_token_id),
                 .fill_token_value (fill_token_value),

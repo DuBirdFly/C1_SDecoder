@@ -126,6 +126,32 @@ class SdtlbInvSeq extends SdtlbBaseSeq;
         wait_cycles(.n(2));
         cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h010), .idx(5'd20))));
         wait_cycles(.n(4));
+
+        // 写阵列拍碰到一次与本次装填地址无关的 inv_sel: 装填不该被丢
+        //   先填一条 0x060 的映射当失效目标, 再发一笔 0x061 的装填 (请求拍 T),
+        //   紧接着在写阵列拍 (T+1) 失效 0x060 那条
+        fill(
+            .base   (gen_pa_base(.high(12'h060), .idx(5'd1))),
+            .up     (5'd1),
+            .eid    (11'h1a0),
+            .tok    (11'h1a1),
+            .tokv   (10'h1a2),
+            .pfn    (18'h1a1a1)
+        );
+        wait_cycles(.n(4));
+
+        item = new_item();
+        set_fill(item, gen_pa_base(.high(12'h061), .idx(5'd1)), 5'd1,
+                 11'h1b0, 11'h1b1, 10'h1b2, 18'h1b1b1);
+        send(item);
+        inv_sel(.pa(gen_pa_base(.high(12'h060), .idx(5'd1))));
+        wait_cycles(.n(4));
+
+        // 0x061 装填照常落表 -> 命中; 0x060 被失效 -> 不命中
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h061), .idx(5'd1))));
+        wait_cycles(.n(2));
+        cam_req(.cam0_en(1'b1), .cam0_pa(gen_pa(.high(12'h060), .idx(5'd1))));
+        wait_cycles(.n(4));
     endtask
 
 endclass

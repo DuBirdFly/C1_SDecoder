@@ -18,9 +18,9 @@ import sdecoder_pkg::*;
     input  logic [PA_WIDTH-1:0]                 cam1_req_pa,
     output logic [SDTLB_ENTRIES-1:0]            cam1_hit_vector,
 
-    // 装填写入
-    input  logic                                fill_en,
-    input  logic [SDTLB_ENTRIES-1:0]            fill_vector,
+    // 装填写入: 已经门控好的 one-hot 写使能 (每条一位, 由 sdtlb 用一条只依赖 FF 的
+    // 表达式算出: 使能和目标必须是同一根网络, 分开传会在沿后混出 "新目标 × 旧使能")
+    input  logic [SDTLB_ENTRIES-1:0]            fill_en_vector,
     input  logic [PA_BASE_WIDTH-1:0]            fill_pa_base,
     input  logic [PA_UP_WIDTH-1:0]              fill_pa_up,
 
@@ -51,7 +51,7 @@ import sdecoder_pkg::*;
                 .cam1_req_pa      (cam1_req_pa),
                 .cam1_hit         (cam1_hit_vector[genvar_i]),
 
-                .fill_en          (fill_en & fill_vector[genvar_i]),
+                .fill_en          (fill_en_vector[genvar_i]),
                 .fill_pa_base     (fill_pa_base),
                 .fill_pa_up       (fill_pa_up),
 
