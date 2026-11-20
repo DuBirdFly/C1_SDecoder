@@ -66,6 +66,17 @@ import sdecoder_pkg::*;
         end
     endgenerate
 
+`ifdef ASSERT_ON
+    logic [SDTLB_ENTRIES-1:0] inv_match_vector;
+
+    for (genvar_i = 0; genvar_i < SDTLB_ENTRIES; genvar_i++) begin : gen_inv_match
+        assign inv_match_vector[genvar_i] = gen_tag_item[genvar_i].u_tag_item.inv_match_for_assert;
+    end
+
+    // inv_sel 相当于一次 CAM 查表: 装填不与已有条目冲突的前提下, 它最多命中一个条目
+    `assert_clk(a_inv_sel_onehot0, ((inv_en && inv_sel) |-> $onehot0(inv_match_vector)))
+`endif
+
 endmodule
 
 `default_nettype wire

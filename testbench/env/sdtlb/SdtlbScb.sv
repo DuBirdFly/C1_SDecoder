@@ -79,6 +79,14 @@ class SdtlbScb extends uvm_scoreboard;
                (up <= e.pa_up);
     endfunction
 
+    // 两个条目覆盖的地址范围是否重叠 (高位不同 => 不重叠)
+    function automatic bit overlap(input entry_t a, input entry_t b);
+        if (a.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH] != b.pa_base[PA_BASE_WIDTH-1:PA_UP_WIDTH]) begin
+            return 1'b0;
+        end
+        return !((a.pa_up < b.pa_base[PA_UP_WIDTH-1:0]) || (a.pa_base[PA_UP_WIDTH-1:0] > b.pa_up));
+    endfunction
+
     // 地址是否落在条目覆盖的范围内 (inv_sel 用): inv_sel_pa 就是 PA[47:30], 18 bit
     function automatic bit in_range_base(input logic [PA_BASE_WIDTH-1:0] base, input entry_t e);
         logic [PA_BASE_WIDTH-PA_UP_WIDTH-1:0] high;
@@ -159,11 +167,8 @@ class SdtlbScb extends uvm_scoreboard;
             fill_cnt++;
         end
 
-        // 2) 本拍写阵列的那一笔 = 上一拍的请求
-        //    丢弃条件 (置无效优先, 但只丢真正冲突的): inv_all 无条件丢;
-        //    inv_sel 只有命中本次装填地址才丢
-        write_now = wr_valid && !wr_cancel &&
-                    !(inv_any && (tr.inv_all || (tr.inv_sel && in_range_base(tr.inv_sel_pa, wr_entry))));
+        // 2) 本拍写阵列的那一笔 = 上一拍的请求; 这一拍有置无效就丢弃 (置无效优先)
+        write_now = wr_valid && !wr_cancel && !inv_any;
 
         // 3) 查表: 用本拍状态算期望 (本拍写阵列的那笔还没置 Valid, 本拍 inv 也还没生效)
         check_port("cam0", tr.cam0_req_en, tr.cam0_req_pa,

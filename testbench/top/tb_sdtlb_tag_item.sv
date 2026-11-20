@@ -4,18 +4,19 @@
 
 // sdtlb_tag_item 单元自检: 装填 (fill), 置无效 (inv), 以及两者同拍时条目层的优先级.
 //
-// 装填与置无效的仲裁在阵列层做 (按 "inv 是否命中本次装填地址" 决定丢不丢这笔装填),
-// 条目层拿到的 fill_en 已经是门控过的, 所以一拍里不会再出现 "该被丢弃的失效":
+// 装填与置无效的仲裁在阵列层做 (写阵列拍有 inv 就丢这次装填), 条目层保留 inv 优先做兜底:
 //
-//   Valid 的更新优先级: fill_en  >  inv_all || inv_match
+//   Valid 的更新优先级: inv_all || inv_match  >  fill_en
 //
-// 本 tb 的次序: 只装填 (正常) -> 只置无效 (正常) -> 同拍 inv + fill (条目层装填赢).
+// 本 tb 的次序: 只装填 (正常) -> 只置无效 (正常) -> 同拍 inv + fill (inv 赢).
 module tb_sdtlb_tag_item;
 
     import sdecoder_pkg::*;
 
     localparam logic [PA_BASE_WIDTH-1:0] TAG_A    = {12'h100, 5'd8};
     localparam logic [PA_UP_WIDTH-1:0]   TAG_A_UP = 5'd8;
+    localparam logic [PA_BASE_WIDTH-1:0] TAG_B    = {12'h200, 5'd8};   // 与 TAG_A 不同段高位
+    localparam logic [PA_UP_WIDTH-1:0]   TAG_B_UP = 5'd8;
 
     logic                       clk;
     logic                       rst_n;
@@ -137,10 +138,12 @@ module tb_sdtlb_tag_item;
         inv_sel     <= 1'b0;
     endtask
 
-    // 同一拍请求 "置无效 base" 和 "装填 base"; 返回这一沿之后的 Valid
+    // 同一拍请求 "置无效 inv_base" 和 "装填 base"; 返回这一沿之后的 Valid
+    // (装填的地址和置无效的地址要分开: 装填不会与条目现存的有效内容重叠, 见 a_fill_no_overlap_self)
     task automatic do_fill_and_inv(
         input  logic [PA_BASE_WIDTH-1:0] base,
         input  logic [PA_UP_WIDTH-1:0]   up,
+        input  logic [PA_BASE_WIDTH-1:0] inv_base,
         output logic                     valid_after
     );
         wait_cycle();
@@ -148,7 +151,7 @@ module tb_sdtlb_tag_item;
         fill_pa_up   <= up;
         fill_en      <= 1'b1;
         inv_en      <= 1'b1;
-        inv_sel_pa  <= base;
+        inv_sel_pa  <= inv_base;
         inv_sel     <= 1'b1;
         wait_cycle();                   // 同一沿: inv 清位与 fill 置位撞车
         valid_after = tag_valid;
@@ -207,22 +210,19 @@ module tb_sdtlb_tag_item;
         chk("只置无效: 查表不命中", hit === 1'b0);
 
         // ====================================================================
-        // 同拍 inv + fill -> 条目层装填优先 (冲突的装填在阵列层就丢了, 到不了这里)
-        do_fill(TAG_A, TAG_A_UP);
-        chk("同拍前置: 重新装填后 Valid = 1", tag_valid === 1'b1);
-
-        do_fill_and_inv(TAG_A, TAG_A_UP, valid_after);
+        // 同拍 inv + fill (条目当前无效) -> 置无效优先, 本次装填丢弃
+        //   注: 装填不会与现存有效条目重叠 (设计不变量), 所以这里在无效条目上测同拍
+        do_fill_and_inv(TAG_A, TAG_A_UP, TAG_A, valid_after);
         $display("");
         $display("--------------------------------------------------------------");
-        $display("同拍 inv + fill: 条目层装填优先 (阵列层会先丢掉冲突的装填)");
+        $display("同拍 inv + fill: 置无效优先, 装填被丢弃");
         $display("  tag_valid   = %b", tag_valid);
         $display("  tag_item.pa_base = 0x%h", tag_item.pa_base);
         $display("--------------------------------------------------------------");
-        chk("同拍 inv+fill: 条目层装填赢, Valid = 1", valid_after === 1'b1);
-        chk("同拍 inv+fill: 拍末 Valid 仍为 1", tag_valid === 1'b1);
-        chk("同拍 inv+fill: tag 保持装填内容", (tag_item.pa_base === TAG_A) && (tag_item.pa_up === TAG_A_UP));
+        chk("同拍 inv+fill: 置无效赢, Valid = 0", valid_after === 1'b0);
+        chk("同拍 inv+fill: 拍末 Valid 仍为 0", tag_valid === 1'b0);
         do_req(TAG_A, hit);
-        chk("同拍 inv+fill: 查表命中", hit === 1'b1);
+        chk("同拍 inv+fill: 查表不命中", hit === 1'b0);
 
         // 装填通路没被这次仲裁破坏: 再来一次普通装填仍能命中
         do_fill(TAG_A, TAG_A_UP);

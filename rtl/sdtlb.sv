@@ -15,8 +15,7 @@
 //   1. 请求拍 T: tlb_fill_pointer 按当拍 Valid 位图选出目标, 与 fill_en、装填数据一起寄存;
 //   2. T+1 拍: 用寄存后的 one-hot 使能写 Latch / 置 Valid, T+2 拍起才能被查表命中.
 //   写阵列那一拍不能有 camN_req_en (Latch 不支持同拍读写, 由上游反压, 内部断言兜底);
-//   那一拍若有置无效, 置无效优先, 但只丢真正冲突的装填: inv_all 无条件丢弃; inv_sel 只有
-//   命中本次装填地址才丢弃 (命中别的地址说明那条旧映射本来就被这次覆盖掉了, 照常写);
+//   那一拍若有置无效 (inv_en & (inv_all | inv_sel)), 置无效优先, 本次装填丢弃;
 //   请求拍 T 的 inv_sel 若覆盖本装填地址, 本次装填同样作废 (否则会把刚清掉的映射写回去).
 //
 // 接口约定 (由外界保证):
@@ -159,21 +158,9 @@ import sdecoder_pkg::*;
         .fill_vector        (fill_vector        )
     );
 
-    // 写阵列拍: 置无效优先, 但只丢真正冲突的装填
-    //   inv_all  -> 无条件丢弃 (所有条目都要变无效)
-    //   inv_sel  -> 只有命中本次装填地址 (要装的映射正被失效) 才丢弃; 命中别的地址时照常写
-    //               (那条旧映射本来就被这次覆盖掉了)
-    //   这里用**寄存器**里的装填地址比较, 不读条目的 Latch
-    logic fill_wr_inv_hit;
-
-    sdtlb_tag_item_match u_fill_wr_inv_match (
-        .tag_pa_base (fill_pa_base_q),
-        .tag_pa_up   (fill_pa_up_q),
-        .pa          (inv_sel_pa),
-        .match       (fill_wr_inv_hit)
-    );
-
-    wire fill_drop = inv_en & (inv_all | (inv_sel & fill_wr_inv_hit));
+    // 写阵列拍: 置无效优先, 本次装填丢弃 (不做 "只丢冲突的" 那套细化: inv 期间不关心性能,
+    // 丢一次装填最多多一次 Page Walk; 细化还要在写拍再比一次装填地址, 不值)
+    wire fill_drop = inv_en & (inv_all | inv_sel);
 
     // 使能和目标必须是**同一根网络**: 写成 "fill_en & fill_vector[i]" 的话两者是两根独立
     // 更新的网络, 沿后会有一瞬间 "新目标 × 旧的使能", 把这次装填的数据写进另一个
@@ -292,9 +279,8 @@ import sdecoder_pkg::*;
     // 写阵列拍的目标同样必须严格 one-hot
     `assert_clk(a_fill_write_onehot0, (fill_write_en |-> $onehot(fill_vector_q)))
 
-    // 写阵列拍的两个丢弃条件: inv_all 的拍不写; inv_sel 命中本装填地址的拍也不写
-    `assert_clk(a_fill_wr_no_inv_all, (fill_write_en |-> !(inv_en && inv_all)))
-    `assert_clk(a_fill_wr_no_inv_hit, (fill_write_en |-> !(inv_en && inv_sel && fill_wr_inv_hit)))
+    // 写阵列拍不允许有置无效 (置无效优先, 冲突的装填在入口就丢了)
+    `assert_clk(a_fill_wr_no_inv, (fill_write_en |-> !(inv_en && (inv_all || inv_sel))))
 
     // 装填请求之间至少隔 1 拍: 写阵列拍不能同时又是请求拍, 否则写数据会在写使能落下
     // 的那个沿上变化, Latch 会把新数据写进上一条 (设计方案 "装填时序")
